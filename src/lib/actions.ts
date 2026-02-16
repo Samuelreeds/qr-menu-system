@@ -5,10 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { createClient } from '@supabase/supabase-js'
 
 // --- SUPABASE SETUP ---
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// --- SUPABASE SETUP ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- READ ACTIONS ---
 
