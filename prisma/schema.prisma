@@ -1,0 +1,55 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// --- USER MODEL (UPDATED) ---
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  password       String
+  failedAttempts Int       @default(0)      // Tracks failed logins
+  lockoutUntil   DateTime?                  // Timestamp when lock expires
+}
+
+// --- YOUR EXISTING MODELS ---
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  price       Float
+  image       String
+  time        String?
+  rating      Float    @default(0)
+  description String?
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model ShopSettings {
+  id            String  @id @default("default")
+  name          String
+  address       String?
+  phone         String?
+  themeColor    String  @default("#5CB85C")
+  logo          String?
+  facebook      String?
+  showFacebook  Boolean @default(false)
+  instagram     String?
+  showInstagram Boolean @default(false)
+  telegram      String?
+  showTelegram  Boolean @default(false)
+}
