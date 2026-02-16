@@ -1,13 +1,13 @@
 import { withAuth } from "next-auth/middleware";
-import { NextRequest } from "next/dist/server/web/spec-extension/request";
 
-export function proxy(request: NextRequest){
-  return withAuth(request, {
-    pages: {
-      signIn: "/login",
-    },
-  });
-}
+// export default directly. Do not wrap it in another function.
+export default withAuth({
+  pages: {
+    signIn: "/login",
+  },
+});
 
-// This ensures only the /admin routes are protected
-export const config = { matcher: ["/admin/:path*"] };
+// Define which paths this applies to
+export const config = { 
+  matcher: ["/admin/:path*"] 
+};

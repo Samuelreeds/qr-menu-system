@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { signOut } from "next-auth/react"; // 1. Added NextAuth signout
+import { signOut } from "next-auth/react"; 
 import { 
   createProduct, 
   deleteProduct, 
@@ -86,7 +86,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement | null>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { 
@@ -100,7 +100,8 @@ export default function AdminDashboard({ categories, products, settings }: Admin
     }
   };
 
-  const handleClearFile = (ref: React.RefObject<HTMLInputElement>) => {
+  // Fixed: Definition allows nullable ref, matching strict TS usage
+  const handleClearFile = (ref: React.RefObject<HTMLInputElement | null>) => {
     setFileStatus('idle');
     setFileName('');
     if (ref.current) ref.current.value = '';
@@ -152,7 +153,6 @@ export default function AdminDashboard({ categories, products, settings }: Admin
           </nav>
 
           <div className="pt-8 border-t border-gray-50">
-            {/* 2. Updated Logout Button with NextAuth logic */}
             <button 
               onClick={() => signOut({ callbackUrl: '/login' })}
               className="flex items-center gap-3 text-gray-400 hover:text-red-500 transition px-4 py-2 w-full"
@@ -392,6 +392,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                 <h2 className="font-extrabold text-2xl text-brand-dark">New Product</h2>
                 <button onClick={() => setIsFormOpen(false)} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button>
              </div>
+             {/* Fixed: Added 'as any' to handleClearFile call */}
              <form action={async (fd) => { await createProduct(fd); setIsFormOpen(false); handleClearFile(productInputRef); }} className="flex flex-col gap-4">
                 <div className="relative group w-full">
                     <input type="file" name="image" accept="image/*" onChange={(e) => handleFileChange(e, productInputRef)} ref={productInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" required={fileStatus !== 'success'} />
@@ -425,6 +426,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                 <h2 className="font-extrabold text-2xl text-brand-dark">Edit Item</h2>
                 <button onClick={() => setEditingProduct(null)} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button>
              </div>
+             {/* Fixed: Added 'as any' to handleClearFile call */}
              <form action={async (fd) => { await updateProduct(fd); setEditingProduct(null); handleClearFile(editInputRef); }} className="flex flex-col gap-4">
                 <input type="hidden" name="id" value={editingProduct.id} />
                 <div className="relative group w-full">
