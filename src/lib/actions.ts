@@ -173,7 +173,6 @@ export async function getShopSettings() {
 
   return settings;
 }
-
 export async function updateShopSettings(formData: FormData) {
   const name = (formData.get('name') as string) || 'Gourmet Shop';
   const address = formData.get('address') as string || '';
@@ -187,14 +186,22 @@ export async function updateShopSettings(formData: FormData) {
   const telegram = formData.get('telegram') as string || '';
   const showTelegram = formData.get('showTelegram') === 'on';
 
-  const logoFile = formData.get('logo') as File
-  let logoPath: string | null = null
+  // 1. GET EXISTING DATA FIRST (To preserve the logo)
+  const existingSettings = await prisma.shopSettings.findFirst();
+  let finalLogoPath = existingSettings?.logo || null; // Start with the old logo
 
-  // SUPABASE UPLOAD LOGIC (For Logo)
+  // 2. CHECK IF A NEW LOGO WAS UPLOADED
+  const logoFile = formData.get('logo') as File;
+  
   if (logoFile && logoFile.size > 0 && logoFile.name !== 'undefined') {
     try {
+      // (Optional) Delete old logo from Supabase to save space
+      /* if (finalLogoPath) {
+         // ... extract filename and delete from supabase ...
+      }
+      */
+
       const fileName = `branding/logo-${Date.now()}.webp`;
-      
       const { data, error } = await supabase.storage
         .from('uploads')
         .upload(fileName, logoFile, {
@@ -203,28 +210,22 @@ export async function updateShopSettings(formData: FormData) {
         });
 
       if (!error) {
-        logoPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/uploads/${fileName}`;
+        // If upload succeeds, overwrite the variable with the NEW path
+        finalLogoPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/uploads/${fileName}`;
       }
     } catch (error) {
-      console.error("Logo upload failed:", error)
+      console.error("Logo upload failed:", error);
     }
   }
 
-  // === CRITICAL FIX: DELETE GHOST ROWS ===
-  // This ensures we don't have multiple settings rows confusing the app
-  const allSettings = await prisma.shopSettings.findMany();
-  if (allSettings.length > 1) {
-    await prisma.shopSettings.deleteMany({
-      where: {
-        id: { not: 'default' }
-      }
-    });
-  }
+  // 3. NUCLEAR CLEANUP (Safe now because we saved the logo in step 1)
+  // Delete ALL rows to ensure we never have duplicates again
+  await prisma.shopSettings.deleteMany();
 
-  // Upsert specifically to ID 'default'
-  await prisma.shopSettings.upsert({
-    where: { id: 'default' },
-    update: {
+  // 4. CREATE THE SINGLE CLEAN ROW
+  await prisma.shopSettings.create({
+    data: {
+      id: 'default', // Force the ID
       name,
       address,
       phone,
@@ -235,21 +236,7 @@ export async function updateShopSettings(formData: FormData) {
       showInstagram,
       telegram,
       showTelegram,
-      ...(logoPath && { logo: logoPath }),
-    },
-    create: {
-      id: 'default', // FORCE ID
-      name,
-      address,
-      phone,
-      themeColor,
-      facebook,
-      showFacebook,
-      instagram,
-      showInstagram,
-      telegram,
-      showTelegram,
-      logo: logoPath || null,
+      logo: finalLogoPath, // This now has either the NEW logo or the PRESERVED old one
     }
   });
 
