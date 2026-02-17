@@ -25,16 +25,73 @@ export async function getShopSettings() {
   if (!settings) {
     return {
       id: "default", name: "Gourmet Shop", address: "", phone: "", themeColor: "#5CB85C",
-      logo: null, facebook: null, showFacebook: false, instagram: null, showInstagram: false, telegram: null, showTelegram: false
+      logo: null, socials: "[]"
     };
   }
   return settings;
+}
+
+// --- WRITE ACTIONS (CATEGORIES - AUTO SORT) ---
+
+export async function createCategory(formData: FormData) {
+  const name = formData.get('name') as string;
+  
+  // AUTO-ARRANGE LOGIC: Find the item with the highest sortOrder
+  const lastCategory = await prisma.category.findFirst({
+    orderBy: { sortOrder: 'desc' }
+  });
+
+  // Next order is last + 1, or 1 if no categories exist
+  const nextOrder = (lastCategory?.sortOrder || 0) + 1;
+
+  await prisma.category.create({
+    data: { 
+      name, 
+      sortOrder: nextOrder 
+    }
+  });
+  revalidatePath('/', 'layout');
+}
+
+export async function updateCategory(formData: FormData) {
+  const id = formData.get('id') as string;
+  const name = formData.get('name') as string;
+  // Parse sortOrder as integer, defaulting to existing if not provided or valid
+  const sortOrderInput = formData.get('sortOrder');
+  
+  // We need to fetch the current category if sortOrder isn't provided to avoid overwriting with 0 or NaN
+  let sortOrder: number;
+
+  if (sortOrderInput) {
+      sortOrder = parseInt(sortOrderInput as string);
+  } else {
+      const currentCategory = await prisma.category.findUnique({ where: { id }, select: { sortOrder: true } });
+      sortOrder = currentCategory?.sortOrder || 0;
+  }
+
+  await prisma.category.update({
+    where: { id },
+    data: { name, sortOrder }
+  });
+  revalidatePath('/', 'layout');
+}
+
+export async function deleteCategory(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    // Optional: Check if products exist in this category first or handle cascade delete in schema
+    await prisma.category.delete({ where: { id } });
+  } catch (error) {
+    console.error("Failed to delete category:", error);
+  }
+  revalidatePath('/', 'layout');
 }
 
 // --- WRITE ACTIONS (PRODUCTS) ---
 
 export async function createProduct(formData: FormData) {
   const name = formData.get('name') as string
+  // Float parsing ensures decimals work
   const price = parseFloat(formData.get('price') as string)
   const categoryId = formData.get('categoryId') as string
   const time = formData.get('time') as string || '15min'
@@ -97,7 +154,7 @@ export async function deleteProduct(formData: FormData) {
   revalidatePath('/', 'layout');
 }
 
-// --- SETTINGS ACTIONS (FIXED FOR LOCAL UPLOAD) ---
+// --- SETTINGS ACTIONS ---
 
 export async function updateShopIdentity(formData: FormData) {
   const name = formData.get('name') as string;
@@ -120,7 +177,6 @@ export async function updateShopBranding(formData: FormData) {
   if (logoFile && logoFile.size > 0 && logoFile.name !== 'undefined') {
     try {
       const buffer = Buffer.from(await logoFile.arrayBuffer())
-      // Unique filename
       const filename = `logo-${Date.now()}.webp`
       const uploadDir = path.join(process.cwd(), 'public', 'uploads')
       const filepath = path.join(uploadDir, filename)
@@ -132,15 +188,11 @@ export async function updateShopBranding(formData: FormData) {
         .toFile(filepath)
 
       newLogoPath = `/uploads/${filename}`
-    } catch (error) {
-      console.error("Logo upload failed:", error);
-    }
+    } catch (error) { console.error("Logo upload failed:", error); }
   }
 
   const dataToUpdate: any = { themeColor };
-  if (newLogoPath) {
-    dataToUpdate.logo = newLogoPath;
-  }
+  if (newLogoPath) dataToUpdate.logo = newLogoPath;
 
   await prisma.shopSettings.update({
     where: { id: 'default' },
@@ -149,21 +201,14 @@ export async function updateShopBranding(formData: FormData) {
   revalidatePath('/', 'layout');
 }
 
-// 3. SOCIALS ACTION: Updates Unlimited Links
 export async function updateShopSocials(formData: FormData) {
-  // We receive a JSON string containing all links
   const socials = formData.get('socials') as string;
-
   await prisma.shopSettings.update({
     where: { id: 'default' },
-    data: { 
-      socials // Saves the entire list as a string
-    }
+    data: { socials }
   });
-
   revalidatePath('/', 'layout');
 }
-
 
 export async function forceRevalidateAction() {
   revalidatePath('/', 'layout');

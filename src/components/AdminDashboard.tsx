@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { signOut } from "next-auth/react"; 
-import Cropper from 'react-easy-crop'; // IMPORT THE CROPPER
-import getCroppedImg from '@/lib/cropImage'; // IMPORT THE HELPER
+import Cropper from 'react-easy-crop'; 
+import getCroppedImg from '@/lib/cropImage'; 
 import { 
   createProduct, deleteProduct, updateProduct, 
+  createCategory, updateCategory, deleteCategory, // NEW IMPORTS
   updateShopIdentity, updateShopBranding, updateShopSocials, 
   forceRevalidateAction 
 } from '@/lib/actions';
@@ -14,61 +15,51 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check // New Icons
+  ZoomIn, Check, List // New Icon
 } from 'lucide-react';
 
 // --- TYPES ---
-interface SocialLink {
-  id: string; platform: string; url: string; active: boolean;
-}
-
-interface ShopSettings {
-  name: string; address: string | null; phone: string | null;
-  themeColor: string; logo: string | null; socials: string;
-}
-
-interface Category { id: string; name: string; }
+interface SocialLink { id: string; platform: string; url: string; active: boolean; }
+interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; logo: string | null; socials: string; }
+interface Category { id: string; name: string; sortOrder: number; } // Added sortOrder
 interface Product { id: string; name: string; price: number; image: string; category: { name: string }; time: string; }
 interface AdminDashboardProps { categories: Category[]; products: Product[]; settings: ShopSettings; }
 
 export default function AdminDashboard({ categories, products, settings }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'menu' | 'settings'>('menu');
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu'); // Added 'categories' tab
+  const [isFormOpen, setIsFormOpen] = useState(false); // Product Modal
+  const [isCatFormOpen, setIsCatFormOpen] = useState(false); // Category Modal
+  
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null); // Edit Category State
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // --- LOGO & CROPPER STATE ---
+  // Logo & Cropper State
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState(settings.logo || '');
   const [isDirtyLogo, setIsDirtyLogo] = useState(false);
-  
-  // Cropper specific states
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [croppedFile, setCroppedFile] = useState<Blob | null>(null);
 
-  // --- SOCIALS STATE ---
+  // Socials State
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => {
     try { return settings.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
   });
 
-  // Product Refs
   const productInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const [fileStatus, setFileStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [fileName, setFileName] = useState('');
 
-  useEffect(() => { 
-    setLogoPreview(settings.logo || ''); 
-    setIsDirtyLogo(false);
-  }, [settings.logo]);
+  useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
 
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
-  
   const handleForceRefresh = async () => {
     setIsRefreshing(true);
     await forceRevalidateAction(); 
@@ -76,52 +67,32 @@ export default function AdminDashboard({ categories, products, settings }: Admin
     alert("Synced!");
   };
 
-  // --- 1. LOGO SELECTION ---
+  // Logo Handlers
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const reader = new FileReader();
-      // When file loads, open the Cropper Modal instead of just setting preview
       reader.addEventListener('load', () => setCropImageSrc(reader.result as string));
       reader.readAsDataURL(file);
-      e.target.value = ''; // Reset input
+      e.target.value = ''; 
     }
   };
-
-  // --- 2. CROPPER LOGIC ---
-  const onCropComplete = (_: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  };
-
+  const onCropComplete = (_: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels);
   const showCroppedImage = async () => {
     if (!cropImageSrc || !croppedAreaPixels) return;
     try {
       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
       if (croppedBlob) {
-        setCroppedFile(croppedBlob); // Store the file to upload later
-        setLogoPreview(URL.createObjectURL(croppedBlob)); // Show preview
-        setCropImageSrc(null); // Close modal
-        setIsDirtyLogo(true);
+        setCroppedFile(croppedBlob); setLogoPreview(URL.createObjectURL(croppedBlob)); setCropImageSrc(null); setIsDirtyLogo(true);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
+  const cancelLogoChange = () => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); setCroppedFile(null); };
 
-  const cancelLogoChange = () => {
-    setLogoPreview(settings.logo || '');
-    setIsDirtyLogo(false);
-    setCroppedFile(null);
-  };
-
-  // --- SOCIALS HANDLERS ---
-  const addSocialLink = () => {
-    setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]);
-  };
+  // Socials Handlers
+  const addSocialLink = () => setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]);
   const removeSocialLink = (id: string) => setSocialLinks(socialLinks.filter(l => l.id !== id));
-  const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => {
-    setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l));
-  };
+  const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l));
   const getPlatformIcon = (platform: string) => {
     switch (platform) {
       case 'facebook': return <Facebook size={18}/>; case 'instagram': return <Instagram size={18}/>;
@@ -131,7 +102,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
     }
   };
 
-  // --- PRODUCT IMAGE HANDLERS ---
+  // File Handlers
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement | null>) => {
     const file = e.target.files?.[0];
     if (file) { setFileStatus('success'); setFileName(file.name); }
@@ -142,17 +113,19 @@ export default function AdminDashboard({ categories, products, settings }: Admin
 
   return (
     <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative">
-      {/* HEADER & SIDEBAR */}
+      {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 w-full bg-white z-20 border-b border-gray-100 p-4 flex justify-between items-center shadow-sm">
         <h1 className="font-bold text-lg">AdminPanel</h1>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg"><Menu size={24} /></button>
       </div>
 
+      {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 h-full flex flex-col">
           <h1 className="font-bold text-xl mb-8 hidden md:block">AdminPanel</h1>
           <nav className="space-y-2 flex-1">
             <button onClick={() => setActiveTab('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-brand-green text-black' : 'text-gray-500'}`}><LayoutGrid size={20}/> Menu</button>
+            <button onClick={() => setActiveTab('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-brand-green text-black' : 'text-gray-500'}`}><List size={20}/> Categories</button>
             <button onClick={() => setActiveTab('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-brand-green text-black' : 'text-gray-500'}`}><Settings size={20}/> Settings</button>
           </nav>
           <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut()} className="flex gap-3 text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
@@ -163,20 +136,18 @@ export default function AdminDashboard({ categories, products, settings }: Admin
 
       <main className="flex-1 p-4 pt-20 md:p-8 md:pt-8 overflow-y-auto">
         <header className="hidden md:flex justify-between mb-8">
-           <h2 className="text-2xl font-bold">{activeTab === 'menu' ? 'Menu' : 'Settings'}</h2>
-           <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border rounded-xl text-xs font-bold text-gray-500 hover:text-brand-green hover:border-brand-green transition-all shadow-sm active:scale-95"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> {isRefreshing ? 'Syncing...' : 'Force Sync'}</button>
+           <h2 className="text-2xl font-bold capitalize">{activeTab}</h2>
+           <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border rounded-xl text-xs font-bold text-gray-500 hover:text-brand-green hover:border-brand-green transition-all shadow-sm active:scale-95"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync</button>
         </header>
 
-        {/* MENU TAB */}
+        {/* --- MENU TAB --- */}
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
-             {/* ... Product Table/UI from previous code ... */}
              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div className="relative w-full sm:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18}/><input placeholder="Search menu..." className="w-full pl-10 pr-4 py-3 rounded-xl border-none bg-white shadow-sm text-sm"/></div>
                 <button onClick={() => setIsFormOpen(true)} className="w-full sm:w-auto bg-brand-green text-black px-5 py-3 rounded-xl font-bold hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2 text-sm"><Plus size={18} strokeWidth={3}/> Add New</button>
              </div>
              
-             {/* DESKTOP TABLE */}
              <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
@@ -206,10 +177,37 @@ export default function AdminDashboard({ categories, products, settings }: Admin
            </div>
         )}
 
-        {/* SETTINGS TAB */}
+        {/* --- CATEGORIES TAB (NEW) --- */}
+        {activeTab === 'categories' && (
+           <div className="animate-in fade-in duration-300">
+             <div className="flex justify-between items-center gap-4 mb-6">
+                <h3 className="font-bold text-gray-800">Manage Categories</h3>
+                <button onClick={() => setIsCatFormOpen(true)} className="w-full sm:w-auto bg-brand-green text-black px-5 py-3 rounded-xl font-bold hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2 text-sm"><Plus size={18} strokeWidth={3}/> Add New</button>
+             </div>
+             
+             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Name</th><th className="p-5">Sort Order</th><th className="p-5 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {categories.map((cat) => (
+                    <tr key={cat.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="p-4 font-bold text-gray-700">{cat.name}</td>
+                      <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
+                      <td className="p-4 text-right flex items-center justify-end gap-2">
+                        <button onClick={() => setEditingCategory(cat)} className="text-gray-300 hover:text-brand-green p-2 hover:bg-green-50 rounded-lg transition"><Settings size={18} /></button>
+                        <form action={deleteCategory}><input type="hidden" name="id" value={cat.id} /><button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button></form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+           </div>
+        )}
+
+        {/* --- SETTINGS TAB --- */}
         {activeTab === 'settings' && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300">
-            
             {/* 1. IDENTITY */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('identity')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
@@ -225,43 +223,18 @@ export default function AdminDashboard({ categories, products, settings }: Admin
               </div>
             </div>
 
-            {/* 2. BRANDING (WITH CROPPER) */}
+            {/* 2. BRANDING */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('branding')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center"><div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Palette size={20}/></div><div className="text-left font-bold text-gray-800">Branding & Design</div></div>{openSection === 'branding' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form 
-                  action={async (formData) => {
-                    // INTERCEPT: If a cropped file exists, inject it!
-                    if (croppedFile) {
-                      formData.set('logo', croppedFile, 'logo.webp');
-                    }
-                    await updateShopBranding(formData);
-                    setIsDirtyLogo(false);
-                    setCroppedFile(null);
-                  }} 
-                  className="p-5 border-t border-gray-50 space-y-6"
-                >
+                <form action={async (formData) => { if (croppedFile) formData.set('logo', croppedFile, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setCroppedFile(null); }} className="p-5 border-t border-gray-50 space-y-6">
                    <div className="bg-gray-50 p-6 rounded-2xl flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200">
                       {logoPreview ? (
-                        <div className="relative group">
-                           <div className="w-32 h-32 rounded-full overflow-hidden shadow-lg border-4 border-white">
-                              <img src={logoPreview} className="w-full h-full object-cover" alt="Preview" />
-                           </div>
-                           {isDirtyLogo && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-md">NEW</span>}
-                        </div>
-                      ) : (
-                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-400"><ImageIcon size={40}/></div>
-                      )}
-                      
-                      <div className="mt-4 flex gap-3">
-                        <button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50">
-                           {logoPreview ? 'Change Image' : 'Upload Logo'}
-                        </button>
-                        {isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100">Cancel</button>}
-                      </div>
-                      {/* Note: onChange triggers onFileSelect, NOT handleLogoChange */}
+                        <div className="relative group"><div className="w-32 h-32 rounded-full overflow-hidden shadow-lg border-4 border-white"><img src={logoPreview} className="w-full h-full object-cover" alt="Preview" /></div>{isDirtyLogo && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-md">NEW</span>}</div>
+                      ) : ( <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-400"><ImageIcon size={40}/></div> )}
+                      <div className="mt-4 flex gap-3"><button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50">{logoPreview ? 'Change Image' : 'Upload Logo'}</button>{isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100">Cancel</button>}</div>
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={onFileSelect} className="hidden"/> 
                    </div>
                    <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Theme Color</label><input name="themeColor" type="color" defaultValue={settings.themeColor} className="h-12 w-full rounded-xl bg-gray-50 p-1 cursor-pointer"/></div>
@@ -270,7 +243,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
               </div>
             </div>
 
-            {/* 3. SOCIAL MEDIA (DYNAMIC) */}
+            {/* 3. SOCIALS */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('socials')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center"><div className="p-2 bg-pink-50 text-pink-600 rounded-lg"><Share2 size={20}/></div><div className="text-left font-bold text-gray-800">Social Media</div></div>{openSection === 'socials' ? <ChevronUp/> : <ChevronDown/>}
@@ -298,47 +271,22 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                 </form>
               </div>
             </div>
-
           </div>
         )}
       </main>
 
-      {/* --- CROPPER MODAL (NEW) --- */}
+      {/* --- CROPPER MODAL --- */}
       {cropImageSrc && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b flex justify-between items-center bg-white z-10">
-              <h3 className="font-bold text-lg">Adjust Logo</h3>
-              <button onClick={() => setCropImageSrc(null)} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button>
-            </div>
-            {/* Cropper Container */}
-            <div className="relative w-full h-[300px] sm:h-[400px] bg-black">
-              <Cropper
-                image={cropImageSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={1} // Lock aspect ratio to 1:1 (Square)
-                onCropChange={setCrop}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-                showGrid={false}
-              />
-            </div>
-            {/* Controls */}
-            <div className="p-6 bg-white space-y-6">
-               <div className="flex items-center gap-4">
-                  <ZoomIn size={20} className="text-gray-400"/>
-                  <input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/>
-               </div>
-               <button onClick={showCroppedImage} className="w-full py-4 bg-brand-green text-black font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all">
-                 <Check size={20} /> Apply Crop
-               </button>
-            </div>
+            <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Logo</h3><button onClick={() => setCropImageSrc(null)} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button></div>
+            <div className="relative w-full h-[300px] sm:h-[400px] bg-black"><Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop} onCropComplete={onCropComplete} onZoomChange={setZoom} showGrid={false} /></div>
+            <div className="p-6 bg-white space-y-6"><div className="flex items-center gap-4"><ZoomIn size={20} className="text-gray-400"/><input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/></div><button onClick={showCroppedImage} className="w-full py-4 bg-brand-green text-black font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all"><Check size={20} /> Apply Crop</button></div>
           </div>
         </div>
       )}
 
-      {/* MODALS (Product Add/Edit - Keep existing) */}
+      {/* --- ADD/EDIT PRODUCT MODAL --- */}
       {isFormOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setIsFormOpen(false)}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
@@ -348,6 +296,47 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><input name="name" placeholder="Product Name" className="p-3 bg-gray-50 rounded-xl outline-none" required /><input name="price" type="number" step="0.01" placeholder="Price" className="p-3 bg-gray-50 rounded-xl outline-none" required /></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><select name="categoryId" className="p-3 bg-gray-50 rounded-xl outline-none" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input name="time" placeholder="20min" className="p-3 bg-gray-50 rounded-xl outline-none" /></div>
                   <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">Save Product</button>
+               </form>
+            </div>
+         </div>
+      )}
+
+      {/* --- EDIT PRODUCT MODAL (FIXED WITH KEY) --- */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setEditingProduct(null)}>
+          <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-brand-dark">Edit Item</h2><button onClick={() => setEditingProduct(null)} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button></div>
+             {/* KEY ADDED HERE: Forces form reset when product changes */}
+             <form key={editingProduct.id} action={async (fd) => { await updateProduct(fd); setEditingProduct(null); handleClearFile(editInputRef as any); }} className="space-y-4 flex flex-col gap-4">
+                <input type="hidden" name="id" value={editingProduct.id} />
+                <div className="relative group w-full"><input type="file" name="image" accept="image/*" onChange={(e) => handleFileChange(e, editInputRef)} ref={editInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" /><div className="border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center border-gray-200 bg-gray-50 text-gray-400"><ImageIcon size={32} /><span className="text-sm font-bold mt-2">Replace current image (optional)</span></div></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><input name="name" defaultValue={editingProduct.name} className="p-3 bg-gray-50 rounded-xl outline-none" required /><input name="price" type="number" step="0.01" defaultValue={editingProduct.price} className="p-3 bg-gray-50 rounded-xl outline-none" required /></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><select name="categoryId" defaultValue={editingProduct.category.name} className="p-3 bg-gray-50 rounded-xl outline-none" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input name="time" defaultValue={editingProduct.time} className="p-3 bg-gray-50 rounded-xl outline-none" /></div>
+                <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">Update Product</button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADD/EDIT CATEGORY MODAL --- */}
+      {(isCatFormOpen || editingCategory) && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-brand-dark">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X/></button></div>
+               <form 
+                 key={editingCategory ? editingCategory.id : 'new'}
+                 action={async (fd) => { 
+                   if (editingCategory) await updateCategory(fd); 
+                   else await createCategory(fd); 
+                   setIsCatFormOpen(false); 
+                   setEditingCategory(null); 
+                 }} 
+                 className="space-y-4"
+               >
+                  {editingCategory && <input type="hidden" name="id" value={editingCategory.id} />}
+                  <input name="name" placeholder="Category Name" defaultValue={editingCategory?.name || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                  <input name="sortOrder" type="number" placeholder="Sort Order (e.g. 1)" defaultValue={editingCategory?.sortOrder || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                  <button className="w-full bg-brand-green p-4 rounded-xl font-bold">{editingCategory ? 'Update' : 'Create'}</button>
                </form>
             </div>
          </div>

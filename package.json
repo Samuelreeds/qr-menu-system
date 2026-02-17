@@ -12,7 +12,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.95.3",
+    "@supabase/supabase-js": "^2.96.0",
     "bcrypt": "^6.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",

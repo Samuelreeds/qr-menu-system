@@ -7,7 +7,6 @@ import ShopInfoModal from '@/components/ShopInfoModal';
 import CartFloat from '@/components/CartFloat'; 
 import { MapPin } from 'lucide-react'; 
 
-
 // --- TYPES ---
 interface ShopSettings {
   name: string;
@@ -73,22 +72,27 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
       />
 
       <div className="px-6 pt-6">
-        {/* --- HEADER --- */}
+        {/* --- HEADER (UPDATED LAYOUT) --- */}
         <button 
           onClick={() => setIsInfoOpen(true)}
-          className="w-full flex items-center justify-center gap-3 mb-6 hover:opacity-80 transition-opacity"
+          // CHANGED: 'justify-center' -> 'justify-between' to push items apart
+          className="w-full flex items-center justify-between gap-3 mb-6 hover:opacity-80 transition-opacity"
         >
-          <div className="relative w-12 h-12 rounded-full overflow-hidden shadow-sm border border-gray-200 bg-white">
+          {/* Logo on the Left */}
+          <div className="relative w-12 h-12 rounded-full overflow-hidden shadow-sm border border-gray-200 bg-white shrink-0">
             <img src={logoUrl} alt={shopName} className="object-cover w-full h-full" />
           </div>
-          <div className="text-left">
-             <h1 className="font-bold text-2xl text-gray-900 tracking-tight leading-none">{shopName}</h1>
-             {shopSettings.address && (
-               <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+
+          {/* Text on the Right */}
+          <div className="text-right flex-1 min-w-0"> 
+             <h1 className="font-bold text-2xl text-gray-900 tracking-tight leading-none truncate pl-2">{shopName}</h1>
+             {/* {shopSettings.address && (
+               // CHANGED: Added 'justify-end' to align the address row to the right
+               <div className="flex items-center justify-end gap-1 text-xs text-gray-400 mt-1">
                  <MapPin size={12} />
                  <span className="truncate max-w-[150px]">{shopSettings.address}</span>
                </div>
-             )}
+             )} */}
           </div>
         </button>
 
@@ -124,10 +128,10 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
 
               return (
                 <section key={cat.id}>
-                  <h2 className="font-extrabold text-xl text-gray-900 mb-5 px-1 flex items-center gap-3">
+                  {/* <h2 className="font-extrabold text-xl text-gray-900 mb-5 px-1 flex items-center gap-3">
                     {cat.name}
                     <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{visibleProducts.length}</span>
-                  </h2>
+                  </h2> */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-6">
                     {visibleProducts.map((item) => (
                       <FoodCard key={item.id} item={{...item, category: getCategoryName(item)}} themeColor={themeColor} />
