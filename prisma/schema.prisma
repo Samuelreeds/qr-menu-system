@@ -5,8 +5,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -15,8 +15,8 @@ model User {
   id             String    @id @default(cuid())
   email          String    @unique
   password       String
-  failedAttempts Int       @default(0)      // Tracks failed logins
-  lockoutUntil   DateTime?                  // Timestamp when lock expires
+  failedAttempts Int       @default(0) // Tracks failed logins
+  lockoutUntil   DateTime? // Timestamp when lock expires
 }
 
 // --- YOUR EXISTING MODELS ---
@@ -47,6 +47,7 @@ model ShopSettings {
   phone         String?
   themeColor    String  @default("#5CB85C")
   logo          String?
+  socials       String   @default("[]")
   facebook      String?
   showFacebook  Boolean @default(false)
   instagram     String?

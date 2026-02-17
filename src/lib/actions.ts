@@ -9,20 +9,26 @@ import sharp from 'sharp'
 // --- READ ACTIONS ---
 
 export async function getCategories() {
-  return await prisma.category.findMany({
-    orderBy: { sortOrder: 'asc' },
-  })
+  return await prisma.category.findMany({ orderBy: { sortOrder: 'asc' } })
 }
 
 export async function getProducts() {
   return await prisma.product.findMany({
-    include: {
-      category: true 
-    },
-    orderBy: {
-      createdAt: 'desc'
-    }
+    include: { category: true },
+    orderBy: { createdAt: 'desc' }
   })
+}
+
+export async function getShopSettings() {
+  let settings = await prisma.shopSettings.findUnique({ where: { id: 'default' } });
+  
+  if (!settings) {
+    return {
+      id: "default", name: "Gourmet Shop", address: "", phone: "", themeColor: "#5CB85C",
+      logo: null, facebook: null, showFacebook: false, instagram: null, showInstagram: false, telegram: null, showTelegram: false
+    };
+  }
+  return settings;
 }
 
 // --- WRITE ACTIONS (PRODUCTS) ---
@@ -39,37 +45,20 @@ export async function createProduct(formData: FormData) {
   if (imageFile && imageFile.size > 0 && imageFile.name !== 'undefined') {
     try {
       const buffer = Buffer.from(await imageFile.arrayBuffer())
-      const filename = `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.webp`
+      const filename = `products/${Date.now()}-${name.replace(/\s+/g, '-').toLowerCase()}.webp`
       const uploadDir = path.join(process.cwd(), 'public', 'uploads')
-      const filepath = path.join(uploadDir, filename)
+      const filepath = path.join(uploadDir, filename.replace('products/', ''))
 
       await fs.mkdir(uploadDir, { recursive: true })
-
-      await sharp(buffer)
-        .resize(600, 600, { fit: 'cover', position: 'center' })
-        .toFormat('webp', { quality: 80 })
-        .toFile(filepath)
-
-      imagePath = `/uploads/${filename}`
-    } catch (error) {
-      console.error("Image upload failed:", error)
-    }
+      await sharp(buffer).resize(600, 600, { fit: 'cover' }).toFormat('webp').toFile(filepath)
+      imagePath = `/uploads/${filename.replace('products/', '')}`
+    } catch (error) { console.error("Image upload failed:", error) }
   }
 
   await prisma.product.create({
-    data: {
-      name,
-      price,
-      categoryId,
-      image: imagePath,
-      time,
-      rating: 4.5,
-      description: ''
-    }
+    data: { name, price, categoryId, image: imagePath, time, rating: 4.5, description: '' }
   })
-
-  revalidatePath('/')
-  revalidatePath('/admin')
+  revalidatePath('/', 'layout');
 }
 
 export async function updateProduct(formData: FormData) {
@@ -84,172 +73,98 @@ export async function updateProduct(formData: FormData) {
 
   if (imageFile && imageFile.size > 0 && imageFile.name !== 'undefined') {
     try {
-      // 1. Delete old image from storage
-      const oldProduct = await prisma.product.findUnique({ where: { id }, select: { image: true } });
-      if (oldProduct?.image && !oldProduct.image.startsWith('http')) {
-        const oldFilePath = path.join(process.cwd(), 'public', oldProduct.image);
-        try { await fs.unlink(oldFilePath); } catch (e) { console.log("Old file not found for deletion"); }
-      }
+      const buffer = Buffer.from(await imageFile.arrayBuffer())
+      const filename = `products/${Date.now()}-${name.replace(/\s+/g, '-').toLowerCase()}.webp`
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads')
+      const filepath = path.join(uploadDir, filename.replace('products/', ''))
 
-      // 2. Process new image
-      const buffer = Buffer.from(await imageFile.arrayBuffer());
-      const filename = `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.webp`;
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-      const filepath = path.join(uploadDir, filename);
-      await fs.mkdir(uploadDir, { recursive: true });
-
-      await sharp(buffer)
-        .resize(600, 600, { fit: 'cover', position: 'center' })
-        .toFormat('webp', { quality: 80 })
-        .toFile(filepath);
-
-      imagePath = `/uploads/${filename}`;
-    } catch (error) {
-      console.error("Update image failed:", error);
-    }
+      await fs.mkdir(uploadDir, { recursive: true })
+      await sharp(buffer).resize(600, 600, { fit: 'cover' }).toFormat('webp').toFile(filepath)
+      imagePath = `/uploads/${filename.replace('products/', '')}`
+    } catch (error) { console.error("Update image failed:", error) }
   }
 
   await prisma.product.update({
     where: { id },
-    data: {
-      name,
-      price,
-      categoryId,
-      time,
-      ...(imagePath && { image: imagePath })
-    }
+    data: { name, price, categoryId, time, ...(imagePath && { image: imagePath }) }
   });
-
-  revalidatePath('/');
-  revalidatePath('/admin');
+  revalidatePath('/', 'layout');
 }
 
 export async function deleteProduct(formData: FormData) {
   const id = formData.get('id') as string;
-
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id },
-      select: { image: true }
-    });
-
-    if (product && product.image && !product.image.startsWith('http')) {
-      const filePath = path.join(process.cwd(), 'public', product.image);
-      try {
-        await fs.access(filePath);
-        await fs.unlink(filePath);
-      } catch (err) {
-        console.error("File deletion failed:", err);
-      }
-    }
-
-    await prisma.product.delete({ where: { id } });
-
-  } catch (error) {
-    console.error("Failed to delete product:", error);
-  }
-
-  revalidatePath('/')
-  revalidatePath('/admin')
+  try { await prisma.product.delete({ where: { id } }); } catch (e) {}
+  revalidatePath('/', 'layout');
 }
 
-// --- SHOP SETTINGS ACTIONS ---
+// --- SETTINGS ACTIONS (FIXED FOR LOCAL UPLOAD) ---
 
-export async function getShopSettings() {
-  let settings = await prisma.shopSettings.findUnique({
-    where: { id: 'default' }
+export async function updateShopIdentity(formData: FormData) {
+  const name = formData.get('name') as string;
+  const address = formData.get('address') as string;
+  const phone = formData.get('phone') as string;
+
+  await prisma.shopSettings.update({
+    where: { id: 'default' },
+    data: { name, address, phone }
   });
-
-  if (!settings) {
-    settings = await prisma.shopSettings.create({
-      data: {
-        id: 'default',
-        name: 'Gourmet Shop',
-        themeColor: '#5CB85C'
-      }
-    });
-  }
-  return settings;
+  revalidatePath('/', 'layout');
 }
 
-export async function updateShopSettings(formData: FormData) {
-  const name = (formData.get('name') as string) || 'Gourmet Shop';
-  const address = formData.get('address') as string || '';
-  const phone = formData.get('phone') as string || '';
+export async function updateShopBranding(formData: FormData) {
   const themeColor = formData.get('themeColor') as string || '#5cb85c';
+  const logoFile = formData.get('logo') as File;
   
-  const facebook = formData.get('facebook') as string || '';
-  const showFacebook = formData.get('showFacebook') === 'on'; 
-  const instagram = formData.get('instagram') as string || '';
-  const showInstagram = formData.get('showInstagram') === 'on';
-  const telegram = formData.get('telegram') as string || '';
-  const showTelegram = formData.get('showTelegram') === 'on';
-
-  const logoFile = formData.get('logo') as File
-  let logoPath: string | null = null
+  let newLogoPath = undefined;
 
   if (logoFile && logoFile.size > 0 && logoFile.name !== 'undefined') {
     try {
-      const currentSettings = await prisma.shopSettings.findUnique({ where: { id: 'default' } });
-      if (currentSettings?.logo) {
-        const oldLogoPath = path.join(process.cwd(), 'public', currentSettings.logo);
-        try { await fs.unlink(oldLogoPath); } catch (e) { console.log("Old logo not found"); }
-      }
-
       const buffer = Buffer.from(await logoFile.arrayBuffer())
+      // Unique filename
       const filename = `logo-${Date.now()}.webp`
       const uploadDir = path.join(process.cwd(), 'public', 'uploads')
       const filepath = path.join(uploadDir, filename)
 
       await fs.mkdir(uploadDir, { recursive: true })
-
       await sharp(buffer)
-        .resize(300, 300, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .resize(300, 300, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .toFormat('webp')
         .toFile(filepath)
 
-      logoPath = `/uploads/${filename}`
+      newLogoPath = `/uploads/${filename}`
     } catch (error) {
-      console.error("Logo upload failed:", error)
+      console.error("Logo upload failed:", error);
     }
   }
 
-  await prisma.shopSettings.upsert({
+  const dataToUpdate: any = { themeColor };
+  if (newLogoPath) {
+    dataToUpdate.logo = newLogoPath;
+  }
+
+  await prisma.shopSettings.update({
     where: { id: 'default' },
-    update: {
-      name,
-      address,
-      phone,
-      themeColor,
-      facebook,
-      showFacebook,
-      instagram,
-      showInstagram,
-      telegram,
-      showTelegram,
-      ...(logoPath && { logo: logoPath }),
-    },
-    create: {
-      id: 'default',
-      name,
-      address,
-      phone,
-      themeColor,
-      facebook,
-      showFacebook,
-      instagram,
-      showInstagram,
-      telegram,
-      showTelegram,
-      logo: logoPath || null,
+    data: dataToUpdate,
+  });
+  revalidatePath('/', 'layout');
+}
+
+// 3. SOCIALS ACTION: Updates Unlimited Links
+export async function updateShopSocials(formData: FormData) {
+  // We receive a JSON string containing all links
+  const socials = formData.get('socials') as string;
+
+  await prisma.shopSettings.update({
+    where: { id: 'default' },
+    data: { 
+      socials // Saves the entire list as a string
     }
   });
 
-  revalidatePath('/');
-  revalidatePath('/admin');
+  revalidatePath('/', 'layout');
 }
 
+
 export async function forceRevalidateAction() {
-  revalidatePath('/');
-  revalidatePath('/admin');
+  revalidatePath('/', 'layout');
 }
