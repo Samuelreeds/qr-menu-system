@@ -1,6 +1,6 @@
 'use client';
 
-import { Star, Plus } from 'lucide-react';
+import { Star } from 'lucide-react';
 
 // Define the shape of the item data
 interface MenuItem {
@@ -13,13 +13,14 @@ interface MenuItem {
   category?: string | { name: string };
 }
 
-// Add themeColor to the props definition
+// We keep themeColor in the interface to prevent build errors from the parent component,
+// even though we aren't using it for the price anymore.
 interface FoodCardProps {
   item: MenuItem;
-  themeColor: string; 
+  themeColor?: string; 
 }
 
-export default function FoodCard({ item, themeColor }: FoodCardProps) {
+export default function FoodCard({ item }: FoodCardProps) {
   return (
     <div className="bg-white p-3 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-shadow">
       
@@ -49,20 +50,11 @@ export default function FoodCard({ item, themeColor }: FoodCardProps) {
           )}
         </div>
 
-        {/* Footer: Price & Button */}
-        <div className="flex items-center justify-between mt-auto pt-3">
-          {/* Dynamic Price Color */}
-          <span className="font-extrabold text-lg" style={{ color: themeColor }}>
+        {/* Footer: Price Only (Black) */}
+        <div className="mt-auto pt-3">
+          <span className="font-extrabold text-lg text-gray-900">
             ${item.price.toFixed(2)}
           </span>
-          
-          {/* Dynamic Button Color */}
-          <button 
-            className="text-white p-2 rounded-xl transition-transform active:scale-95 shadow-sm"
-            style={{ backgroundColor: themeColor }}
-          >
-            <Plus size={20} strokeWidth={3} />
-          </button>
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@ import Cropper from 'react-easy-crop';
 import getCroppedImg from '@/lib/cropImage'; 
 import { 
   createProduct, deleteProduct, updateProduct, 
-  createCategory, updateCategory, deleteCategory, // NEW IMPORTS
+  createCategory, updateCategory, deleteCategory,
   updateShopIdentity, updateShopBranding, updateShopSocials, 
   forceRevalidateAction 
 } from '@/lib/actions';
@@ -15,79 +15,122 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List // New Icon
+  ZoomIn, Check, List 
 } from 'lucide-react';
 
 // --- TYPES ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; logo: string | null; socials: string; }
-interface Category { id: string; name: string; sortOrder: number; } // Added sortOrder
+interface Category { id: string; name: string; sortOrder: number; } 
 interface Product { id: string; name: string; price: number; image: string; category: { name: string }; time: string; }
 interface AdminDashboardProps { categories: Category[]; products: Product[]; settings: ShopSettings; }
 
 export default function AdminDashboard({ categories, products, settings }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu'); // Added 'categories' tab
+  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
   const [isFormOpen, setIsFormOpen] = useState(false); // Product Modal
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); // Category Modal
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null); // Edit Category State
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Logo & Cropper State
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const [logoPreview, setLogoPreview] = useState(settings.logo || '');
-  const [isDirtyLogo, setIsDirtyLogo] = useState(false);
+  // --- NOTIFICATION STATE ---
+  const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+
+  // --- UNIVERSAL CROPPER STATE ---
+  const [cropTarget, setCropTarget] = useState<'logo' | 'product' | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
-  const [croppedFile, setCroppedFile] = useState<Blob | null>(null);
 
-  // Socials State
+  // --- LOGO SPECIFIC STATE ---
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState(settings.logo || '');
+  const [isDirtyLogo, setIsDirtyLogo] = useState(false);
+  const [logoFileBlob, setLogoFileBlob] = useState<Blob | null>(null);
+
+  // --- PRODUCT SPECIFIC STATE ---
+  const productInputRef = useRef<HTMLInputElement>(null);
+  const [productPreview, setProductPreview] = useState('');
+  const [productFileBlob, setProductFileBlob] = useState<Blob | null>(null);
+
+  // --- SOCIALS STATE ---
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => {
     try { return settings.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
   });
 
-  const productInputRef = useRef<HTMLInputElement>(null);
-  const editInputRef = useRef<HTMLInputElement>(null);
-  const [fileStatus, setFileStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [fileName, setFileName] = useState('');
-
   useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
 
+  // Reset Product Preview when opening modal
+  useEffect(() => {
+    if (editingProduct) {
+      setProductPreview(editingProduct.image);
+      setProductFileBlob(null);
+    } else if (isFormOpen) {
+      setProductPreview('');
+      setProductFileBlob(null);
+    }
+  }, [editingProduct, isFormOpen]);
+
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
+  
   const handleForceRefresh = async () => {
     setIsRefreshing(true);
     await forceRevalidateAction(); 
     setIsRefreshing(false);
-    alert("Synced!");
+    showToast("Synced successfully!");
   };
 
-  // Logo Handlers
-  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- NOTIFICATION HELPER ---
+  const showToast = (message: string) => {
+    setToast({ show: true, message });
+    setTimeout(() => setToast({ show: false, message: '' }), 3000);
+  };
+
+  // --- 1. UNIVERSAL FILE SELECT ---
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const reader = new FileReader();
-      reader.addEventListener('load', () => setCropImageSrc(reader.result as string));
+      reader.addEventListener('load', () => {
+        setCropImageSrc(reader.result as string);
+        setCropTarget(target); 
+        setZoom(1); 
+      });
       reader.readAsDataURL(file);
       e.target.value = ''; 
     }
   };
+
+  // --- 2. APPLY CROP ---
   const onCropComplete = (_: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels);
+  
   const showCroppedImage = async () => {
     if (!cropImageSrc || !croppedAreaPixels) return;
     try {
       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
       if (croppedBlob) {
-        setCroppedFile(croppedBlob); setLogoPreview(URL.createObjectURL(croppedBlob)); setCropImageSrc(null); setIsDirtyLogo(true);
+        const objectUrl = URL.createObjectURL(croppedBlob);
+        
+        if (cropTarget === 'logo') {
+          setLogoFileBlob(croppedBlob); 
+          setLogoPreview(objectUrl); 
+          setIsDirtyLogo(true);
+        } else if (cropTarget === 'product') {
+          setProductFileBlob(croppedBlob);
+          setProductPreview(objectUrl);
+        }
+        setCropImageSrc(null); 
+        setCropTarget(null);
       }
     } catch (e) { console.error(e); }
   };
-  const cancelLogoChange = () => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); setCroppedFile(null); };
+
+  const cancelLogoChange = () => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); setLogoFileBlob(null); };
 
   // Socials Handlers
   const addSocialLink = () => setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]);
@@ -102,17 +145,17 @@ export default function AdminDashboard({ categories, products, settings }: Admin
     }
   };
 
-  // File Handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, ref: React.RefObject<HTMLInputElement | null>) => {
-    const file = e.target.files?.[0];
-    if (file) { setFileStatus('success'); setFileName(file.name); }
-  };
-  const handleClearFile = (ref: React.RefObject<HTMLInputElement | null>) => {
-    setFileStatus('idle'); setFileName(''); if (ref.current) ref.current.value = '';
-  };
-
   return (
     <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative">
+      
+      {/* --- TOAST NOTIFICATION --- */}
+      <div className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+        <div className="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
+          <div className="bg-green-500 rounded-full p-1"><Check size={14} strokeWidth={3} className="text-white" /></div>
+          <span className="font-bold text-sm">{toast.message}</span>
+        </div>
+      </div>
+
       {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 w-full bg-white z-20 border-b border-gray-100 p-4 flex justify-between items-center shadow-sm">
         <h1 className="font-bold text-lg">AdminPanel</h1>
@@ -128,7 +171,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
             <button onClick={() => setActiveTab('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-brand-green text-black' : 'text-gray-500'}`}><List size={20}/> Categories</button>
             <button onClick={() => setActiveTab('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-brand-green text-black' : 'text-gray-500'}`}><Settings size={20}/> Settings</button>
           </nav>
-          <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut()} className="flex gap-3 text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
+          <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut({ callbackUrl: '/login' })} className="flex gap-3 text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
         </div>
       </aside>
 
@@ -158,26 +201,28 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                       <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category.name}</span></td>
                       <td className="p-4 font-bold text-gray-900">${item.price.toFixed(2)}</td>
                       <td className="p-4 text-sm text-gray-400">{item.time}</td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2"><button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-brand-green p-2 hover:bg-green-50 rounded-lg transition"><Settings size={18} /></button><form action={deleteProduct}><input type="hidden" name="id" value={item.id} /><button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button></form></td>
+                      <td className="p-4 text-right flex items-center justify-end gap-2">
+                        <button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-brand-green p-2 hover:bg-green-50 rounded-lg transition"><Settings size={18} /></button>
+                        <form action={async (fd) => { await deleteProduct(fd); showToast("Product deleted"); }}><input type="hidden" name="id" value={item.id} /><button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button></form>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             
-            {/* MOBILE LIST */}
             <div className="md:hidden space-y-3">
                {products.map((item) => (
                   <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                      <div className="flex items-center gap-4"><div className="w-16 h-16 bg-gray-100 rounded-xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div><div><h4 className="font-bold text-gray-800">{item.name}</h4><p className="text-xs text-gray-500 mb-1">{item.category.name} • {item.time}</p><p className="font-bold text-brand-green">${item.price.toFixed(2)}</p></div></div>
-                     <div className="flex gap-2"><button onClick={() => setEditingProduct(item)} className="p-2 text-gray-300 bg-gray-50 rounded-lg"><Settings size={20} /></button><form action={deleteProduct}><input type="hidden" name="id" value={item.id} /><button className="p-2 text-gray-300 hover:text-red-500 bg-gray-50 rounded-lg"><Trash2 size={20} /></button></form></div>
+                     <div className="flex gap-2"><button onClick={() => setEditingProduct(item)} className="p-2 text-gray-300 bg-gray-50 rounded-lg"><Settings size={20} /></button><form action={async (fd) => { await deleteProduct(fd); showToast("Product deleted"); }}><input type="hidden" name="id" value={item.id} /><button className="p-2 text-gray-300 hover:text-red-500 bg-gray-50 rounded-lg"><Trash2 size={20} /></button></form></div>
                   </div>
                ))}
             </div>
            </div>
         )}
 
-        {/* --- CATEGORIES TAB (NEW) --- */}
+        {/* --- CATEGORIES TAB --- */}
         {activeTab === 'categories' && (
            <div className="animate-in fade-in duration-300">
              <div className="flex justify-between items-center gap-4 mb-6">
@@ -195,7 +240,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                       <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
                       <td className="p-4 text-right flex items-center justify-end gap-2">
                         <button onClick={() => setEditingCategory(cat)} className="text-gray-300 hover:text-brand-green p-2 hover:bg-green-50 rounded-lg transition"><Settings size={18} /></button>
-                        <form action={deleteCategory}><input type="hidden" name="id" value={cat.id} /><button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button></form>
+                        <form action={async (fd) => { await deleteCategory(fd); showToast("Category deleted"); }}><input type="hidden" name="id" value={cat.id} /><button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button></form>
                       </td>
                     </tr>
                   ))}
@@ -214,7 +259,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                  <div className="flex gap-4 items-center"><div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Store size={20}/></div><div className="text-left font-bold text-gray-800">Shop Identity</div></div>{openSection === 'identity' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'identity' ? 'block' : 'hidden'}>
-                <form action={updateShopIdentity} className="p-5 border-t border-gray-50 space-y-4">
+                <form action={async (fd) => { await updateShopIdentity(fd); showToast("Identity saved successfully!"); }} className="p-5 border-t border-gray-50 space-y-4">
                    <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name</label><input name="name" defaultValue={settings.name} className="w-full p-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-brand-green"/></div>
                    <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-brand-green"/></div>
                    <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-brand-green"/></div>
@@ -229,13 +274,13 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                  <div className="flex gap-4 items-center"><div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Palette size={20}/></div><div className="text-left font-bold text-gray-800">Branding & Design</div></div>{openSection === 'branding' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form action={async (formData) => { if (croppedFile) formData.set('logo', croppedFile, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setCroppedFile(null); }} className="p-5 border-t border-gray-50 space-y-6">
+                <form action={async (formData) => { if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); showToast("Branding updated!"); }} className="p-5 border-t border-gray-50 space-y-6">
                    <div className="bg-gray-50 p-6 rounded-2xl flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200">
                       {logoPreview ? (
                         <div className="relative group"><div className="w-32 h-32 rounded-full overflow-hidden shadow-lg border-4 border-white"><img src={logoPreview} className="w-full h-full object-cover" alt="Preview" /></div>{isDirtyLogo && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-md">NEW</span>}</div>
                       ) : ( <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-400"><ImageIcon size={40}/></div> )}
                       <div className="mt-4 flex gap-3"><button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50">{logoPreview ? 'Change Image' : 'Upload Logo'}</button>{isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100">Cancel</button>}</div>
-                      <input type="file" accept="image/*" ref={logoInputRef} onChange={onFileSelect} className="hidden"/> 
+                      <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
                    </div>
                    <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Theme Color</label><input name="themeColor" type="color" defaultValue={settings.themeColor} className="h-12 w-full rounded-xl bg-gray-50 p-1 cursor-pointer"/></div>
                    <div className="flex justify-end pt-2"><button className="bg-brand-dark px-6 py-3 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:scale-[1.02] transition"><Save size={16}/> Save Branding</button></div>
@@ -249,7 +294,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                  <div className="flex gap-4 items-center"><div className="p-2 bg-pink-50 text-pink-600 rounded-lg"><Share2 size={20}/></div><div className="text-left font-bold text-gray-800">Social Media</div></div>{openSection === 'socials' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                <form action={updateShopSocials} className="p-5 border-t border-gray-50 space-y-4">
+                <form action={async (fd) => { await updateShopSocials(fd); showToast("Socials saved!"); }} className="p-5 border-t border-gray-50 space-y-4">
                   <input type="hidden" name="socials" value={JSON.stringify(socialLinks)} />
                   {socialLinks.map((link) => (
                     <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100 animate-in slide-in-from-left-2">
@@ -275,47 +320,86 @@ export default function AdminDashboard({ categories, products, settings }: Admin
         )}
       </main>
 
-      {/* --- CROPPER MODAL --- */}
+      {/* --- UNIVERSAL CROPPER MODAL --- */}
       {cropImageSrc && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Logo</h3><button onClick={() => setCropImageSrc(null)} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button></div>
-            <div className="relative w-full h-[300px] sm:h-[400px] bg-black"><Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop} onCropComplete={onCropComplete} onZoomChange={setZoom} showGrid={false} /></div>
+            <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Image</h3><button onClick={() => { setCropImageSrc(null); setCropTarget(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button></div>
+            <div className="relative w-full h-[300px] sm:h-[400px] bg-black">
+              <Cropper 
+                image={cropImageSrc} 
+                crop={crop} 
+                zoom={zoom} 
+                aspect={1} // Keep aspect ratio square for consistency
+                onCropChange={setCrop} 
+                onCropComplete={onCropComplete} 
+                onZoomChange={setZoom} 
+                showGrid={false} 
+              />
+            </div>
             <div className="p-6 bg-white space-y-6"><div className="flex items-center gap-4"><ZoomIn size={20} className="text-gray-400"/><input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/></div><button onClick={showCroppedImage} className="w-full py-4 bg-brand-green text-black font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all"><Check size={20} /> Apply Crop</button></div>
           </div>
         </div>
       )}
 
-      {/* --- ADD/EDIT PRODUCT MODAL --- */}
-      {isFormOpen && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setIsFormOpen(false)}>
+      {/* --- ADD/EDIT PRODUCT MODAL (UPDATED) --- */}
+      {(isFormOpen || editingProduct) && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-brand-dark">New Product</h2><button onClick={() => setIsFormOpen(false)}><X/></button></div>
-               <form action={async (fd) => { await createProduct(fd); setIsFormOpen(false); handleClearFile(productInputRef as any); }} className="space-y-4">
-                  <div className="relative group w-full"><input type="file" name="image" accept="image/*" onChange={(e) => handleFileChange(e, productInputRef)} ref={productInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" required={fileStatus !== 'success'} /><div className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center transition-all duration-300 ${fileStatus === 'success' ? 'border-brand-green bg-green-50/50 text-brand-green' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>{fileStatus === 'success' ? <CheckCircle size={32} /> : <UploadCloud size={32} />}<span className="text-sm font-bold truncate max-w-[200px] mt-2">{fileName || 'Tap to upload image'}</span></div></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><input name="name" placeholder="Product Name" className="p-3 bg-gray-50 rounded-xl outline-none" required /><input name="price" type="number" step="0.01" placeholder="Price" className="p-3 bg-gray-50 rounded-xl outline-none" required /></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><select name="categoryId" className="p-3 bg-gray-50 rounded-xl outline-none" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input name="time" placeholder="20min" className="p-3 bg-gray-50 rounded-xl outline-none" /></div>
-                  <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">Save Product</button>
+               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-brand-dark">{editingProduct ? 'Edit Product' : 'New Product'}</h2><button onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}><X/></button></div>
+               
+               <form 
+                 key={editingProduct ? editingProduct.id : 'new'} 
+                 action={async (fd) => { 
+                   if (productFileBlob) fd.set('image', productFileBlob, 'product.webp');
+                   
+                   if (editingProduct) await updateProduct(fd);
+                   else await createProduct(fd); 
+                   
+                   setIsFormOpen(false); 
+                   setEditingProduct(null); 
+                   setProductFileBlob(null);
+                   showToast("Product saved successfully!");
+                 }} 
+                 className="space-y-4"
+               >
+                  {editingProduct && <input type="hidden" name="id" value={editingProduct.id} />}
+                  
+                  {/* --- NEW IMAGE SELECTOR --- */}
+                  <div 
+                    onClick={() => productInputRef.current?.click()}
+                    className="relative w-full h-48 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-brand-green transition-colors"
+                  >
+                     {productPreview ? (
+                        <>
+                          <img src={productPreview} className="w-full h-full object-cover" alt="Preview" />
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                             <p className="text-white font-bold text-sm bg-black/50 px-3 py-1 rounded-full">Change Image</p>
+                          </div>
+                        </>
+                     ) : (
+                        <div className="text-center text-gray-400">
+                           <UploadCloud size={32} className="mx-auto mb-2"/>
+                           <span className="text-xs font-bold">Tap to upload image</span>
+                        </div>
+                     )}
+                     <input type="file" accept="image/*" ref={productInputRef} onChange={(e) => onFileSelect(e, 'product')} className="hidden" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <input name="name" defaultValue={editingProduct?.name || ''} placeholder="Product Name" className="p-3 bg-gray-50 rounded-xl outline-none" required />
+                    <input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="Price" className="p-3 bg-gray-50 rounded-xl outline-none" required />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <select name="categoryId" defaultValue={editingProduct?.category?.name} className="p-3 bg-gray-50 rounded-xl outline-none" required>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <input name="time" defaultValue={editingProduct?.time || ''} placeholder="20min" className="p-3 bg-gray-50 rounded-xl outline-none" />
+                  </div>
+                  <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">{editingProduct ? 'Update Product' : 'Save Product'}</button>
                </form>
             </div>
          </div>
-      )}
-
-      {/* --- EDIT PRODUCT MODAL (FIXED WITH KEY) --- */}
-      {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => setEditingProduct(null)}>
-          <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-brand-dark">Edit Item</h2><button onClick={() => setEditingProduct(null)} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button></div>
-             {/* KEY ADDED HERE: Forces form reset when product changes */}
-             <form key={editingProduct.id} action={async (fd) => { await updateProduct(fd); setEditingProduct(null); handleClearFile(editInputRef as any); }} className="space-y-4 flex flex-col gap-4">
-                <input type="hidden" name="id" value={editingProduct.id} />
-                <div className="relative group w-full"><input type="file" name="image" accept="image/*" onChange={(e) => handleFileChange(e, editInputRef)} ref={editInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" /><div className="border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center border-gray-200 bg-gray-50 text-gray-400"><ImageIcon size={32} /><span className="text-sm font-bold mt-2">Replace current image (optional)</span></div></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><input name="name" defaultValue={editingProduct.name} className="p-3 bg-gray-50 rounded-xl outline-none" required /><input name="price" type="number" step="0.01" defaultValue={editingProduct.price} className="p-3 bg-gray-50 rounded-xl outline-none" required /></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><select name="categoryId" defaultValue={editingProduct.category.name} className="p-3 bg-gray-50 rounded-xl outline-none" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><input name="time" defaultValue={editingProduct.time} className="p-3 bg-gray-50 rounded-xl outline-none" /></div>
-                <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">Update Product</button>
-             </form>
-          </div>
-        </div>
       )}
 
       {/* --- ADD/EDIT CATEGORY MODAL --- */}
@@ -330,12 +414,15 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                    else await createCategory(fd); 
                    setIsCatFormOpen(false); 
                    setEditingCategory(null); 
+                   showToast("Category saved successfully!");
                  }} 
                  className="space-y-4"
                >
                   {editingCategory && <input type="hidden" name="id" value={editingCategory.id} />}
                   <input name="name" placeholder="Category Name" defaultValue={editingCategory?.name || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
-                  <input name="sortOrder" type="number" placeholder="Sort Order (e.g. 1)" defaultValue={editingCategory?.sortOrder || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                  {editingCategory && (
+                    <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                  )}
                   <button className="w-full bg-brand-green p-4 rounded-xl font-bold">{editingCategory ? 'Update' : 'Create'}</button>
                </form>
             </div>
