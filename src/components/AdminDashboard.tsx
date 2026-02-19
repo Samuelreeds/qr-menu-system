@@ -24,15 +24,15 @@ interface ShopSettings { name: string; address: string | null; phone: string | n
 interface Category { 
   id: string; 
   name: string; 
-  name_kh?: string; 
-  name_zh?: string; 
+  name_kh?: string | null; 
+  name_zh?: string | null; 
   sortOrder: number; 
 } 
 interface Product { 
   id: string; 
   name: string; 
-  name_kh?: string; 
-  name_zh?: string; 
+  name_kh?: string | null; 
+  name_zh?: string | null; 
   price: number; 
   image: string; 
   category: { name: string }; 
