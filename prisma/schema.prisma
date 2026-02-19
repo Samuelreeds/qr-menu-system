@@ -23,6 +23,8 @@ model User {
 model Category {
   id        String    @id @default(cuid())
   name      String
+  name_kh     String?
+  name_zh     String?
   sortOrder Int       @default(0)
   products  Product[]
 }
@@ -30,6 +32,8 @@ model Category {
 model Product {
   id          String   @id @default(cuid())
   name        String
+  name_kh     String?
+  name_zh     String?
   price       Float
   image       String
   time        String?

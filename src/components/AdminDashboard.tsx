@@ -1,5 +1,5 @@
 'use client';
-
+import LocalizedInput from "@/components/LocalizedInput"; // Make sure this path is correct
 import { useState, useRef, useEffect } from 'react';
 import { signOut } from "next-auth/react"; 
 import Cropper from 'react-easy-crop'; 
@@ -18,11 +18,26 @@ import {
   ZoomIn, Check, List 
 } from 'lucide-react';
 
-// --- TYPES ---
+// --- TYPES (Updated with Language Fields) ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; logo: string | null; socials: string; }
-interface Category { id: string; name: string; sortOrder: number; } 
-interface Product { id: string; name: string; price: number; image: string; category: { name: string }; time: string; }
+interface Category { 
+  id: string; 
+  name: string; 
+  name_kh?: string; // Added
+  name_zh?: string; // Added
+  sortOrder: number; 
+} 
+interface Product { 
+  id: string; 
+  name: string; 
+  name_kh?: string; // Added
+  name_zh?: string; // Added
+  price: number; 
+  image: string; 
+  category: { name: string }; 
+  time: string; 
+}
 interface AdminDashboardProps { categories: Category[]; products: Product[]; settings: ShopSettings; }
 
 export default function AdminDashboard({ categories, products, settings }: AdminDashboardProps) {
@@ -32,6 +47,10 @@ export default function AdminDashboard({ categories, products, settings }: Admin
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
+
+  // --- LOCALIZED INPUT STATE ---
+  const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
+  const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
@@ -65,16 +84,35 @@ export default function AdminDashboard({ categories, products, settings }: Admin
 
   useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
 
-  // Reset Product Preview when opening modal
+  // --- SYNC STATE WHEN OPENING MODALS ---
   useEffect(() => {
     if (editingProduct) {
       setProductPreview(editingProduct.image);
       setProductFileBlob(null);
+      // Populate names
+      setProdName({
+        en: editingProduct.name || '',
+        kh: editingProduct.name_kh || '',
+        zh: editingProduct.name_zh || ''
+      });
     } else if (isFormOpen) {
       setProductPreview('');
       setProductFileBlob(null);
+      setProdName({ en: '', kh: '', zh: '' }); // Reset names
     }
   }, [editingProduct, isFormOpen]);
+
+  useEffect(() => {
+    if (editingCategory) {
+      setCatName({
+        en: editingCategory.name || '',
+        kh: editingCategory.name_kh || '',
+        zh: editingCategory.name_zh || ''
+      });
+    } else if (isCatFormOpen) {
+      setCatName({ en: '', kh: '', zh: '' });
+    }
+  }, [editingCategory, isCatFormOpen]);
 
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
   
@@ -342,7 +380,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
         </div>
       )}
 
-      {/* --- ADD/EDIT PRODUCT MODAL (UPDATED) --- */}
+      {/* --- ADD/EDIT PRODUCT MODAL (UPDATED WITH LOCALIZED INPUT) --- */}
       {(isFormOpen || editingProduct) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
@@ -352,6 +390,11 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                  key={editingProduct ? editingProduct.id : 'new'} 
                  action={async (fd) => { 
                    if (productFileBlob) fd.set('image', productFileBlob, 'product.webp');
+                   
+                   // --- INJECT LOCALIZED NAMES ---
+                   fd.set('name', prodName.en);
+                   fd.set('name_kh', prodName.kh);
+                   fd.set('name_zh', prodName.zh);
                    
                    if (editingProduct) await updateProduct(fd);
                    else await createProduct(fd); 
@@ -371,38 +414,58 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                     className="relative w-full h-48 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-brand-green transition-colors"
                   >
                      {productPreview ? (
-                        <>
-                          <img src={productPreview} className="w-full h-full object-cover" alt="Preview" />
-                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                             <p className="text-white font-bold text-sm bg-black/50 px-3 py-1 rounded-full">Change Image</p>
-                          </div>
-                        </>
+                       <>
+                         <img src={productPreview} className="w-full h-full object-cover" alt="Preview" />
+                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-white font-bold text-sm bg-black/50 px-3 py-1 rounded-full">Change Image</p>
+                         </div>
+                       </>
                      ) : (
-                        <div className="text-center text-gray-400">
-                           <UploadCloud size={32} className="mx-auto mb-2"/>
-                           <span className="text-xs font-bold">Tap to upload image</span>
-                        </div>
+                       <div className="text-center text-gray-400">
+                          <UploadCloud size={32} className="mx-auto mb-2"/>
+                          <span className="text-xs font-bold">Tap to upload image</span>
+                       </div>
                      )}
                      <input type="file" accept="image/*" ref={productInputRef} onChange={(e) => onFileSelect(e, 'product')} className="hidden" />
                   </div>
 
+                  {/* --- LOCALIZED NAME INPUT --- */}
+                  <LocalizedInput 
+                    label="Product Name"
+                    value={prodName.en}
+                    valueKh={prodName.kh}
+                    valueZh={prodName.zh}
+                    onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))}
+                    required
+                  />
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input name="name" defaultValue={editingProduct?.name || ''} placeholder="Product Name" className="p-3 bg-gray-50 rounded-xl outline-none" required />
-                    <input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="Price" className="p-3 bg-gray-50 rounded-xl outline-none" required />
+                    {/* Price - keeping standard input */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500">Price ($)</label>
+                      <input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                    </div>
+                    {/* Category */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500">Category</label>
+                      <select name="categoryId" defaultValue={editingProduct?.category?.name} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <select name="categoryId" defaultValue={editingProduct?.category?.name} className="p-3 bg-gray-50 rounded-xl outline-none" required>
-                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <input name="time" defaultValue={editingProduct?.time || ''} placeholder="20min" className="p-3 bg-gray-50 rounded-xl outline-none" />
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500">Preparation Time</label>
+                    <input name="time" defaultValue={editingProduct?.time || ''} placeholder="e.g. 20min" className="w-full p-3 bg-gray-50 rounded-xl outline-none" />
                   </div>
-                  <button className="bg-brand-green text-black p-4 rounded-xl font-bold mt-2">{editingProduct ? 'Update Product' : 'Save Product'}</button>
+                  
+                  <button className="w-full bg-brand-green text-black p-4 rounded-xl font-bold mt-4 shadow-lg hover:brightness-105 active:scale-95 transition-all">{editingProduct ? 'Update Product' : 'Save Product'}</button>
                </form>
             </div>
          </div>
       )}
 
-      {/* --- ADD/EDIT CATEGORY MODAL --- */}
+      {/* --- ADD/EDIT CATEGORY MODAL (UPDATED WITH LOCALIZED INPUT) --- */}
       {(isCatFormOpen || editingCategory) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -410,6 +473,11 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                <form 
                  key={editingCategory ? editingCategory.id : 'new'}
                  action={async (fd) => { 
+                    // --- INJECT LOCALIZED NAMES ---
+                    fd.set('name', catName.en);
+                    fd.set('name_kh', catName.kh);
+                    fd.set('name_zh', catName.zh);
+
                    if (editingCategory) await updateCategory(fd); 
                    else await createCategory(fd); 
                    setIsCatFormOpen(false); 
@@ -419,11 +487,23 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                  className="space-y-4"
                >
                   {editingCategory && <input type="hidden" name="id" value={editingCategory.id} />}
-                  <input name="name" placeholder="Category Name" defaultValue={editingCategory?.name || ''} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                  
+                  <LocalizedInput 
+                    label="Category Name"
+                    value={catName.en}
+                    valueKh={catName.kh}
+                    valueZh={catName.zh}
+                    onChange={(lang, val) => setCatName(prev => ({ ...prev, [lang]: val }))}
+                    required
+                  />
+
                   {editingCategory && (
-                    <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500">Sort Order</label>
+                      <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3 bg-gray-50 rounded-xl outline-none" required />
+                    </div>
                   )}
-                  <button className="w-full bg-brand-green p-4 rounded-xl font-bold">{editingCategory ? 'Update' : 'Create'}</button>
+                  <button className="w-full bg-brand-green p-4 rounded-xl font-bold shadow-lg hover:brightness-105 active:scale-95 transition-all">{editingCategory ? 'Update' : 'Create'}</button>
                </form>
             </div>
          </div>

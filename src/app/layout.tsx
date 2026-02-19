@@ -1,14 +1,31 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Poppins, Chenla, Noto_Sans_TC } from "next/font/google"; // 1. Added Noto_Sans_TC
 import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 
-// THIS LINE WAS MISSING:
-const inter = Inter({ subsets: ["latin"] });
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
+});
+
+const chenla = Chenla({
+  subsets: ["khmer"],
+  weight: ["400"],
+  variable: "--font-chenla",
+});
+
+// 2. Configure Noto Sans TC
+const notoTc = Noto_Sans_TC({
+  weight: ["400", "500", "700"],
+  variable: "--font-noto-tc",
+  preload: false, // Required for large Chinese fonts in Next.js
+});
 
 export const metadata: Metadata = {
-  title: "Gourmet Shop",
-  description: "Best food in town",
+  title: 'Menu',
+  description: 'QR Menu System',
 };
 
 export default function RootLayout({
@@ -18,10 +35,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <CartProvider>
-          {children}
-        </CartProvider>
+      {/* 3. Add the new variable to the className */}
+      <body className={`${poppins.variable} ${chenla.variable} ${notoTc.variable} antialiased`}>
+        <LanguageProvider>
+          <CartProvider>
+            {children}
+          </CartProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

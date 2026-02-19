@@ -1,11 +1,14 @@
 'use client';
 
 import { Star } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext'; // 1. Import the hook
 
-// Define the shape of the item data
+// 2. Add language fields to the interface
 interface MenuItem {
   id: string;
   name: string;
+  name_kh?: string | null; 
+  name_zh?: string | null; 
   price: number;
   image: string;
   time?: string;
@@ -13,14 +16,20 @@ interface MenuItem {
   category?: string | { name: string };
 }
 
-// We keep themeColor in the interface to prevent build errors from the parent component,
-// even though we aren't using it for the price anymore.
 interface FoodCardProps {
   item: MenuItem;
   themeColor?: string; 
 }
 
 export default function FoodCard({ item }: FoodCardProps) {
+  const { lang } = useLanguage(); // 3. Get current language
+
+  // 4. Logic to get the correct translated name
+  const displayName = 
+    lang === 'kh' ? (item.name_kh || item.name) : 
+    lang === 'zh' ? (item.name_zh || item.name) : 
+    item.name;
+
   return (
     <div className="bg-white p-3 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-shadow">
       
@@ -28,7 +37,7 @@ export default function FoodCard({ item }: FoodCardProps) {
       <div className="relative h-32 w-full mb-3 shrink-0">
         <img 
           src={item.image} 
-          alt={item.name}
+          alt={displayName} // Update alt text
           className="object-cover rounded-2xl w-full h-full bg-gray-100"
           loading="lazy"
         />
@@ -37,7 +46,7 @@ export default function FoodCard({ item }: FoodCardProps) {
       {/* Content */}
       <div className="flex flex-col flex-1 space-y-1">
         <h3 className="font-bold text-gray-900 text-lg leading-tight line-clamp-2">
-          {item.name}
+          {displayName} {/* 5. Display the translated name */}
         </h3>
         
         <div className="flex items-center text-gray-400 text-xs gap-2">

@@ -1,4 +1,3 @@
-// tailwind.config.ts
 import type { Config } from "tailwindcss";
 
 const config: Config = {
@@ -11,14 +10,18 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          green: "#5CB85C", // Adjusted to match the 'Add' button and 'Salads' active state
+          green: "#5CB85C",
           dark: "#1A1A1A",
           gray: "#F4F5F7",
         }
       },
       borderRadius: {
         '3xl': '1.5rem',
-      }
+      },
+      // Ensure this is here to link Tailwind to the CSS variables
+      fontFamily: {
+        sans: ["var(--font-poppins)", "var(--font-chenla)", "sans-serif"],
+      },
     },
   },
   plugins: [],

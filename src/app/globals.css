@@ -8,12 +8,19 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Update the font-sans variable.
+     This creates a stack: 
+     1. Poppins (English)
+     2. Chenla (Khmer Fallback)
+     3. Noto Sans TC (Chinese Fallback)
+     4. System sans-serif 
+  */
+  --font-sans: var(--font-poppins), var(--font-chenla), var(--font-noto-tc), sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Force the Next.js font variables to prevent overrides */
+  font-family: var(--font-sans) !important;
 }
