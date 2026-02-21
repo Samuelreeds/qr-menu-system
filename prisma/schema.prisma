@@ -1,4 +1,4 @@
-// prisma/schema.prisma
+// PHASE 1: PRISMA SCHEMA CHANGES
 
 generator client {
   provider = "prisma-client-js"
@@ -10,22 +10,69 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// --- USER MODEL (UPDATED) ---
+// --- USER MODEL ---
 model User {
   id             String    @id @default(cuid())
   email          String    @unique
   password       String
-  failedAttempts Int       @default(0) // Tracks failed logins
-  lockoutUntil   DateTime? // Timestamp when lock expires
+  failedAttempts Int       @default(0) 
+  lockoutUntil   DateTime? 
+
+  shopUsers      ShopUser[]
 }
 
-// --- YOUR EXISTING MODELS ---
+// --- NEW SAAS MODELS ---
+model Shop {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique 
+  plan        String    @default("FREE") 
+  status      String    @default("ACTIVE") 
+  trialEndsAt DateTime?
+  paidUntil   DateTime?
+  createdAt   DateTime  @default(now())
+
+  shopUsers   ShopUser[]
+  categories  Category[]
+  products    Product[]
+  settings    ShopSettings?
+}
+
+model ShopUser {
+  id        String   @id @default(cuid())
+  userId    String
+  shopId    String
+  role      String   @default("OWNER") 
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shopId])
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String?
+  shopName  String?
+  slug      String?
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// --- YOUR EXISTING MODELS (SCOPED TO SHOP) ---
 model Category {
   id        String    @id @default(cuid())
   name      String
-  name_kh     String?
-  name_zh     String?
+  name_kh   String?
+  name_zh   String?
   sortOrder Int       @default(0)
+  
+  shopId    String
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
   products  Product[]
 }
 
@@ -39,23 +86,32 @@ model Product {
   time        String?
   rating      Float    @default(0)
   description String?
+  isPopular   Boolean  @default(false) // <-- ADD THIS LINE BACK
+
   categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
   createdAt   DateTime @default(now())
 }
 
 model ShopSettings {
-  id            String  @id @default("default")
+  id            String  @id @default(cuid())
   name          String
   address       String?
   phone         String?
   themeColor    String  @default("#5CB85C")
   logo          String?
-  socials       String   @default("[]")
+  socials       String  @default("[]")
   facebook      String?
   showFacebook  Boolean @default(false)
   instagram     String?
   showInstagram Boolean @default(false)
   telegram      String?
   showTelegram  Boolean @default(false)
+
+  shopId        String  @unique 
+  shop          Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

@@ -15,7 +15,7 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil 
+  ZoomIn, Check, List, Pencil, ExternalLink // Added ExternalLink here
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -36,9 +36,17 @@ interface Product {
   price: number; 
   image: string; 
   category: { name: string }; 
-  time: string; 
+  time: string;
+  isPopular?: boolean; 
 }
-interface AdminDashboardProps { categories: Category[]; products: Product[]; settings: ShopSettings; }
+
+// Added shopSlug to the props
+interface AdminDashboardProps { 
+  categories: Category[]; 
+  products: Product[]; 
+  settings: ShopSettings; 
+  shopSlug: string; 
+}
 
 // --- OPTIMISTIC REDUCER TYPES ---
 type OptimisticAction<T> = 
@@ -46,7 +54,7 @@ type OptimisticAction<T> =
   | { type: 'update'; payload: T }
   | { type: 'delete'; payload: string };
 
-export default function AdminDashboard({ categories, products, settings }: AdminDashboardProps) {
+export default function AdminDashboard({ categories, products, settings, shopSlug }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -184,7 +192,6 @@ export default function AdminDashboard({ categories, products, settings }: Admin
   };
 
   return (
-    // INJECT THE THEME COLOR AS A CSS VARIABLE HERE
     <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative" style={{ '--theme-color': settings?.themeColor || '#5CB85C' } as React.CSSProperties}>
       <div className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
         <div className="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
@@ -193,7 +200,6 @@ export default function AdminDashboard({ categories, products, settings }: Admin
         </div>
       </div>
 
-      {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 w-full bg-[#F9FAFB] z-20 p-4 flex items-center gap-4">
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
           <Menu size={22} className="text-gray-700" />
@@ -218,9 +224,23 @@ export default function AdminDashboard({ categories, products, settings }: Admin
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
       <main className="flex-1 p-4 pt-24 md:p-8 overflow-y-auto">
-        <header className="hidden md:flex justify-between mb-8">
+        
+        {/* --- UPDATED HEADER WITH 'VIEW LIVE MENU' BUTTON --- */}
+        <header className="hidden md:flex justify-between mb-8 items-center">
            <h2 className="text-2xl font-bold capitalize">{activeTab}</h2>
-           <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync</button>
+           <div className="flex gap-3">
+             <a 
+               href={`/${shopSlug}`} 
+               target="_blank" 
+               rel="noopener noreferrer"
+               className="flex gap-2 px-4 py-2 bg-[var(--theme-color)] text-white rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-sm active:scale-95 items-center"
+             >
+               <ExternalLink size={14} /> View Live Menu
+             </a>
+             <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95">
+               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync
+             </button>
+           </div>
         </header>
 
         {/* --- MENU TAB --- */}
@@ -243,7 +263,13 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                 <tbody className="divide-y divide-gray-50">
                   {optProducts.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="p-4 flex items-center gap-3"><div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div><span className="font-bold text-gray-700">{item.name}</span></td>
+                      <td className="p-4 flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                        <span className="font-bold text-gray-700 flex items-center gap-2">
+                          {item.name}
+                          {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                        </span>
+                      </td>
                       <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category?.name}</span></td>
                       <td className="p-4 font-bold text-gray-900">${item.price.toFixed(2)}</td>
                       <td className="p-4 text-sm text-gray-400">{item.time}</td>
@@ -267,7 +293,17 @@ export default function AdminDashboard({ categories, products, settings }: Admin
             <div className="md:hidden space-y-3">
                {optProducts.map((item) => (
                   <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between">
-                     <div className="flex items-center gap-4"><div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div><div><h4 className="font-bold text-gray-800 leading-tight mb-1">{item.name}</h4><p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p><p className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</p></div></div>
+                     <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                        <div>
+                          <h4 className="font-bold text-gray-800 leading-tight mb-1 flex items-center gap-2">
+                            {item.name}
+                            {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                          </h4>
+                          <p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p>
+                          <p className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</p>
+                        </div>
+                     </div>
                      <div className="flex flex-col gap-2">
                       <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)]"><Pencil size={16} /></button>
                       <form action={async (fd) => { 
@@ -425,6 +461,7 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                      image: productPreview || editingProduct?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
+                     isPopular: fd.get('isPopular') === 'on', // Optimistic update for Hot Sale
                    };
 
                    dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
@@ -466,7 +503,25 @@ export default function AdminDashboard({ categories, products, settings }: Admin
                   </div>
 
                   <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Preparation Time</label><input name="time" defaultValue={editingProduct?.time || ''} placeholder="e.g. 15min" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" /></div>
-                  <button className="w-full bg-[var(--theme-color)] text-white py-4 rounded-xl font-bold mt-6 shadow-md hover:brightness-110 active:scale-95 transition-all">{editingProduct ? 'Update Product' : 'Save Product'}</button>
+                  
+                  {/* --- HOT SALE TOGGLE --- */}
+                  <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100 mt-2">
+                    <div>
+                      <h4 className="font-bold text-orange-600 text-sm">Hot Sale Item</h4>
+                      <p className="text-[10px] text-orange-400">Show this in the popular section</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        name="isPopular" 
+                        defaultChecked={editingProduct?.isPopular} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                    </label>
+                  </div>
+
+                  <button className="w-full bg-[var(--theme-color)] text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:brightness-110 active:scale-95 transition-all">{editingProduct ? 'Update Product' : 'Save Product'}</button>
                </form>
             </div>
          </div>

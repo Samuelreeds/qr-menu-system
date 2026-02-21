@@ -4,31 +4,66 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
+import { z } from 'zod'
+import crypto from 'crypto'
+import bcrypt from 'bcrypt'
+import { getServerSession } from 'next-auth';
 
 // --- SETUP ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
+// --- MULTI-TENANT HELPER ---
+// This safely bridges your old single-tenant code to the new SaaS structure
+// --- MULTI-TENANT HELPER (SECURED) ---
+async function getActiveShopId() {
+  const session = await getServerSession();
+  
+  if (!session || !session.user || !session.user.email) {
+    throw new Error("Unauthorized: You must be logged in.");
+  }
+
+  // Find the logged-in user and the shop they own
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    include: { shopUsers: true }
+  });
+
+  if (!user || user.shopUsers.length === 0) {
+    throw new Error("No shop found for this account.");
+  }
+
+  // Return their exact, private shop ID
+  return user.shopUsers[0].shopId;
+}
+
 // --- READ ACTIONS ---
 export async function getCategories() {
-  return await prisma.category.findMany({ orderBy: { sortOrder: 'asc' } })
+  const shopId = await getActiveShopId();
+  return await prisma.category.findMany({ 
+    where: { shopId },
+    orderBy: { sortOrder: 'asc' } 
+  });
 }
 
 export async function getProducts() {
+  const shopId = await getActiveShopId();
   return await prisma.product.findMany({
+    where: { shopId },
     include: { category: true },
     orderBy: { createdAt: 'desc' }
-  })
+  });
 }
 
 export async function getShopSettings() {
-  let settings = await prisma.shopSettings.findUnique({ where: { id: 'default' } });
+  const shopId = await getActiveShopId();
+  let settings = await prisma.shopSettings.findUnique({ where: { shopId } });
   
   if (!settings) {
     return {
       id: "default", 
-      name: "Gourmet Shop", 
+      name: "Scandine", 
       address: "", 
       phone: "", 
       themeColor: "#5CB85C",
@@ -85,11 +120,16 @@ export async function createCategory(formData: FormData) {
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
-  const lastCategory = await prisma.category.findFirst({ orderBy: { sortOrder: 'desc' } });
+  const shopId = await getActiveShopId();
+
+  const lastCategory = await prisma.category.findFirst({ 
+    where: { shopId },
+    orderBy: { sortOrder: 'desc' } 
+  });
   const nextOrder = (lastCategory?.sortOrder || 0) + 1;
   
   await prisma.category.create({ 
-    data: { name, name_kh, name_zh, sortOrder: nextOrder } 
+    data: { name, name_kh, name_zh, sortOrder: nextOrder, shopId } 
   });
   revalidatePath('/', 'layout');
 }
@@ -123,12 +163,13 @@ export async function createProduct(formData: FormData) {
   const categoryId = formData.get('categoryId') as string
   const time = formData.get('time') as string || '15min'
   const imageFile = formData.get('image') as File
+  const shopId = await getActiveShopId();
   
   let imagePath = await uploadToSupabase(imageFile, 'products');
   if (!imagePath) imagePath = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
 
   await prisma.product.create({
-    data: { name, name_kh, name_zh, price, categoryId, image: imagePath, time, rating: 4.5, description: '' }
+    data: { name, name_kh, name_zh, price, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
   })
   revalidatePath('/', 'layout');
 }
@@ -152,7 +193,7 @@ export async function updateProduct(formData: FormData) {
 
   await prisma.product.update({
     where: { id },
-    data: { name, name_kh, name_zh, price, categoryId, time, ...(newImagePath && { image: newImagePath }) }
+    data: { name, name_kh, name_zh, price, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on' }
   });
   revalidatePath('/', 'layout');
 }
@@ -168,17 +209,17 @@ export async function deleteProduct(formData: FormData) {
 }
 
 // --- SETTINGS ACTIONS ---
-
 export async function updateShopIdentity(formData: FormData) {
   const name = formData.get('name') as string;
   const address = formData.get('address') as string;
   const phone = formData.get('phone') as string;
+  const shopId = await getActiveShopId();
 
   await prisma.shopSettings.upsert({
-    where: { id: 'default' },
+    where: { shopId },
     update: { name, address, phone },
     create: { 
-      id: 'default', 
+      shopId, 
       name, 
       address, 
       phone,
@@ -191,13 +232,14 @@ export async function updateShopIdentity(formData: FormData) {
 export async function updateShopBranding(formData: FormData) {
   const themeColor = formData.get('themeColor') as string || '#5cb85c';
   const logoFile = formData.get('logo') as File;
+  const shopId = await getActiveShopId();
   
   const newLogoPath = await uploadToSupabase(logoFile, 'branding');
 
   const dataToUpdate: any = { themeColor };
   
   if (newLogoPath) {
-    const currentSettings = await prisma.shopSettings.findUnique({ where: { id: 'default' }, select: { logo: true } });
+    const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { logo: true } });
     if (currentSettings?.logo) {
       await deleteFromSupabase(currentSettings.logo);
     }
@@ -205,11 +247,11 @@ export async function updateShopBranding(formData: FormData) {
   }
 
   await prisma.shopSettings.upsert({
-    where: { id: 'default' },
+    where: { shopId },
     update: dataToUpdate,
     create: {
-      id: 'default',
-      name: 'Gourmet Shop',
+      shopId,
+      name: 'Scandine',
       themeColor,
       logo: newLogoPath || null
     }
@@ -219,13 +261,14 @@ export async function updateShopBranding(formData: FormData) {
 
 export async function updateShopSocials(formData: FormData) {
   const socials = formData.get('socials') as string;
+  const shopId = await getActiveShopId();
   
   await prisma.shopSettings.upsert({
-    where: { id: 'default' },
+    where: { shopId },
     update: { socials },
     create: {
-      id: 'default',
-      name: 'Gourmet Shop',
+      shopId,
+      name: 'Scandine',
       socials
     }
   });
@@ -234,4 +277,206 @@ export async function updateShopSocials(formData: FormData) {
 
 export async function forceRevalidateAction() {
   revalidatePath('/', 'layout');
+}
+
+
+// ============================================================================
+// PHASE 2: INVITE & SHOP REGISTRATION ACTIONS
+// ============================================================================
+
+const createInviteSchema = z.object({
+  email: z.string().email().optional().or(z.literal('')),
+  shopName: z.string().optional().or(z.literal('')),
+  slug: z.string().optional().or(z.literal('')),
+  expiresInDays: z.number().min(1).max(30).default(7),
+});
+
+// SLUG REMOVED FROM SCHEMA
+const registerSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  shopName: z.string().min(1, "Shop name is required"),
+});
+
+// --- 1. SUPER ADMIN ACTIONS ---
+
+export async function createInvite(formData: FormData) {
+  const data = {
+    email: formData.get('email')?.toString() || undefined,
+    shopName: formData.get('shopName')?.toString() || undefined,
+    slug: formData.get('slug')?.toString() || undefined,
+    expiresInDays: parseInt(formData.get('expiresInDays')?.toString() || '7', 10),
+  };
+
+  const parsed = createInviteSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid input data" };
+  }
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const expiresAt = new Date(Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000);
+
+  try {
+    const invite = await prisma.invite.create({
+      data: {
+        token,
+        email: parsed.data.email,
+        shopName: parsed.data.shopName,
+        slug: parsed.data.slug,
+        expiresAt,
+      }
+    });
+    
+    revalidatePath('/superadmin');
+    return { success: true, token: invite.token };
+  } catch (error) {
+    console.error("Failed to create invite:", error);
+    return { success: false, error: "Database error while creating invite" };
+  }
+}
+
+export async function listInvites() {
+  return await prisma.invite.findMany({
+    orderBy: { createdAt: 'desc' }
+  });
+}
+
+export async function toggleShopStatus(formData: FormData) {
+  const id = formData.get('id') as string;
+  const currentStatus = formData.get('currentStatus') === 'true';
+  await prisma.shop.update({ 
+    where: { id }, 
+    data: { status: currentStatus ? "LOCKED" : "ACTIVE" } 
+  });
+  revalidatePath('/superadmin');
+}
+
+export async function updateShopPlan(formData: FormData) {
+  const id = formData.get('id') as string;
+  const plan = formData.get('plan') as string;
+  await prisma.shop.update({ 
+    where: { id }, 
+    data: { plan } 
+  });
+  revalidatePath('/superadmin');
+}
+
+// --- 2. INVITE CLAIM FLOW ACTIONS ---
+
+export async function validateInviteToken(token: string) {
+  if (!token) return { valid: false, error: "No token provided" };
+
+  const invite = await prisma.invite.findUnique({
+    where: { token }
+  });
+
+  if (!invite) return { valid: false, error: "Invite not found or invalid" };
+  if (invite.isUsed) return { valid: false, error: "This invite has already been used" };
+  if (new Date() > invite.expiresAt) return { valid: false, error: "This invite has expired" };
+
+  return { valid: true, invite };
+}
+
+export async function registerShopFromInvite(formData: FormData) {
+  const data = Object.fromEntries(formData.entries());
+  const parsed = registerSchema.safeParse(data);
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  // SLUG IS NO LONGER EXTRACTED HERE
+  const { token, email, password, shopName } = parsed.data;
+
+  const inviteCheck = await validateInviteToken(token);
+  if (!inviteCheck.valid) {
+    return { success: false, error: inviteCheck.error };
+  }
+
+  // --- 🪄 AUTO-GENERATE THE SLUG ---
+  // Converts "Banlung City Shop" -> "banlung-city-shop"
+  const generatedSlug = shopName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-') // Replaces spaces and special characters with hyphens
+    .replace(/^-+|-+$/g, '');    // Removes extra hyphens from the start or end
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      
+      const existingUser = await tx.user.findUnique({ where: { email } });
+      if (existingUser) throw new Error("Email already in use");
+
+      // Check if the auto-generated slug is already taken by another shop
+      const existingShop = await tx.shop.findUnique({ where: { slug: generatedSlug } });
+      if (existingShop) throw new Error("That shop name is already taken. Please try a slightly different name.");
+
+      const newShop = await tx.shop.create({
+        data: {
+          name: shopName,
+          slug: generatedSlug, // Insert auto-generated slug here
+          plan: "PRO",
+          status: "ACTIVE",
+          trialEndsAt: trialEndsAt,
+        }
+      });
+
+      const newUser = await tx.user.create({
+        data: {
+          email: email,
+          password: hashedPassword,
+        }
+      });
+
+      await tx.shopUser.create({
+        data: {
+          userId: newUser.id,
+          shopId: newShop.id,
+          role: "OWNER"
+        }
+      });
+
+      await tx.shopSettings.create({
+        data: {
+          shopId: newShop.id,
+          name: shopName,
+          themeColor: "#5CB85C",
+        }
+      });
+
+      await tx.invite.update({
+        where: { token },
+        data: { isUsed: true }
+      });
+
+      return newShop;
+    });
+
+    return { success: true, shopSlug: result.slug };
+
+  } catch (error: any) {
+    console.error("Registration transaction failed:", error);
+    if (error.code === 'P2002') return { success: false, error: "Email or URL Slug is already taken." };
+    return { success: false, error: error.message || "Registration failed." };
+  }
+}
+// --- SUPER ADMIN: DELETE ANY PRODUCT ---
+export async function superAdminDeleteProduct(formData: FormData) {
+  const id = formData.get('id') as string;
+  const shopId = formData.get('shopId') as string; // Used for revalidation routing
+
+  try { 
+    const product = await prisma.product.findUnique({ where: { id }, select: { image: true } });
+    await prisma.product.delete({ where: { id } });
+    // Assuming deleteFromSupabase is available in your file
+    await deleteFromSupabase(product?.image || null);
+  } catch (e) {
+    console.error("Super Admin Delete Failed", e);
+  }
+  
+  revalidatePath(`/superadmin/shop/${shopId}`);
 }
