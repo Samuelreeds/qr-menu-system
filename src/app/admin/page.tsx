@@ -33,7 +33,7 @@ export default async function AdminPage() {
   return (
     <AdminDashboard 
       categories={categories} 
-      products={products} 
+      products={products as any} 
       settings={settings} 
       shopSlug={activeShop.slug} 
     />
