@@ -17,6 +17,7 @@ interface ShopSettings {
   facebook?: string; showFacebook: boolean;
   instagram?: string; showInstagram: boolean;
   telegram?: string; showTelegram: boolean;
+  socials: string; 
 }
 
 interface Product {
@@ -30,6 +31,7 @@ interface Product {
   image: string;
   categoryId: string;
   category: { name: string } | string;
+  isPopular?: boolean; // Added isPopular to type
 }
 
 interface Category { 
@@ -77,9 +79,11 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
     );
   };
 
+  const hasPopularProducts = initialProducts.some(p => p.isPopular);
+
   return (
   <main 
-    className="font-sans min-h-screen bg-gray-50/30 max-w-md mx-auto relative pb-24"
+    className="font-sans min-h-screen bg-gray-50/30 w-full max-w-2xl mx-auto relative pb-24 shadow-sm"
     style={{ '--brand-color': themeColor } as React.CSSProperties}
   >
     <ShopInfoModal 
@@ -152,7 +156,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
             </h1>
           </div>
 
-          {/* Right — Spacer (Keeps Center aligned perfectly after removing Menu Icon) */}
+          {/* Right — Spacer */}
           <div className="w-10 h-10 flex-shrink-0" />
         </div>
       </div>
@@ -185,6 +189,20 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
               {lang === 'kh' ? 'ទាំងអស់' : lang === 'zh' ? '全部' : 'All'}
           </button>
 
+          {hasPopularProducts && (
+            <button 
+                onClick={() => setActiveCategory('Hot Sale')}
+                className={`px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                  activeCategory === 'Hot Sale' 
+                    ? 'text-white shadow-md border-transparent' 
+                    : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100'
+                }`}
+                style={activeCategory === 'Hot Sale' ? { backgroundColor: themeColor } : {}}
+              >
+                🔥 {lang === 'kh' ? 'ពេញនិយម' : lang === 'zh' ? '热卖' : 'Hot Sale'}
+            </button>
+          )}
+
           {categories.map((cat) => (
             <button 
               key={cat.id}
@@ -215,7 +233,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
                   {getCategoryName(cat)}
                   <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{visibleProducts.length}</span>
                 </h2>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6">
                   {visibleProducts.map((item) => (
                     <FoodCard key={item.id} item={item} themeColor={themeColor} />
                   ))}
@@ -224,10 +242,17 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
             );
           })}
         </div>
+      ) : activeCategory === 'Hot Sale' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6 animate-in fade-in duration-300">
+          {getProductsBySearch(initialProducts.filter(p => p.isPopular))
+            .map((item) => (
+              <FoodCard key={item.id} item={item} themeColor={themeColor} />
+            ))
+          }
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-6">
-          {initialProducts
-            .filter(p => getProductCategoryString(p) === activeCategory)
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6 animate-in fade-in duration-300">
+          {getProductsBySearch(initialProducts.filter(p => getProductCategoryString(p) === activeCategory))
             .map((item) => (
               <FoodCard key={item.id} item={item} themeColor={themeColor} />
             ))
