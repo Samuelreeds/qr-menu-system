@@ -15,7 +15,7 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil, ExternalLink // Added ExternalLink here
+  ZoomIn, Check, List, Pencil, ExternalLink 
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -40,7 +40,6 @@ interface Product {
   isPopular?: boolean; 
 }
 
-// Added shopSlug to the props
 interface AdminDashboardProps { 
   categories: Category[]; 
   products: Product[]; 
@@ -56,8 +55,10 @@ type OptimisticAction<T> =
 
 export default function AdminDashboard({ categories, products, settings, shopSlug }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
@@ -71,6 +72,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const [dismissGuide, setDismissGuide] = useState(false);
 
   // --- ⚡ OPTIMISTIC HOOKS ---
   const [optProducts, dispatchOptProducts] = useOptimistic(
@@ -115,6 +117,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => {
     try { return settings.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
   });
+
+  // --- ONBOARDING GUIDE PROGRESS ---
+  const hasCategory = optCategories.length > 0;
+  const hasProduct = optProducts.length > 0;
+  const hasSettings = !!settings.address || !!settings.logo || !!settings.phone;
+  const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
   useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
 
@@ -191,6 +199,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
+  const filteredProducts = optProducts.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative" style={{ '--theme-color': settings?.themeColor || '#5CB85C' } as React.CSSProperties}>
       <div className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
@@ -217,7 +230,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-[var(--theme-color)] text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50'}`}><List size={20}/> Categories</button>
             <button onClick={() => {setActiveTab('settings'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-[var(--theme-color)] text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50'}`}><Settings size={20}/> Settings</button>
           </nav>
-          <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut({ callbackUrl: '/login' })} className="flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
+          <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
         </div>
       </aside>
 
@@ -225,7 +238,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       <main className="flex-1 p-4 pt-24 md:p-8 overflow-y-auto">
         
-        {/* --- UPDATED HEADER WITH 'VIEW LIVE MENU' BUTTON --- */}
         <header className="hidden md:flex justify-between mb-8 items-center">
            <h2 className="text-2xl font-bold capitalize">{activeTab}</h2>
            <div className="flex gap-3">
@@ -243,88 +255,182 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
            </div>
         </header>
 
+        {/* --- PHASE 3: ONBOARDING GUIDE --- */}
+        {!isGuideComplete && !dismissGuide && (
+          <div className="mb-8 bg-white p-6 rounded-3xl border border-[var(--theme-color)] shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[var(--theme-color)]"></div>
+            <div className="flex justify-between items-start mb-4">
+               <div>
+                 <h3 className="text-lg font-bold text-gray-900">Welcome to your dashboard! 👋</h3>
+                 <p className="text-sm text-gray-500 mt-1">Complete these steps to get your menu live.</p>
+               </div>
+               <button onClick={() => setDismissGuide(true)} className="text-gray-400 hover:text-gray-600 p-1"><X size={20}/></button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+               <button onClick={() => { setActiveTab('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+                 <div className="flex justify-between items-center w-full">
+                   <span className={`text-sm font-bold ${hasCategory ? 'text-green-700' : 'text-gray-700'}`}>1. Create Category</span>
+                   {hasCategory ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
+                 </div>
+                 <span className="text-xs text-gray-500">Organize your menu structure.</span>
+               </button>
+
+               <button onClick={() => { setActiveTab('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+                 <div className="flex justify-between items-center w-full">
+                   <span className={`text-sm font-bold ${hasProduct ? 'text-green-700' : 'text-gray-700'}`}>2. Add Item</span>
+                   {hasProduct ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
+                 </div>
+                 <span className="text-xs text-gray-500">Add products to your menu.</span>
+               </button>
+
+               <button onClick={() => { setActiveTab('settings'); setOpenSection('identity'); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasSettings ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+                 <div className="flex justify-between items-center w-full">
+                   <span className={`text-sm font-bold ${hasSettings ? 'text-green-700' : 'text-gray-700'}`}>3. Update Settings</span>
+                   {hasSettings ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
+                 </div>
+                 <span className="text-xs text-gray-500">Set your shop details & logo.</span>
+               </button>
+            </div>
+          </div>
+        )}
+
         {/* --- MENU TAB --- */}
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
-             
-             <div className="flex flex-row items-center justify-between gap-3 mb-6">
-                <div className="relative flex-1">
+             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+                <div className="relative w-full sm:flex-1 sm:max-w-md">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
-                  <input placeholder="Search menu..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-[var(--theme-color)]"/>
+                  <input 
+                    placeholder="Search menu..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-[var(--theme-color)]"
+                  />
                 </div>
-                <button onClick={() => setIsFormOpen(true)} className="shrink-0 bg-[var(--theme-color)] text-white px-4 sm:px-6 py-3.5 rounded-2xl font-bold hover:brightness-110 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
-                  <Plus size={18} strokeWidth={3}/> <span className="hidden sm:inline">Add New</span>
-                </button>
+                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-3">
+                  <div className="flex bg-gray-200/50 p-1 rounded-xl">
+                    <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
+                    <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
+                  </div>
+                  <button onClick={() => setIsFormOpen(true)} className="shrink-0 bg-[var(--theme-color)] text-white px-4 sm:px-6 py-3.5 rounded-2xl font-bold hover:brightness-110 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
+                    <Plus size={18} strokeWidth={3}/> <span className="hidden sm:inline">Add New</span>
+                  </button>
+                </div>
              </div>
              
-             <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">
-                  {optProducts.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="p-4 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
-                        <span className="font-bold text-gray-700 flex items-center gap-2">
-                          {item.name}
-                          {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category?.name}</span></td>
-                      <td className="p-4 font-bold text-gray-900">${item.price.toFixed(2)}</td>
-                      <td className="p-4 text-sm text-gray-400">{item.time}</td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
-                        <button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
-                        <form action={async (fd) => { 
-                          dispatchOptProducts({ type: 'delete', payload: item.id }); 
-                          await deleteProduct(fd); 
-                          showToast("Product deleted"); 
-                        }}>
-                          <input type="hidden" name="id" value={item.id} />
-                          <button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="md:hidden space-y-3">
-               {optProducts.map((item) => (
-                  <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between">
-                     <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
-                        <div>
-                          <h4 className="font-bold text-gray-800 leading-tight mb-1 flex items-center gap-2">
-                            {item.name}
-                            {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
-                          </h4>
-                          <p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p>
-                          <p className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</p>
+             {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredProducts.map(item => (
+                    <div key={item.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 group">
+                      <div className="relative w-full h-40 rounded-2xl overflow-hidden bg-gray-100">
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"/>
+                        {item.isPopular && <span className="absolute top-2 right-2 bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-gray-800 leading-tight truncate">{item.name}</h4>
+                        <div className="flex justify-between items-center mt-1">
+                           <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">{item.category?.name}</span>
+                           <span className="text-xs text-gray-400">{item.time}</span>
                         </div>
-                     </div>
-                     <div className="flex flex-col gap-2">
-                      <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)]"><Pencil size={16} /></button>
-                      <form action={async (fd) => { 
-                          dispatchOptProducts({ type: 'delete', payload: item.id }); 
-                          await deleteProduct(fd); 
-                          showToast("Product deleted"); 
-                      }}>
-                        <input type="hidden" name="id" value={item.id} />
-                        <button className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50"><Trash2 size={16} /></button>
-                      </form>
+                      </div>
+                      <div className="flex justify-between items-center mt-auto pt-2 border-t border-gray-50">
+                        <span className="font-extrabold text-lg text-gray-900">${item.price.toFixed(2)}</span>
+                        <div className="flex gap-1">
+                          <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)] transition-colors"><Pencil size={16} /></button>
+                          <form action={async (fd) => { 
+                              dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                              await deleteProduct(fd); 
+                              showToast("Product deleted"); 
+                          }}>
+                            <input type="hidden" name="id" value={item.id} />
+                            <button className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+                          </form>
+                        </div>
+                      </div>
                     </div>
+                  ))}
+                  {filteredProducts.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
+                  )}
+                </div>
+             ) : (
+                <>
+                  <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {filteredProducts.map((item) => (
+                          <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                            <td className="p-4 flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                              <span className="font-bold text-gray-700 flex items-center gap-2">
+                                {item.name}
+                                {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category?.name}</span></td>
+                            <td className="p-4 font-bold text-gray-900">${item.price.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-gray-400">{item.time}</td>
+                            <td className="p-4 text-right flex items-center justify-end gap-2">
+                              <button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
+                              <form action={async (fd) => { 
+                                dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                                await deleteProduct(fd); 
+                                showToast("Product deleted"); 
+                              }}>
+                                <input type="hidden" name="id" value={item.id} />
+                                <button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button>
+                              </form>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {filteredProducts.length === 0 && (
+                      <div className="py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
+                    )}
                   </div>
-               ))}
-            </div>
+                  
+                  <div className="md:hidden space-y-3">
+                     {filteredProducts.map((item) => (
+                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between">
+                           <div className="flex items-center gap-4">
+                              <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                              <div>
+                                <h4 className="font-bold text-gray-800 leading-tight mb-1 flex items-center gap-2">
+                                  {item.name}
+                                  {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                                </h4>
+                                <p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p>
+                                <p className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</p>
+                              </div>
+                           </div>
+                           <div className="flex flex-col gap-2">
+                            <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)]"><Pencil size={16} /></button>
+                            <form action={async (fd) => { 
+                                dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                                await deleteProduct(fd); 
+                                showToast("Product deleted"); 
+                            }}>
+                              <input type="hidden" name="id" value={item.id} />
+                              <button className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50"><Trash2 size={16} /></button>
+                            </form>
+                          </div>
+                        </div>
+                     ))}
+                     {filteredProducts.length === 0 && (
+                        <div className="bg-white p-8 rounded-3xl text-center text-gray-400 font-medium shadow-sm border border-gray-100">No products found matching "{searchQuery}"</div>
+                     )}
+                  </div>
+                </>
+             )}
            </div>
         )}
 
         {/* --- CATEGORIES TAB --- */}
         {activeTab === 'categories' && (
            <div className="animate-in fade-in duration-300">
-             
              <div className="flex justify-between items-center gap-4 mb-6">
                 <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
                 <button onClick={() => setIsCatFormOpen(true)} className="ml-auto shrink-0 bg-[var(--theme-color)] text-white px-6 py-3.5 rounded-2xl font-bold hover:brightness-110 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
@@ -461,7 +567,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      image: productPreview || editingProduct?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
-                     isPopular: fd.get('isPopular') === 'on', // Optimistic update for Hot Sale
+                     isPopular: fd.get('isPopular') === 'on', 
                    };
 
                    dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
@@ -504,7 +610,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                   <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Preparation Time</label><input name="time" defaultValue={editingProduct?.time || ''} placeholder="e.g. 15min" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" /></div>
                   
-                  {/* --- HOT SALE TOGGLE --- */}
                   <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100 mt-2">
                     <div>
                       <h4 className="font-bold text-orange-600 text-sm">Hot Sale Item</h4>

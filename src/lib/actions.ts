@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
-import { z } from 'zod'
 import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 import { getServerSession } from 'next-auth';
@@ -17,14 +16,14 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 // --- MULTI-TENANT HELPER (SECURED) ---
 async function getActiveShopId() {
   const session = await getServerSession();
-  if (!session?.user?.email) return null; // Graceful exit
+  if (!session?.user?.email) return null;
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
     include: { shopUsers: true }
   });
 
-  if (!user || user.shopUsers.length === 0) return null; // Prevent crash
+  if (!user || user.shopUsers.length === 0) return null;
   return user.shopUsers[0].shopId;
 }
 
@@ -210,6 +209,18 @@ export async function updateShopIdentity(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
+  const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+  try {
+    // Sync the main Shop model's name and slug so the live menu URL updates automatically
+    await prisma.shop.update({
+      where: { id: shopId },
+      data: { name, slug: newSlug }
+    });
+  } catch (error) {
+    console.error("Failed to update slug (might be duplicate):", error);
+  }
+
   await prisma.shopSettings.upsert({
     where: { shopId },
     update: { name, address, phone },
@@ -329,13 +340,6 @@ export async function deleteUser(formData: FormData) {
   revalidatePath('/superadmin');
 }
 
-/**
- * FIXED: Handles product deletion by Super Admin for specific shop details
- */
-/**
- * FIXED: Handles product deletion by Super Admin.
- * Changed return type to satisfy the form action requirement (Promise<void>).
- */
 export async function superAdminDeleteProduct(formData: FormData): Promise<void> {
   const id = formData.get('id') as string;
   const shopId = formData.get('shopId') as string;
@@ -349,15 +353,12 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
     await prisma.product.delete({ where: { id } });
 
     if (product?.image) {
-      // Assuming deleteFromSupabase is defined in your actions.ts
       await deleteFromSupabase(product.image);
     }
 
     revalidatePath(`/superadmin/shop/${shopId}`);
   } catch (error) {
     console.error("Super Admin Delete Failed:", error);
-    // In server actions, you can throw errors to be caught by error boundaries
-    // or simply return nothing to satisfy the void requirement.
   }
 }
 
@@ -444,4 +445,56 @@ export async function resetPassword(formData: FormData) {
   });
 
   return { success: true };
+}
+
+export async function registerPublicShop(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const telegram = formData.get('telegram') as string;
+  const phone = formData.get('phone') as string;
+  
+  const shopName = email.split('@')[0] + "'s Shop";
+
+  if (!email || !password) {
+    return { success: false, error: "Email and password are required" };
+  }
+
+  // Use an exact match slug to ensure consistency
+  const slug = shopName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const shop = await tx.shop.create({
+        data: { name: shopName, slug, plan: "FREE", status: "ACTIVE" }
+      });
+
+      const user = await tx.user.create({
+        data: { email, password: hashedPassword }
+      });
+
+      await tx.shopUser.create({
+        data: { userId: user.id, shopId: shop.id, role: "OWNER" }
+      });
+
+      await tx.shopSettings.create({
+        data: {
+          shopId: shop.id,
+          name: shopName,
+          themeColor: "#5CB85C",
+          socials: "[]",
+          telegram: telegram || null,
+          phone: phone || null
+        }
+      });
+
+      return { success: true };
+    });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return { success: false, error: "Email already exists" };
+    }
+    return { success: false, error: "Registration failed. Please try again." };
+  }
 }

@@ -3,16 +3,16 @@ import { getCategories, getProducts, getShopSettings } from '@/lib/actions';
 import AdminDashboard from '@/components/AdminDashboard';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
+import { prisma } from '@/lib/prisma';
 
 export default async function AdminPage() {
   const session = await getServerSession();
-  if (!session) redirect('/auth/login');
+  if (!session?.user?.email) redirect('/auth/login');
 
   const categories = await getCategories();
   const products = await getProducts();
   const settingsData = await getShopSettings();
 
-  // FIX: Provide fallback settings if the database returns null
   const settings = settingsData || {
     id: "default",
     name: "My Shop",
@@ -30,15 +30,28 @@ export default async function AdminPage() {
     shopId: "",
   };
 
-  // Assuming activeShop logic exists above or via session
-  // For this example, we'll assume a shop is found
-  const shopSlug = "my-shop"; 
+  // Dynamically fetch the actual shop slug from the database for the active user
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    include: {
+      shopUsers: {
+        include: {
+          shop: true
+        }
+      }
+    }
+  });
+
+  const activeShop = user?.shopUsers[0]?.shop;
+  
+  // Use the actual slug from the Shop record, fallback to a generated one if somehow missing
+  const shopSlug = activeShop?.slug || settings.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
   return (
     <AdminDashboard 
       categories={categories}
       products={products as any}
-      settings={settings as any} // Cast as any if local types conflict slightly
+      settings={settings as any}
       shopSlug={shopSlug}
     />
   );
