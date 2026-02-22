@@ -5,7 +5,7 @@ import SearchBar from '@/components/SearchBar';
 import FoodCard from '@/components/FoodCard';
 import ShopInfoModal from '@/components/ShopInfoModal';
 import CartFloat from '@/components/CartFloat'; 
-import { useLanguage } from '@/context/LanguageContext'; // 1. Import Language Hook
+import { useLanguage } from '@/context/LanguageContext'; 
 
 // --- TYPES ---
 interface ShopSettings {
@@ -19,12 +19,11 @@ interface ShopSettings {
   telegram?: string; showTelegram: boolean;
 }
 
-// 2. Update Types to include language fields
 interface Product {
   id: string;
   name: string;
-  name_kh?: string | null; // Added
-  name_zh?: string | null; // Added
+  name_kh?: string | null; 
+  name_zh?: string | null; 
   price: number;
   rating: number;
   time: string;
@@ -36,8 +35,8 @@ interface Product {
 interface Category { 
   id: string; 
   name: string; 
-  name_kh?: string | null; // Added
-  name_zh?: string | null; // Added
+  name_kh?: string | null; 
+  name_zh?: string | null; 
 }
 
 interface MenuClientProps {
@@ -50,27 +49,24 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
-  const { lang } = useLanguage(); // 3. Get current language
+  const { lang } = useLanguage(); 
 
   // Default values
   const shopName = shopSettings?.name || 'Gourmet Shop';
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const logoUrl = shopSettings?.logo || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
 
-  // 4. Helper to Translate Category Name
   const getCategoryName = (cat: Category) => {
     if (lang === 'kh') return cat.name_kh || cat.name;
     if (lang === 'zh') return cat.name_zh || cat.name;
     return cat.name;
   };
 
-  // Helper to handle product category string/object craziness
   const getProductCategoryString = (product: Product) => {
     if (typeof product.category === 'string') return product.category;
     return product.category?.name || 'Unknown';
   };
 
-  // 5. Update Search to check ALL languages
   const getProductsBySearch = (products: Product[]) => {
     if (!searchQuery) return products;
     const lowerQuery = searchQuery.toLowerCase();
@@ -93,15 +89,13 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
       settings={shopSettings}
     />
 
-    {/* --- HEADER SECTION (Now following themeColor) --- */}
+    {/* --- HEADER SECTION --- */}
     <header
       className="relative overflow-hidden pb-8 pt-2 transition-colors duration-300"
-      style={{ background: themeColor }} // Dynamically set from database
+      style={{ background: themeColor }}
     >
-      {/* Darkening Overlay: Ensures white text/icons are always readable on light theme colors */}
       <div className="absolute inset-0 bg-black/10 z-0" />
 
-      {/* Noise texture */}
       <div
         className="absolute inset-0 pointer-events-none z-0 opacity-30"
         style={{
@@ -109,7 +103,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
         }}
       />
 
-      {/* Radial glow (Adjusted to be a highlight of the theme color) */}
       <div
         className="absolute pointer-events-none z-0"
         style={{
@@ -159,26 +152,21 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
             </h1>
           </div>
 
-          {/* Right — Grid/Menu */}
-          <button
-            aria-label="Menu"
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md"
-            style={{ border: '1px solid rgba(255,255,255,0.2)', background: '#fff' }}
-          >
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#000">
-              <rect x="3" y="3" width="7" height="7" rx="1.5" strokeWidth={2.5}/>
-              <rect x="14" y="3" width="7" height="7" rx="1.5" strokeWidth={2.5}/>
-              <rect x="3" y="14" width="7" height="7" rx="1.5" strokeWidth={2.5}/>
-              <rect x="14" y="14" width="7" height="7" rx="1.5" strokeWidth={2.5}/>
-            </svg>
-          </button>
+          {/* Right — Spacer (Keeps Center aligned perfectly after removing Menu Icon) */}
+          <div className="w-10 h-10 flex-shrink-0" />
         </div>
       </div>
     </header>
 
     {/* --- BODY SECTION --- */}
     <div className="px-4 mt-6">
-      <div className="mb-6"><SearchBar value={searchQuery} onChange={setSearchQuery} /></div>
+      <div className="mb-6">
+        <SearchBar 
+          value={searchQuery} 
+          onChange={setSearchQuery} 
+          hideSwitcher={isInfoOpen} 
+        />
+      </div>
 
       <div className="mb-8">
         <div 
@@ -214,7 +202,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
         </div>
       </div>
 
-      {/* Product list logic remains the same... */}
       {activeCategory === 'All' ? (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {categories.map((cat) => {

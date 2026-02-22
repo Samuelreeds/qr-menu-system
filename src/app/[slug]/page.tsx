@@ -41,6 +41,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: false,
     telegram: '',
     showTelegram: false,
+    socials: '[]', // ADDED DEFAULT
   };
 
   // Format Settings for the Client
@@ -56,6 +57,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: safeSettings.showInstagram || false,
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
+    socials: safeSettings.socials || '[]', // ADDED PASSING SOCIALS
   };
 
   // Clean up Categories
