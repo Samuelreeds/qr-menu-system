@@ -1,4 +1,3 @@
-// src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
@@ -18,11 +17,11 @@ const handler = NextAuth({
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
+          include: { shopUsers: true } // Crucial for multi-tenant mapping
         });
 
         if (!user) {
-          // Returning null usually implies "User not found" generic error
           throw new Error("Invalid credentials"); 
         }
 
@@ -30,7 +29,7 @@ const handler = NextAuth({
         if (user.lockoutUntil && user.lockoutUntil > new Date()) {
           const now = new Date();
           const diff = user.lockoutUntil.getTime() - now.getTime();
-          const minutesLeft = Math.ceil(diff / 60000); // Convert ms to minutes
+          const minutesLeft = Math.ceil(diff / 60000);
           throw new Error(`Locked out. Try again in ${minutesLeft} minute(s).`);
         }
 
@@ -41,14 +40,11 @@ const handler = NextAuth({
           const newAttempts = user.failedAttempts + 1;
           let newLockout = null;
 
-          // If attempts hit 4 or more, apply exponential lockout
-          // 4th try = 1 min, 5th = 2 mins, 6th = 4 mins, etc.
           if (newAttempts >= 4) {
             const penaltyMinutes = Math.pow(2, newAttempts - 4); 
             newLockout = new Date(Date.now() + penaltyMinutes * 60000);
           }
 
-          // Update user failure stats
           await prisma.user.update({
             where: { id: user.id },
             data: { 
@@ -72,13 +68,34 @@ const handler = NextAuth({
           data: { failedAttempts: 0, lockoutUntil: null }
         });
 
-        return { id: user.id, email: user.email };
+        return { 
+          id: user.id, 
+          email: user.email,
+          // Attach shop info to the session object
+          shopId: user.shopUsers[0]?.shopId || null 
+        };
       }
     })
   ],
+  callbacks: {
+    // Inject shopId into the JWT and Session
+    async jwt({ token, user }: any) {
+      if (user) {
+        token.shopId = user.shopId;
+      }
+      return token;
+    },
+    async session({ session, token }: any) {
+      if (token && session.user) {
+        session.user.shopId = token.shopId;
+      }
+      return session;
+    }
+  },
   pages: {
-    signIn: "/login",
-    error: "/login" // Redirect back to login page on error
+    // UPDATED PATH: Points to your new auth/login location
+    signIn: "/auth/login",
+    error: "/auth/login" 
   },
   session: {
     strategy: "jwt",

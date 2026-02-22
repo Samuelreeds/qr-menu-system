@@ -7,6 +7,7 @@ export const revalidate = 0;
 export default async function SuperAdminPage() {
   const shops = await prisma.shop.findMany({ orderBy: { createdAt: 'desc' } });
   const invites = await prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
+  const users = await prisma.user.findMany({ orderBy: { id: 'desc' } });
 
-  return <SuperAdminClient shops={shops} invites={invites} />;
+  return <SuperAdminClient shops={shops} invites={invites} users={users} />;
 }

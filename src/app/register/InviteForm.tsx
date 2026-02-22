@@ -1,3 +1,4 @@
+// src/app/register/InviteForm.tsx
 'use client';
 
 import { useState } from 'react';
@@ -19,8 +20,8 @@ export default function InviteForm({ invite, token }: { invite: any, token: stri
     const result = await registerShopFromInvite(formData);
 
     if (result.success) {
-      // Redirect to login or directly to admin panel
-      router.push('/login?registered=true'); 
+      // UPDATED PATH: Points to the new auth folder location
+      router.push('/auth/login?registered=true'); 
     } else {
       setError(result.error || 'Registration failed');
       setLoading(false);
@@ -41,11 +42,6 @@ export default function InviteForm({ invite, token }: { invite: any, token: stri
         <label className="text-xs font-bold text-gray-500 mb-1 block">Restaurant Name</label>
         <input name="shopName" defaultValue={invite.shopName || ''} required className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-
-      {/* <div>
-        <label className="text-xs font-bold text-gray-500 mb-1 block">URL Slug (e.g. 'pizza-house')</label>
-        <input name="slug" defaultValue={invite.slug || ''} required pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and dashes" className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-      </div> */}
 
       <div>
         <label className="text-xs font-bold text-gray-500 mb-1 block">Owner Email</label>
