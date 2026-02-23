@@ -15,7 +15,7 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil, ExternalLink 
+  ZoomIn, Check, List, Pencil, ExternalLink, QrCode
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -58,6 +58,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
+  const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); // State for preview toggle
+  const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); // State for actual printing
   const [searchQuery, setSearchQuery] = useState('');
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -69,7 +72,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [dismissGuide, setDismissGuide] = useState(false);
@@ -124,6 +126,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const hasSettings = !!settings.address || !!settings.logo || !!settings.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
+  // Cleanup print state after printing dialog closes
+  useEffect(() => {
+    const afterPrint = () => setPrintFormat(null);
+    window.addEventListener('afterprint', afterPrint);
+    return () => window.removeEventListener('afterprint', afterPrint);
+  }, []);
+
   useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
 
   useEffect(() => {
@@ -147,17 +156,17 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   }, [editingCategory, isCatFormOpen]);
 
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
-  
-  const handleForceRefresh = async () => {
-    setIsRefreshing(true);
-    await forceRevalidateAction(); 
-    setIsRefreshing(false);
-    showToast("Synced successfully!");
-  };
 
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 3000);
+  };
+
+  const handleGeneratePDF = (format: 'portrait' | 'landscape') => {
+    setPrintFormat(format);
+    setTimeout(() => {
+      window.print();
+    }, 500); 
   };
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product') => {
@@ -202,6 +211,74 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const filteredProducts = optProducts.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // --- REUSABLE PRINT TEMPLATE ---
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/${shopSlug}` : `https://yourdomain.com/${shopSlug}`)}`;
+
+  const renderPrintTemplate = (format: 'portrait' | 'landscape') => (
+    <div 
+      className="border-[14px] border-black rounded-[40px] flex items-center justify-center p-12 bg-white text-black relative"
+      style={{ 
+        width: format === 'landscape' ? '1000px' : '650px', 
+        height: format === 'landscape' ? '650px' : '1000px',
+        flexDirection: format === 'landscape' ? 'row' : 'column',
+        gap: format === 'landscape' ? '4rem' : '2rem',
+        boxSizing: 'border-box'
+      }}
+    >
+      {format === 'landscape' ? (
+        <>
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+            <h1 className="text-5xl font-light text-gray-600 mb-4 tracking-wide">{settings.name}</h1>
+            <p className="text-3xl text-gray-500 mb-12 font-light">Scan to view menu</p>
+            <div className="flex items-center w-full justify-center gap-6 mb-8">
+               <div className="flex-1 h-[2px] bg-gray-300"></div>
+               <div className="relative flex items-center justify-center w-20 h-20 shrink-0">
+                  <div className="absolute inset-0 bg-[#222] rounded-full w-16 h-16 m-auto"></div>
+                  <div className="relative bg-white border-[3px] border-[#222] rounded-xl w-10 h-16 flex flex-col items-center justify-start pt-1.5 z-10 shadow-sm">
+                    <div className="w-2 h-[2px] bg-gray-300 rounded-full mb-1"></div>
+                    <QrCode size={20} className="text-black" />
+                    <div className="mt-auto mb-1 w-2 h-2 rounded-full bg-gray-300"></div>
+                  </div>
+                  <svg className="absolute left-[-8px] top-1 text-gray-600 w-6 h-6 transform -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path></svg>
+               </div>
+               <div className="flex-1 h-[2px] bg-gray-300"></div>
+            </div>
+            <p className="text-lg text-gray-500 font-medium">www.scandine.xyz</p>
+          </div>
+          <div className="flex-1 flex justify-center items-center">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px]" />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col items-center justify-center text-center mt-4">
+            <h1 className="text-6xl font-light text-gray-600 mb-4 tracking-wide">{settings.name}</h1>
+            <p className="text-4xl text-gray-500 font-light">Scan to view menu</p>
+          </div>
+          <div className="flex justify-center items-center my-8">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px]" />
+          </div>
+          <div className="flex flex-col items-center justify-center text-center w-full px-12 mb-4">
+            <div className="flex items-center w-full justify-center gap-6 mb-8">
+               <div className="flex-1 h-[2px] bg-gray-300"></div>
+               <div className="relative flex items-center justify-center w-20 h-20 shrink-0">
+                  <div className="absolute inset-0 bg-[#222] rounded-full w-16 h-16 m-auto"></div>
+                  <div className="relative bg-white border-[3px] border-[#222] rounded-xl w-10 h-16 flex flex-col items-center justify-start pt-1.5 z-10 shadow-sm">
+                    <div className="w-2 h-[2px] bg-gray-300 rounded-full mb-1"></div>
+                    <QrCode size={20} className="text-black" />
+                    <div className="mt-auto mb-1 w-2 h-2 rounded-full bg-gray-300"></div>
+                  </div>
+                  <svg className="absolute left-[-8px] top-1 text-gray-600 w-6 h-6 transform -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path></svg>
+               </div>
+               <div className="flex-1 h-[2px] bg-gray-300"></div>
+            </div>
+            <p className="text-xl text-gray-500 font-medium">www.scandine.xyz</p>
+          </div>
+        </>
+      )}
+    </div>
   );
 
   return (
@@ -249,8 +326,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
              >
                <ExternalLink size={14} /> View Live Menu
              </a>
-             <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95">
-               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync
+             <button onClick={() => setIsQrModalOpen(true)} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
+               <QrCode size={14} /> Get QR
              </button>
            </div>
         </header>
@@ -531,6 +608,84 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           </div>
         )}
       </main>
+
+      {/* --- QR CODE MODAL --- */}
+      {isQrModalOpen && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm py-4" onClick={() => setIsQrModalOpen(false)}>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
+               <div className="flex justify-between items-center mb-6">
+                  <h2 className="font-extrabold text-2xl text-gray-900">QR & Print Menu</h2>
+                  <button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100" onClick={() => setIsQrModalOpen(false)}><X size={20}/></button>
+               </div>
+               
+               {/* Format Selector */}
+               <div className="flex gap-2 mb-6 bg-gray-100 p-1.5 rounded-2xl w-full">
+                  <button 
+                    onClick={() => setPreviewFormat('portrait')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${previewFormat === 'portrait' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Portrait
+                  </button>
+                  <button 
+                    onClick={() => setPreviewFormat('landscape')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${previewFormat === 'landscape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Landscape
+                  </button>
+               </div>
+
+               {/* Preview Container */}
+               <div className="w-full bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center mb-6" style={{ height: '350px' }}>
+                  <div 
+                    className="origin-center transform transition-transform duration-300 flex items-center justify-center"
+                    style={{ 
+                      transform: previewFormat === 'portrait' ? 'scale(0.32)' : 'scale(0.32)' 
+                    }}
+                  >
+                    {renderPrintTemplate(previewFormat)}
+                  </div>
+               </div>
+
+               <div className="space-y-3">
+                  <button 
+                    onClick={() => handleGeneratePDF(previewFormat)} 
+                    className="w-full py-4 bg-[var(--theme-color)] text-white rounded-2xl font-bold shadow-md hover:brightness-110 active:scale-95 transition-all text-lg flex items-center justify-center gap-2"
+                  >
+                    <QrCode size={20} /> Print QR
+                  </button>
+                  <p className="text-xs text-center text-gray-400">Make sure to enable 'Background graphics' in the print dialog for best results.</p>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* --- PRINTABLE QR SECTION (HIDDEN BY DEFAULT) --- */}
+      <div 
+        id="print-area" 
+        className="hidden items-center justify-center bg-white"
+      >
+        {printFormat && renderPrintTemplate(printFormat)}
+      </div>
+
+      {printFormat && (
+        <style>{`
+          @media print {
+            @page { size: ${printFormat === 'landscape' ? 'landscape' : 'portrait'}; margin: 0; }
+            body * { visibility: hidden !important; }
+            #print-area, #print-area * { visibility: visible !important; }
+            #print-area { 
+              position: absolute; left: 0; top: 0; 
+              width: 100vw; height: 100vh; 
+              display: flex !important; 
+              align-items: center; justify-content: center;
+              background: white;
+              z-index: 99999;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+          }
+        `}</style>
+      )}
 
       {/* --- UNIVERSAL CROPPER MODAL --- */}
       {cropImageSrc && (
