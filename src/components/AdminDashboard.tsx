@@ -1,3 +1,4 @@
+// components/AdminDashboard.tsx
 'use client';
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic } from 'react';
@@ -8,20 +9,19 @@ import {
   createProduct, deleteProduct, updateProduct, 
   createCategory, updateCategory, deleteCategory,
   updateShopIdentity, updateShopBranding, updateShopSocials, 
-  addBanner, deleteBanner, reorderBanners,
-  forceRevalidateAction 
+  addBanner, deleteBanner, reorderBanners
 } from '@/lib/actions';
 import { 
   Plus, X, Trash2, UploadCloud, CheckCircle, 
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil, ExternalLink, QrCode
+  ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // --- TYPES ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
-interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; logo: string | null; socials: string; }
+interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; headerDesign: string; logo: string | null; socials: string; }
 interface Banner { id: string; image: string; sortOrder: number; }
 interface Category { 
   id: string; 
@@ -71,6 +71,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
   const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); 
   const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); 
+  const [paperSize, setPaperSize] = useState<'A4' | 'A5' | '10x15'>('A4');
+  const [origin, setOrigin] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -80,14 +82,25 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
 
+  // --- FORM STATES ---
+  const [prepTime, setPrepTime] = useState('15');
+  const [isHotSale, setIsHotSale] = useState(false);
+
+  // --- LOADING STATES ---
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [dismissGuide, setDismissGuide] = useState(false);
 
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
+
+  // --- DESIGN PREVIEW STATE ---
+  const [headerDesign, setHeaderDesign] = useState(settings.headerDesign || 'design1');
+  const [themeColorPreview, setThemeColorPreview] = useState(settings.themeColor || '#000000');
 
   // --- ⚡ OPTIMISTIC HOOKS ---
   const [optProducts, dispatchOptProducts] = useOptimistic(
@@ -155,6 +168,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     const afterPrint = () => setPrintFormat(null);
     window.addEventListener('afterprint', afterPrint);
     return () => window.removeEventListener('afterprint', afterPrint);
@@ -167,10 +181,14 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       setProductPreview(editingProduct.image);
       setProductFileBlob(null);
       setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' });
+      setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15');
+      setIsHotSale(editingProduct.isPopular || false);
     } else if (isFormOpen) {
       setProductPreview('');
       setProductFileBlob(null);
       setProdName({ en: '', kh: '', zh: '' }); 
+      setPrepTime('15');
+      setIsHotSale(false);
     }
   }, [editingProduct, isFormOpen]);
 
@@ -184,13 +202,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
 
-  const handleForceRefresh = async () => {
-    setIsRefreshing(true);
-    await forceRevalidateAction(); 
-    setIsRefreshing(false);
-    showToast("Synced successfully!");
-  };
-
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 3000);
@@ -201,6 +212,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     setTimeout(() => {
       window.print();
     }, 500); 
+  };
+
+  const getPreviewScale = () => {
+    if (previewFormat === 'portrait') {
+      if (paperSize === 'A4') return 'scale(0.28)';
+      if (paperSize === 'A5') return 'scale(0.24)';
+      return 'scale(0.22)'; 
+    } else {
+      if (paperSize === 'A4') return 'scale(0.3)';
+      if (paperSize === 'A5') return 'scale(0.26)';
+      return 'scale(0.24)'; 
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    handleGeneratePDF(previewFormat);
   };
 
   // --- DRAG AND DROP & ORDERING HANDLERS ---
@@ -312,160 +339,183 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
+  const handlePrevDesign = () => {
+    const designs = ['design1', 'design2', 'design3', 'design4'];
+    const idx = designs.indexOf(headerDesign);
+    setHeaderDesign(designs[(idx - 1 + designs.length) % designs.length]);
+  };
+
+  const handleNextDesign = () => {
+    const designs = ['design1', 'design2', 'design3', 'design4'];
+    const idx = designs.indexOf(headerDesign);
+    setHeaderDesign(designs[(idx + 1) % designs.length]);
+  };
+
   const filteredProducts = optProducts.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // --- REUSABLE PRINT TEMPLATE ---
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/${shopSlug}` : `https://yourdomain.com/${shopSlug}`)}`;
-
-  const renderPrintTemplate = (format: 'portrait' | 'landscape') => (
-    <div 
-      className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-[#4a4a4a] relative font-sans"
-      style={{ 
-        width: format === 'landscape' ? '1000px' : '650px', 
-        height: format === 'landscape' ? '650px' : '1000px',
-        flexDirection: format === 'landscape' ? 'row' : 'column',
-        boxSizing: 'border-box',
-        padding: format === 'landscape' ? '3rem 4rem' : '4rem 3rem'
-      }}
-    >
-      {format === 'landscape' ? (
-        <>
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2">
-            <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
-              {settings.name}
-            </h1>
-            <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
-              scan to view menu !
-            </p>
-            
-            <div className="flex items-center w-full justify-center gap-4 mb-8">
-               <div className="flex-1 h-[1px] bg-gray-400"></div>
-               <div className="relative flex items-center justify-center px-4">
-                  <div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div>
-                  <div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
-                    <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center">
-                      <QrCode size={18} className="text-black" />
+  const renderPrintTemplate = (format: 'portrait' | 'landscape') => {
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(origin ? `${origin}/${shopSlug}` : `https://scandine.xyz/${shopSlug}`)}`;
+    
+    return (
+      <div 
+        className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-[#4a4a4a] relative font-sans"
+        style={{ 
+          width: format === 'landscape' ? '1000px' : '650px', 
+          height: format === 'landscape' ? '650px' : '1000px',
+          flexDirection: format === 'landscape' ? 'row' : 'column',
+          boxSizing: 'border-box',
+          padding: format === 'landscape' ? '3rem 4rem' : '4rem 3rem'
+        }}
+      >
+        {format === 'landscape' ? (
+          <>
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2">
+              <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
+                {settings.name}
+              </h1>
+              <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
+                scan to view menu !
+              </p>
+              
+              <div className="flex items-center w-full justify-center gap-4 mb-8">
+                 <div className="flex-1 h-[1px] bg-gray-400"></div>
+                 <div className="relative flex items-center justify-center px-4">
+                    <div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div>
+                    <div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                      <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center">
+                        <QrCode size={18} className="text-black" />
+                      </div>
+                      <div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div>
+                      <div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
                     </div>
-                    <div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div>
-                    <div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
-                  </div>
-                  <svg className="absolute -top-3 -left-1 text-gray-500 w-6 h-6 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
-               </div>
-               <div className="flex-1 h-[1px] bg-gray-400"></div>
+                    <svg className="absolute -top-3 -left-1 text-gray-500 w-6 h-6 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
+                 </div>
+                 <div className="flex-1 h-[1px] bg-gray-400"></div>
+              </div>
+              
+              <p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
+            </div>
+            <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
+              <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4">
+              <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
+                {settings.name}
+              </h1>
+              <p className="text-[3rem] text-gray-500 font-light">
+                scan to view menu !
+              </p>
             </div>
             
-            <p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
-          </div>
-          <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" />
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4">
-            <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
-              {settings.name}
-            </h1>
-            <p className="text-[3rem] text-gray-500 font-light">
-              scan to view menu !
-            </p>
-          </div>
-          
-          <div className="flex justify-center items-center flex-1 w-full my-6">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
-          </div>
-
-          <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4">
-            <div className="flex items-center w-full justify-center gap-4 mb-8">
-               <div className="flex-1 h-[1px] bg-gray-400"></div>
-               <div className="relative flex items-center justify-center px-4">
-                  <div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div>
-                  <div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
-                    <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center">
-                      <QrCode size={22} className="text-black" />
-                    </div>
-                    <div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div>
-                    <div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div>
-                  </div>
-                  <svg className="absolute -top-3 -left-1 text-gray-500 w-7 h-7 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
-               </div>
-               <div className="flex-1 h-[1px] bg-gray-400"></div>
+            <div className="flex justify-center items-center flex-1 w-full my-6">
+              <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
             </div>
-            <p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
-          </div>
-        </>
-      )}
-    </div>
-  );
+
+            <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4">
+              <div className="flex items-center w-full justify-center gap-4 mb-8">
+                 <div className="flex-1 h-[1px] bg-gray-400"></div>
+                 <div className="relative flex items-center justify-center px-4">
+                    <div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div>
+                    <div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                      <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center">
+                        <QrCode size={22} className="text-black" />
+                      </div>
+                      <div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div>
+                      <div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div>
+                    </div>
+                    <svg className="absolute -top-3 -left-1 text-gray-500 w-7 h-7 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
+                 </div>
+                 <div className="flex-1 h-[1px] bg-gray-400"></div>
+              </div>
+              <p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const fallbackLogo = 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
 
   return (
-    <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative" style={{ '--theme-color': settings?.themeColor || '#5CB85C' } as React.CSSProperties}>
-      <div className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+    <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative" style={{ '--theme-color': settings?.themeColor || '#000000' } as React.CSSProperties}>
+      <div className={`fixed top-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
         <div className="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
-          <div className="bg-[var(--theme-color)] rounded-full p-1"><Check size={14} strokeWidth={3} className="text-white" /></div>
+          <div className="bg-green-500 rounded-full p-1"><Check size={14} strokeWidth={3} className="text-white" /></div>
           <span className="font-bold text-sm">{toast.message}</span>
         </div>
       </div>
 
-      <div className="md:hidden fixed top-0 left-0 w-full bg-[#F9FAFB] z-20 p-4 flex items-center gap-4">
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
-          <Menu size={22} className="text-gray-700" />
+      <div className="md:hidden fixed top-0 left-0 w-full bg-[#F9FAFB] z-20 p-4 flex items-center justify-between gap-4 border-b border-gray-100">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
+            <Menu size={22} className="text-gray-700" />
+          </button>
+          <h1 className="font-bold text-xl tracking-tight text-gray-900 truncate">
+            {settings?.name || 'AdminPanel'}
+          </h1>
+        </div>
+        <button onClick={() => setActiveTab('settings')} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-gray-700 active:scale-95 transition-transform">
+          <Settings size={20} />
         </button>
-        <h1 className="font-bold text-xl tracking-tight text-gray-900 truncate">
-          {settings?.name || 'AdminPanel'}
-        </h1>
       </div>
 
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-8 h-full flex flex-col">
+        <div className="p-8 h-full flex flex-col mt-14 md:mt-0">
           <h1 className="font-bold text-xl mb-8 hidden md:block">{settings?.name || 'AdminPanel'}</h1>
-          <nav className="space-y-2 flex-1">
-            <button onClick={() => {setActiveTab('menu'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-[var(--theme-color)] text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50'}`}><LayoutGrid size={20}/> Menu</button>
-            <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-[var(--theme-color)] text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50'}`}><List size={20}/> Categories</button>
-            <button onClick={() => {setActiveTab('settings'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-[var(--theme-color)] text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50'}`}><Settings size={20}/> Settings</button>
+          <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <button onClick={() => {setActiveTab('menu'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
+            <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
+            <button onClick={() => {setActiveTab('settings'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
           </nav>
-          <div className="pt-8 border-t border-gray-50"><button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition"><LogOut size={18}/> Log Out</button></div>
+          <div className="pt-6 border-t border-gray-50 mt-auto"><button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="w-full flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition active:scale-95"><LogOut size={18}/> Log Out</button></div>
         </div>
       </aside>
 
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      <main className="flex-1 p-4 pt-24 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-4 pt-24 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-full">
         
-        <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
-           <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
-           <div className="flex gap-2 w-full sm:w-auto">
-             <a 
-               href={`/${shopSlug}`} 
-               target="_blank" 
-               rel="noopener noreferrer"
-               className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[var(--theme-color)] text-white rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-sm active:scale-95 items-center"
-             >
-               <ExternalLink size={14} /> View Live Menu
-             </a>
-             <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
-               <QrCode size={14} /> Get QR
-             </button>
-           </div>
-        </header>
+        {activeTab !== 'settings' && (
+          <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
+             <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
+             <div className="flex gap-2 w-full sm:w-auto">
+               <a 
+                 href={`/${shopSlug}`} 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all shadow-sm active:scale-95 items-center"
+               >
+                 <ExternalLink size={14} /> View Live Menu
+               </a>
+               <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-transparent border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95 items-center">
+                 <QrCode size={14} /> Get QR
+               </button>
+             </div>
+          </header>
+        )}
 
         {/* --- PHASE 3: ONBOARDING GUIDE --- */}
         {!isGuideComplete && !dismissGuide && (
-          <div className="mb-8 bg-white p-6 rounded-3xl border border-[var(--theme-color)] shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
-            <div className="absolute top-0 left-0 w-2 h-full bg-[var(--theme-color)]"></div>
+          <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
+            <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
             <div className="flex justify-between items-start mb-4">
                <div>
                  <h3 className="text-lg font-bold text-gray-900">Welcome to your dashboard! 👋</h3>
                  <p className="text-sm text-gray-500 mt-1">Complete these steps to get your menu live.</p>
                </div>
-               <button onClick={() => setDismissGuide(true)} className="text-gray-400 hover:text-gray-600 p-1"><X size={20}/></button>
+               <button onClick={() => setDismissGuide(true)} className="text-gray-400 hover:text-gray-600 p-1 active:scale-95 transition-transform"><X size={20}/></button>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-               <button onClick={() => { setActiveTab('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+               <button onClick={() => { setActiveTab('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasCategory ? 'text-green-700' : 'text-gray-700'}`}>1. Create Category</span>
                    {hasCategory ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -473,7 +523,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <span className="text-xs text-gray-500">Organize your menu structure.</span>
                </button>
 
-               <button onClick={() => { setActiveTab('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+               <button onClick={() => { setActiveTab('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasProduct ? 'text-green-700' : 'text-gray-700'}`}>2. Add Item</span>
                    {hasProduct ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -481,7 +531,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <span className="text-xs text-gray-500">Add products to your menu.</span>
                </button>
 
-               <button onClick={() => { setActiveTab('settings'); setOpenSection('identity'); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all ${hasSettings ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-[var(--theme-color)]'}`}>
+               <button onClick={() => { setActiveTab('settings'); setOpenSection('identity'); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasSettings ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasSettings ? 'text-green-700' : 'text-gray-700'}`}>3. Update Settings</span>
                    {hasSettings ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -502,24 +552,44 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     placeholder="Search menu..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-[var(--theme-color)]"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900"
                   />
                 </div>
                 <div className="flex w-full md:w-auto items-center justify-between md:justify-end gap-3 flex-wrap">
                   <div className="flex bg-gray-200/50 p-1 rounded-xl">
-                    <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
-                    <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
+                    <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
+                    <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
                   </div>
-                  <button onClick={() => setIsFormOpen(true)} className="shrink-0 bg-[var(--theme-color)] text-white px-4 sm:px-6 py-3.5 rounded-2xl font-bold hover:brightness-110 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
-                    <Plus size={18} strokeWidth={3}/> <span className="hidden sm:inline">Add New</span>
+                  <button onClick={() => setIsFormOpen(true)} className="hidden md:flex shrink-0 bg-gray-900 text-white px-4 sm:px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm">
+                    <Plus size={18} strokeWidth={3}/> Add New
                   </button>
                 </div>
              </div>
              
-             {viewMode === 'grid' ? (
+             {optProducts.length === 0 && searchQuery === '' ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-3xl border border-gray-100 shadow-sm mt-4 text-center">
+                   <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4">
+                     <LayoutGrid size={28} className="text-gray-400"/>
+                   </div>
+                   <h3 className="text-xl font-bold text-gray-900 mb-2">No products yet</h3>
+                   <ul className="text-sm text-gray-500 mb-8 text-left space-y-2 inline-block">
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Create a category</li>
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Add your first product</li>
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> View your live menu</li>
+                   </ul>
+                   <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                     <button onClick={() => setIsFormOpen(true)} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-95 transition flex items-center justify-center gap-2 text-sm w-full sm:w-auto">
+                       <Plus size={16} strokeWidth={3}/> Add Product
+                     </button>
+                     <button onClick={() => setActiveTab('categories')} className="bg-white border border-gray-200 text-gray-700 px-6 py-3.5 rounded-xl font-bold hover:bg-gray-50 active:scale-95 transition text-sm w-full sm:w-auto">
+                       Go to Categories
+                     </button>
+                   </div>
+                </div>
+             ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {filteredProducts.map(item => (
-                    <div key={item.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 group">
+                    <div key={item.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 group active:scale-[0.98] transition-transform cursor-default">
                       <div className="relative w-full h-40 rounded-2xl overflow-hidden bg-gray-100">
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"/>
                         <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
@@ -528,38 +598,42 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         </div>
                       </div>
                       <div>
-                        <h4 className="font-bold text-gray-800 leading-tight truncate">{item.name}</h4>
+                        <h4 className="font-bold text-gray-900 text-base leading-tight truncate">{item.name}</h4>
                         <div className="flex justify-between items-center mt-1">
-                           <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">{item.category?.name}</span>
-                           <span className="text-xs text-gray-400">{item.time}</span>
+                           <span className="text-[10px] text-gray-400 truncate uppercase tracking-wider">{item.category?.name}</span>
+                           <span className="text-[10px] text-gray-400 shrink-0 font-medium">{item.time}</span>
                         </div>
                       </div>
-                      <div className="flex justify-between items-center mt-auto pt-2 border-t border-gray-50">
+                      <div className="flex justify-between items-center mt-auto pt-3 border-t border-gray-50">
                         <div className="flex flex-col">
                            {item.discount && item.discount > 0 ? (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-extrabold text-lg text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="font-black text-xl text-red-500 leading-none">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
                                 <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
                               </div>
                             ) : (
-                              <span className="font-extrabold text-lg text-gray-900">${item.price.toFixed(2)}</span>
+                              <span className="font-black text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
                             )}
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                          <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)] transition-colors"><Pencil size={16} /></button>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
                           <form action={async (fd) => { 
+                              setDeletingId(item.id);
                               dispatchOptProducts({ type: 'delete', payload: item.id }); 
                               await deleteProduct(fd); 
+                              setDeletingId(null);
                               showToast("Product deleted"); 
                           }}>
                             <input type="hidden" name="id" value={item.id} />
-                            <button className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+                            <button disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95 disabled:opacity-50">
+                              {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                            </button>
                           </form>
                         </div>
                       </div>
                     </div>
                   ))}
-                  {filteredProducts.length === 0 && (
+                  {filteredProducts.length === 0 && searchQuery !== '' && (
                     <div className="col-span-full py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
                   )}
                 </div>
@@ -573,14 +647,14 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
                             <td className="p-4 flex items-center gap-3">
                               <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
-                              <span className="font-bold text-gray-700 flex items-center gap-2">
+                              <span className="font-bold text-gray-900 flex items-center gap-2">
                                 {item.name}
                                 {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
                                 {item.discount && item.discount > 0 ? <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{item.discount}%</span> : null}
                               </span>
                             </td>
-                            <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category?.name}</span></td>
-                            <td className="p-4 font-bold text-gray-900">
+                            <td className="p-4 text-xs text-gray-400 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1 rounded-full">{item.category?.name}</span></td>
+                            <td className="p-4 font-black text-xl text-gray-900">
                                {item.discount && item.discount > 0 ? (
                                  <div className="flex flex-col">
                                    <span className="text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
@@ -590,68 +664,86 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                  `$${item.price.toFixed(2)}`
                               )}
                             </td>
-                            <td className="p-4 text-sm text-gray-400">{item.time}</td>
+                            <td className="p-4 text-xs text-gray-400 font-medium">{item.time}</td>
                             <td className="p-4 text-right flex items-center justify-end gap-2">
-                              <button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
+                              <button onClick={() => setEditingProduct(item)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
                               <form action={async (fd) => { 
+                                setDeletingId(item.id);
                                 dispatchOptProducts({ type: 'delete', payload: item.id }); 
                                 await deleteProduct(fd); 
+                                setDeletingId(null);
                                 showToast("Product deleted"); 
                               }}>
                                 <input type="hidden" name="id" value={item.id} />
-                                <button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button>
+                                <button disabled={deletingId === item.id} className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95 disabled:opacity-50">
+                                  {deletingId === item.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                </button>
                               </form>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {filteredProducts.length === 0 && (
+                    {filteredProducts.length === 0 && searchQuery !== '' && (
                       <div className="py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
                     )}
                   </div>
                   
                   <div className="md:hidden space-y-3">
                      {filteredProducts.map((item) => (
-                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-[0.98] transition-transform cursor-default">
                            <div className="flex items-center gap-4">
                               <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
                               <div>
-                                <h4 className="font-bold text-gray-800 leading-tight mb-1 flex items-center gap-2">
+                                <h4 className="font-bold text-gray-900 text-base leading-tight mb-1 flex items-center gap-2">
                                   {item.name}
                                   {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
                                 </h4>
-                                <p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p>
+                                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{item.category?.name} • <span className="font-medium">{item.time}</span></p>
                                 <div className="flex flex-col">
                                    {item.discount && item.discount > 0 ? (
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-extrabold text-sm text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                                        <span className="font-black text-lg text-red-500 leading-none">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
                                         <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
                                       </div>
                                     ) : (
-                                      <span className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</span>
+                                      <span className="font-black text-lg text-gray-900 leading-none">${item.price.toFixed(2)}</span>
                                     )}
                                 </div>
                               </div>
                            </div>
                            <div className="flex flex-col gap-2 shrink-0">
-                            <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)]"><Pencil size={16} /></button>
+                            <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={16} /></button>
                             <form action={async (fd) => { 
+                                setDeletingId(item.id);
                                 dispatchOptProducts({ type: 'delete', payload: item.id }); 
                                 await deleteProduct(fd); 
+                                setDeletingId(null);
                                 showToast("Product deleted"); 
                             }}>
                               <input type="hidden" name="id" value={item.id} />
-                              <button className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50"><Trash2 size={16} /></button>
+                              <button disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 active:scale-95 transition-all disabled:opacity-50">
+                                {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                              </button>
                             </form>
                           </div>
                         </div>
                      ))}
-                     {filteredProducts.length === 0 && (
+                     {filteredProducts.length === 0 && searchQuery !== '' && (
                         <div className="bg-white p-8 rounded-3xl text-center text-gray-400 font-medium shadow-sm border border-gray-100">No products found matching "{searchQuery}"</div>
                      )}
                   </div>
                 </>
+             )}
+
+             {/* Mobile Primary Action (FAB) */}
+             {optProducts.length > 0 && (
+               <button 
+                 onClick={() => setIsFormOpen(true)}
+                 className="md:hidden fixed bottom-6 right-6 z-40 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
+               >
+                 <Plus size={24} strokeWidth={3} />
+               </button>
              )}
            </div>
         )}
@@ -661,7 +753,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
            <div className="animate-in fade-in duration-300">
              <div className="flex justify-between items-center gap-4 mb-6">
                 <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
-                <button onClick={() => setIsCatFormOpen(true)} className="ml-auto shrink-0 bg-[var(--theme-color)] text-white px-6 py-3.5 rounded-2xl font-bold hover:brightness-110 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
+                <button onClick={() => setIsCatFormOpen(true)} className="ml-auto shrink-0 bg-gray-900 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
                   <Plus size={18} strokeWidth={3}/> Add New
                 </button>
              </div>
@@ -676,18 +768,27 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
                       <td className="p-4 text-sm text-gray-500">{cat.discount ? `${cat.discount}%` : '-'}</td>
                       <td className="p-4 text-right flex items-center justify-end gap-2">
-                        <button onClick={() => setEditingCategory(cat)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
+                        <button onClick={() => setEditingCategory(cat)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
                         <form action={async (fd) => { 
+                          setDeletingId(cat.id);
                           dispatchOptCategories({ type: 'delete', payload: cat.id }); 
                           await deleteCategory(fd); 
+                          setDeletingId(null);
                           showToast("Category deleted"); 
                         }}>
                           <input type="hidden" name="id" value={cat.id} />
-                          <button className="text-gray-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition"><Trash2 size={18} /></button>
+                          <button disabled={deletingId === cat.id} className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95 disabled:opacity-50">
+                            {deletingId === cat.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          </button>
                         </form>
                       </td>
                     </tr>
                   ))}
+                  {optCategories.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-gray-400 font-medium">No categories created yet</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -696,17 +797,17 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
         {/* --- SETTINGS TAB --- */}
         {activeTab === 'settings' && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300">
+          <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300 pb-12">
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('identity')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center"><div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Store size={20}/></div><div className="text-left font-bold text-gray-800">Shop Identity</div></div>{openSection === 'identity' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'identity' ? 'block' : 'hidden'}>
-                <form action={async (fd) => { await updateShopIdentity(fd); showToast("Identity saved successfully!"); }} className="p-5 border-t border-gray-50 space-y-4">
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name</label><input name="name" defaultValue={settings.name} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]"/></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]"/></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]"/></div>
-                   <div className="flex justify-end pt-2"><button className="bg-[var(--theme-color)] text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:brightness-110 active:scale-95 transition"><Save size={16}/> Save Identity</button></div>
+                <form action={async (fd) => { setIsSaving(true); await updateShopIdentity(fd); setIsSaving(false); showToast("Identity saved successfully!"); }} className="p-5 border-t border-gray-50 space-y-4">
+                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name</label><input name="name" defaultValue={settings.name} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
+                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
+                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
+                   <div className="flex justify-end pt-2"><button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">{isSaving ? 'Saving...' : <><Save size={16}/> Save Identity</>}</button></div>
                 </form>
               </div>
             </div>
@@ -716,16 +817,99 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <div className="flex gap-4 items-center"><div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Palette size={20}/></div><div className="text-left font-bold text-gray-800">Branding & Design</div></div>{openSection === 'branding' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form action={async (formData) => { if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); showToast("Branding updated!"); }} className="p-5 border-t border-gray-50 space-y-6">
-                   <div className="bg-gray-50 p-6 rounded-3xl flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200">
-                      {logoPreview ? (
-                        <div className="relative group"><div className="w-32 h-32 rounded-full overflow-hidden shadow-lg border-4 border-white"><img src={logoPreview} className="w-full h-full object-cover" alt="Preview" /></div>{isDirtyLogo && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-md">NEW</span>}</div>
-                      ) : ( <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-400"><ImageIcon size={40}/></div> )}
-                      <div className="mt-4 flex gap-3"><button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-sm hover:bg-gray-50">{logoPreview ? 'Change Image' : 'Upload Logo'}</button>{isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-4 py-2.5 rounded-xl hover:bg-red-100">Cancel</button>}</div>
+                <form action={async (formData) => { setIsSaving(true); if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); setIsSaving(false); showToast("Branding updated!"); }} className="p-5 border-t border-gray-50 space-y-6">
+                   
+                   <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Header Layout Preview</label>
+                         <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md uppercase tracking-wider">
+                           {headerDesign.replace('design', 'Design ')}
+                         </span>
+                      </div>
+
+                      <div className="w-full relative overflow-hidden rounded-2xl border border-gray-200 shadow-sm mb-4 group">
+                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                           <ChevronLeft size={18}/>
+                         </button>
+                         
+                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                           <ChevronRight size={18}/>
+                         </button>
+
+                         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-pulse">
+                           <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm border border-white/10">
+                             Tap to change layout
+                           </span>
+                         </div>
+
+                         <header 
+                           onClick={handleNextDesign}
+                           className="relative overflow-hidden pt-12 pb-8 transition-colors duration-300 min-h-[140px] flex flex-col justify-center cursor-pointer" 
+                           style={{ background: themeColorPreview }}
+                         >
+                            <div className="absolute inset-0 bg-black/10 z-0 pointer-events-none" />
+                            <div className="absolute inset-0 pointer-events-none z-0 opacity-30" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")` }} />
+                            
+                            <div className="absolute top-3 left-4 z-20 pointer-events-none">
+                               <div className="p-1.5 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 text-white shadow-sm flex items-center justify-center">
+                                 <Menu size={20} strokeWidth={2.5}/>
+                               </div>
+                            </div>
+
+                            <div className="relative z-10 flex items-center justify-center px-4 w-full h-full pointer-events-none">
+                               {headerDesign === 'design2' ? (
+                                 <h1 className="text-white tracking-wide text-center text-3xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
+                               ) : headerDesign === 'design3' ? (
+                                 <div className="flex flex-col items-center gap-3">
+                                   <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
+                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                   </div>
+                                   <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
+                                 </div>
+                               ) : headerDesign === 'design4' ? (
+                                 <div className="flex items-center gap-4">
+                                   <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                   </div>
+                                   <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
+                                 </div>
+                               ) : (
+                                 <div className="flex flex-col items-center gap-2">
+                                   <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                   </div>
+                                   <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
+                                 </div>
+                               )}
+                            </div>
+                         </header>
+                      </div>
+                      
+                      <input type="hidden" name="headerDesign" value={headerDesign} />
+
+                      <div className="flex justify-center pt-2">
+                         <div className="flex items-center gap-3 flex-wrap">
+                            <button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-6 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700 active:scale-95 transition-all">
+                               <ImageIcon size={16}/> {logoPreview ? 'Change Logo' : 'Upload Logo'}
+                            </button>
+                            {isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
+                         </div>
+                      </div>
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
                    </div>
-                   <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Theme Color</label><input name="themeColor" type="color" defaultValue={settings.themeColor} className="h-14 w-full rounded-2xl bg-gray-50 p-1 cursor-pointer border border-gray-100"/></div>
-                   <div className="flex justify-end pt-2"><button className="bg-[var(--theme-color)] text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:brightness-110 active:scale-95 transition"><Save size={16}/> Save Branding</button></div>
+
+                   <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Theme Color</label>
+                      <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => setThemeColorPreview(e.target.value)} className="h-14 w-full rounded-2xl bg-white p-1 cursor-pointer border border-gray-200 shadow-sm"/>
+                   </div>
+                   <div className="flex justify-end pt-2">
+                       <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">
+                         {isSaving ? 'Saving...' : <><Save size={16}/> Save Branding</>}
+                       </button>
+                   </div>
                 </form>
               </div>
             </div>
@@ -744,27 +928,31 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          onDragStart={(e) => handleDragStart(e, index)}
                          onDragOver={(e) => handleDragOver(e, index)}
                          onDrop={(e) => handleDrop(e, index)}
-                         className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-[var(--theme-color)] opacity-50' : 'border-gray-100'} shadow-sm group bg-white flex items-center justify-center cursor-move`}
+                         className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-100'} shadow-sm group bg-white flex items-center justify-center cursor-move`}
                        >
                          <img src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                          
                          <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm"><ChevronUp size={14}/></button>
-                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm"><ChevronDown size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button>
                          </div>
 
                          <form action={async (fd) => {
+                           setDeletingId(b.id);
                            dispatchOptBanners({ type: 'delete', payload: b.id });
                            await deleteBanner(fd);
+                           setDeletingId(null);
                            showToast("Banner deleted");
                          }}>
                            <input type="hidden" name="id" value={b.id} />
-                           <button className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm"><Trash2 size={14}/></button>
+                           <button disabled={deletingId === b.id} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 disabled:opacity-50">
+                             {deletingId === b.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14}/>}
+                           </button>
                          </form>
                        </div>
                      ))}
                    </div>
-                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-[var(--theme-color)] hover:text-[var(--theme-color)] transition-all flex items-center justify-center gap-2">
+                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-gray-900 hover:text-gray-900 transition-all flex items-center justify-center gap-2 active:scale-[0.99]">
                      <Plus size={16}/> Add New Banner
                    </button>
                    <input type="file" accept="image/*" ref={bannerInputRef} onChange={(e) => onFileSelect(e, 'banner')} className="hidden" />
@@ -777,7 +965,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <div className="flex gap-4 items-center"><div className="p-2 bg-pink-50 text-pink-600 rounded-xl"><Share2 size={20}/></div><div className="text-left font-bold text-gray-800">Social Media</div></div>{openSection === 'socials' ? <ChevronUp/> : <ChevronDown/>}
               </button>
               <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                <form action={async (fd) => { await updateShopSocials(fd); showToast("Socials saved!"); }} className="p-5 border-t border-gray-50 space-y-4">
+                <form action={async (fd) => { setIsSaving(true); await updateShopSocials(fd); setIsSaving(false); showToast("Socials saved!"); }} className="p-5 border-t border-gray-50 space-y-4">
                   <input type="hidden" name="socials" value={JSON.stringify(socialLinks)} />
                   {socialLinks.map((link) => (
                     <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-3 bg-gray-50/50 rounded-2xl border border-gray-100 animate-in slide-in-from-left-2">
@@ -787,15 +975,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option>
                           </select>
                        </div>
-                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 p-3 bg-white rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:ring-2 focus:ring-[var(--theme-color)]"/>
+                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 p-3 bg-white rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900"/>
                        <div className="flex items-center gap-2 justify-end">
-                          <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-[var(--theme-color)] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div></label>
-                          <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                          <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div></label>
+                          <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
                        </div>
                     </div>
                   ))}
-                  <button type="button" onClick={addSocialLink} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-[var(--theme-color)] hover:text-[var(--theme-color)] transition-all flex items-center justify-center gap-2"><Plus size={16}/> Add New Link</button>
-                  <div className="flex justify-end pt-4"><button className="bg-[var(--theme-color)] text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:brightness-110 active:scale-95 transition"><Save size={16}/> Save Socials</button></div>
+                  <button type="button" onClick={addSocialLink} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-gray-900 hover:text-gray-900 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"><Plus size={16}/> Add New Link</button>
+                  <div className="flex justify-end pt-4"><button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">{isSaving ? 'Saving...' : <><Save size={16}/> Save Socials</>}</button></div>
                 </form>
               </div>
             </div>
@@ -806,49 +994,102 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {/* --- QR CODE MODAL --- */}
       {isQrModalOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm py-4" onClick={() => setIsQrModalOpen(false)}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
+               
                <div className="flex justify-between items-center mb-6">
                   <h2 className="font-extrabold text-2xl text-gray-900">QR & Print Menu</h2>
-                  <button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100" onClick={() => setIsQrModalOpen(false)}><X size={20}/></button>
+                  <button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 transition-colors active:scale-95" onClick={() => setIsQrModalOpen(false)}>
+                    <X size={20}/>
+                  </button>
                </div>
                
-               {/* Format Selector */}
+               {/* 1. Orientation Selector with Context */}
                <div className="flex gap-2 mb-6 bg-gray-100 p-1.5 rounded-2xl w-full">
                   <button 
                     onClick={() => setPreviewFormat('portrait')}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${previewFormat === 'portrait' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 px-1 rounded-xl text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'portrait' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                   >
-                    Portrait
+                    <span>Portrait</span>
+                    <span className="text-[10px] font-normal opacity-70 mt-0.5">(Table stand)</span>
                   </button>
                   <button 
                     onClick={() => setPreviewFormat('landscape')}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${previewFormat === 'landscape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 px-1 rounded-xl text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'landscape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                   >
-                    Landscape
+                    <span>Landscape</span>
+                    <span className="text-[10px] font-normal opacity-70 mt-0.5">(Wall / Counter)</span>
                   </button>
                </div>
 
-               {/* Preview Container */}
-               <div className="w-full bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center mb-6 overflow-x-auto" style={{ height: '350px' }}>
+               {/* 2. Paper Size Selector */}
+               <div className="mb-6">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block text-center">Paper Size</label>
+                  <div className="flex gap-2 bg-gray-100 p-1.5 rounded-xl w-full max-w-[240px] mx-auto">
+                     {['A4', 'A5', '10x15'].map(size => (
+                       <button 
+                         key={size} 
+                         onClick={() => setPaperSize(size as any)} 
+                         className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${paperSize === size ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                       >
+                         {size === '10x15' ? '10×15 cm' : size}
+                       </button>
+                     ))}
+                  </div>
+               </div>
+
+               {/* 3. QR Target Link Preview */}
+               <div className="mb-3 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">QR will open:</span>
+                  <div className="bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg max-w-[280px] w-full text-center truncate shadow-sm">
+                     <span className="text-xs text-gray-500 font-medium">
+                       {origin ? `${origin}/${shopSlug}` : `.../${shopSlug}`}
+                     </span>
+                  </div>
+               </div>
+
+               {/* 6. Preview Container */}
+               <div className="w-full bg-gray-50/80 rounded-3xl flex items-center justify-center mb-6 overflow-hidden relative shadow-inner" style={{ height: '320px' }}>
+                  <div className="absolute top-3 right-4 bg-white/90 backdrop-blur px-2 py-1 rounded shadow-sm z-20">
+                     <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Actual print ratio</span>
+                  </div>
                   <div 
-                    className="origin-center transform transition-transform duration-300 flex items-center justify-center min-w-max"
-                    style={{ 
-                      transform: previewFormat === 'portrait' ? 'scale(0.32)' : 'scale(0.32)' 
-                    }}
+                    className="origin-center transform transition-all duration-500 flex items-center justify-center shadow-lg bg-white"
+                    style={{ transform: getPreviewScale() }}
                   >
                     {renderPrintTemplate(previewFormat)}
                   </div>
                </div>
 
+               {/* 4. Non-Technical Print Warning */}
+               <div className="flex items-start gap-3 bg-blue-50/60 text-blue-800 p-3.5 rounded-2xl border border-blue-100 mb-6">
+                  <svg className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs leading-relaxed">
+                    <span className="font-bold block mb-0.5 text-blue-900">Best print result:</span>
+                    Turn ON <span className="font-bold">“Background graphics”</span> in the print window
+                  </div>
+               </div>
+
+               {/* 5. Primary and Secondary Actions */}
                <div className="space-y-3">
                   <button 
                     onClick={() => handleGeneratePDF(previewFormat)} 
-                    className="w-full py-4 bg-[var(--theme-color)] text-white rounded-2xl font-bold shadow-md hover:brightness-110 active:scale-95 transition-all text-lg flex items-center justify-center gap-2"
+                    className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all text-[15px] flex items-center justify-center gap-2"
                   >
-                    <QrCode size={20} /> Print / Save as PDF
+                    <QrCode size={18} /> Print / Save as PDF
                   </button>
-                  <p className="text-xs text-center text-gray-400">Make sure to enable 'Background graphics' in the print dialog for best results.</p>
+                  <button 
+                    onClick={handleDownloadPDF} 
+                    className="w-full py-3.5 bg-white border-2 border-gray-200 text-gray-800 rounded-2xl font-bold hover:border-gray-900 hover:text-gray-900 active:scale-[0.98] transition-all text-[14px] flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg> 
+                    Download PDF
+                  </button>
                </div>
+
             </div>
          </div>
       )}
@@ -885,11 +1126,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {cropImageSrc && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Image</h3><button onClick={() => { setCropImageSrc(null); setCropTarget(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button></div>
+            <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Image</h3><button onClick={() => { setCropImageSrc(null); setCropTarget(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500 active:scale-95 transition-transform"><X size={20}/></button></div>
             <div className="relative w-full h-[300px] sm:h-[400px] bg-black">
               <Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onCropComplete={onCropComplete} onZoomChange={setZoom} showGrid={false} />
             </div>
-            <div className="p-6 bg-white space-y-6"><div className="flex items-center gap-4"><ZoomIn size={20} className="text-gray-400"/><input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/></div><button onClick={showCroppedImage} className="w-full py-4 bg-[var(--theme-color)] text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all"><Check size={20} /> Apply Crop</button></div>
+            <div className="p-6 bg-white space-y-6"><div className="flex items-center gap-4"><ZoomIn size={20} className="text-gray-400"/><input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/></div><button onClick={showCroppedImage} className="w-full py-4 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:bg-gray-800 active:scale-95 transition-all"><Check size={20} /> Apply Crop</button></div>
           </div>
         </div>
       )}
@@ -897,12 +1138,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {/* --- ADD/EDIT PRODUCT MODAL --- */}
       {(isFormOpen || editingProduct) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingProduct ? 'Edit Product' : 'New Product'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}><X size={20}/></button></div>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
+               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingProduct ? 'Edit Product' : 'New Product'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}><X size={20}/></button></div>
                
                <form 
                  key={editingProduct ? editingProduct.id : 'new'} 
                  action={async (fd) => { 
+                   setIsSaving(true);
                    const tempId = editingProduct ? editingProduct.id : `temp-${Date.now()}`;
                    const catId = fd.get('categoryId') as string;
                    const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown';
@@ -917,7 +1159,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      image: productPreview || editingProduct?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
-                     isPopular: fd.get('isPopular') === 'on', 
+                     isPopular: isHotSale, 
                    };
 
                    dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
@@ -928,11 +1170,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    fd.set('name', prodName.en);
                    fd.set('name_kh', prodName.kh);
                    fd.set('name_zh', prodName.zh);
+                   fd.set('isPopular', isHotSale ? 'on' : 'off');
                    
                    if (editingProduct) await updateProduct(fd);
                    else await createProduct(fd); 
                    
                    setProductFileBlob(null);
+                   setIsSaving(false);
                    showToast("Product saved successfully!");
                  }} 
                  className="space-y-4"
@@ -941,7 +1185,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   
                   <div 
                     onClick={() => productInputRef.current?.click()}
-                    className="relative w-full h-48 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-[var(--theme-color)] transition-colors"
+                    className="relative w-full h-48 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-gray-900 transition-colors"
                   >
                      {productPreview ? (
                        <><img src={productPreview} className="w-full h-full object-cover" alt="Preview" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">Change Image</p></div></>
@@ -954,30 +1198,58 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required />
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required /></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Discount (%)</label><input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" /></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Category</label><select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                  </div>
-
-                  <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Preparation Time</label><input name="time" defaultValue={editingProduct?.time || ''} placeholder="e.g. 15min" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" /></div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100 mt-2">
-                    <div>
-                      <h4 className="font-bold text-orange-600 text-sm">Hot Sale Item</h4>
-                      <p className="text-[10px] text-orange-400">Show this in the popular section</p>
+                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required /></div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500">Discount (%)</label>
+                      <input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" />
+                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">Displayed as a sale badge on the customer menu</p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        name="isPopular" 
-                        defaultChecked={editingProduct?.isPopular} 
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                    </label>
+                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Category</label><select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>
 
-                  <button className="w-full bg-[var(--theme-color)] text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:brightness-110 active:scale-95 transition-all">{editingProduct ? 'Update Product' : 'Save Product'}</button>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500">Preparation Time</label>
+                    <div className="relative flex items-center">
+                      <input 
+                        type="number" 
+                        value={prepTime}
+                        onChange={(e) => setPrepTime(e.target.value)}
+                        placeholder="15" 
+                        className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 pr-12" 
+                      />
+                      <span className="absolute right-4 text-gray-400 font-medium text-sm pointer-events-none">min</span>
+                      <input type="hidden" name="time" value={prepTime ? `${prepTime}min` : ''} />
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-3 p-4 bg-orange-50 rounded-xl border border-orange-100 mt-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-orange-600 text-sm">Hot Sale Item</h4>
+                        <p className="text-[10px] text-orange-400">Show this in the popular section</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={isHotSale} 
+                          onChange={(e) => setIsHotSale(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                      </label>
+                    </div>
+                    {isHotSale && (
+                      <div className="flex">
+                        <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">
+                          Hot Sale
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button disabled={isSaving} className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSaving ? 'Saving...' : (editingProduct ? 'Update Product' : 'Save Product')}
+                  </button>
                </form>
             </div>
          </div>
@@ -986,11 +1258,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {/* --- ADD/EDIT CATEGORY MODAL --- */}
       {(isCatFormOpen || editingCategory) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X size={20}/></button></div>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
+               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X size={20}/></button></div>
                <form 
                  key={editingCategory ? editingCategory.id : 'new'}
                  action={async (fd) => { 
+                    setIsSaving(true);
                     const tempId = editingCategory ? editingCategory.id : `temp-${Date.now()}`;
                     const tempCat: Category = {
                       id: tempId,
@@ -1012,6 +1285,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    if (editingCategory) await updateCategory(fd); 
                    else await createCategory(fd); 
                    
+                   setIsSaving(false);
                    showToast("Category saved successfully!");
                  }} 
                  className="space-y-4"
@@ -1022,17 +1296,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-gray-500">Discount (%)</label>
-                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" />
+                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" />
+                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">Displayed as a sale badge on the customer menu</p>
                     </div>
                     {editingCategory && (
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-gray-500">Sort Order</label>
-                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required />
+                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required />
                       </div>
                     )}
                   </div>
 
-                  <button className="w-full bg-[var(--theme-color)] text-white py-4 rounded-xl font-bold shadow-md hover:brightness-110 active:scale-95 transition-all mt-6">{editingCategory ? 'Update' : 'Create'}</button>
+                  <button disabled={isSaving} className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSaving ? 'Saving...' : (editingCategory ? 'Update' : 'Create')}
+                  </button>
                </form>
             </div>
          </div>

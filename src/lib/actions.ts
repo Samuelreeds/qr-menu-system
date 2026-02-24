@@ -58,7 +58,8 @@ export async function getShopSettings() {
       name: "Scandine", 
       address: "", 
       phone: "", 
-      themeColor: "#5CB85C",
+      themeColor: "#000000",
+      headerDesign: "design1",
       logo: null, 
       socials: "[]"
     };
@@ -292,21 +293,23 @@ export async function updateShopIdentity(formData: FormData) {
     update: { name, address, phone },
     create: { 
       shopId, name, address, phone,
-      themeColor: '#5CB85C'
+      themeColor: '#000000',
+      headerDesign: 'design1'
     }
   });
   revalidatePath('/', 'layout');
 }
 
 export async function updateShopBranding(formData: FormData) {
-  const themeColor = formData.get('themeColor') as string || '#5cb85c';
+  const themeColor = formData.get('themeColor') as string || '#000000';
+  const headerDesign = formData.get('headerDesign') as string || 'design1';
   const logoFile = formData.get('logo') as File;
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
   const newLogoPath = await uploadToSupabase(logoFile, 'branding');
 
-  const dataToUpdate: any = { themeColor };
+  const dataToUpdate: any = { themeColor, headerDesign };
   if (newLogoPath) {
     const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { logo: true } });
     if (currentSettings?.logo) await deleteFromSupabase(currentSettings.logo);
@@ -316,7 +319,7 @@ export async function updateShopBranding(formData: FormData) {
   await prisma.shopSettings.upsert({
     where: { shopId },
     update: dataToUpdate,
-    create: { shopId, name: 'Scandine', themeColor, logo: newLogoPath || null }
+    create: { shopId, name: 'Scandine', themeColor, headerDesign, logo: newLogoPath || null }
   });
   revalidatePath('/', 'layout');
 }
@@ -525,6 +528,7 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
     return { success: false, error: "Email and password are required" };
   }
 
+  // Use an exact match slug to ensure consistency
   const slug = shopName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -547,7 +551,8 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
         data: {
           shopId: shop.id,
           name: shopName,
-          themeColor: "#5CB85C",
+          themeColor: "#000000",
+          headerDesign: "design1",
           socials: "[]",
           telegram: telegram || null,
           phone: phone || null

@@ -6,6 +6,7 @@ import FoodCard from '@/components/FoodCard';
 import ShopInfoModal from '@/components/ShopInfoModal';
 import CartFloat from '@/components/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
+import { Menu } from 'lucide-react';
 
 // --- TYPES ---
 interface ShopSettings {
@@ -13,6 +14,7 @@ interface ShopSettings {
   address?: string;
   phone?: string;
   themeColor: string;
+  headerDesign?: string;
   logo?: string;
   facebook?: string; showFacebook: boolean;
   instagram?: string; showInstagram: boolean;
@@ -69,6 +71,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   // Default values
   const shopName = shopSettings?.name || 'Gourmet Shop';
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
+  const headerDesign = shopSettings?.headerDesign || 'design1';
   const logoUrl = shopSettings?.logo || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
 
   // Auto Slider with 3 second delay
@@ -136,7 +139,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
     {/* --- HEADER SECTION --- */}
     <header
-      className="relative overflow-hidden pb-8 pt-2 transition-colors duration-300"
+      className="relative overflow-hidden pb-8 pt-4 transition-colors duration-300 min-h-[140px]"
       style={{ background: themeColor }}
     >
       <div className="absolute inset-0 bg-black/10 z-0" />
@@ -161,44 +164,46 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       />
 
       <div className="relative z-10 flex flex-col h-full max-w-7xl mx-auto w-full">
-        <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 pt-6 pb-6 lg:pt-10 lg:pb-8">
-          {/* Left — Info */}
+        {/* Top Left Menu Button */}
+        <div className="absolute top-2 left-4 sm:left-6 lg:left-8 z-20">
           <button
             onClick={() => setIsInfoOpen(true)}
             aria-label="Shop info"
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md hover:scale-105 active:scale-95"
-            style={{ border: '1px solid rgba(255,255,255,0.2)', background: '#fff' }}
+            className="p-2 sm:p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 transition-all shadow-sm flex items-center justify-center active:scale-95"
           >
-            <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
+            <Menu size={24} strokeWidth={2.5} />
           </button>
+        </div>
 
-          {/* Center — Logo + Name */}
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="rounded-full overflow-hidden flex-shrink-0 bg-white"
-              style={{
-                width: 68,
-                height: 68,
-                padding: 0,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              }}
-            >
-              <img
-                src={logoUrl}
-                alt={shopName}
-                className="w-full h-full object-cover rounded-full"
-              />
-            </div>
-            <h1 className="text-white tracking-wide text-center text-xl sm:text-2xl lg:text-3xl mt-1 font-bold drop-shadow-sm">
+        {/* Header Content Variations */}
+        <div className="flex items-center justify-center px-4 sm:px-6 lg:px-8 pt-12 pb-2 w-full h-full">
+          {headerDesign === 'design2' ? (
+            <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">
               {shopName}
             </h1>
-          </div>
-
-          {/* Right — Spacer */}
-          <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0" />
+          ) : headerDesign === 'design3' ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5">
+                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-[14px]" />
+              </div>
+              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+            </div>
+          ) : headerDesign === 'design4' ? (
+            <div className="flex items-center gap-4">
+              <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5">
+                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-full" />
+              </div>
+              <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+            </div>
+          ) : (
+            // default design1
+            <div className="flex flex-col items-center gap-2">
+              <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5">
+                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-full" />
+              </div>
+              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -213,7 +218,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         />
       </div>
 
-      <div className="mb-6 sm:mb-8">
+      <div className="mb-6">
         <div 
           className="flex gap-3 overflow-x-auto pb-4 no-scrollbar" 
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}

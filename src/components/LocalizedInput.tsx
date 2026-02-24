@@ -1,92 +1,94 @@
-"use client";
-import { useState } from "react";
-import { Plus, X } from "lucide-react";
+// components/LocalizedInput.tsx
+'use client';
+import { useState } from 'react';
 
 interface LocalizedInputProps {
   label: string;
-  value: string;      // English (Default)
-  valueKh: string;    // Khmer
-  valueZh: string;    // Chinese
+  value: string;
+  valueKh?: string | null;
+  valueZh?: string | null;
   onChange: (lang: 'en' | 'kh' | 'zh', val: string) => void;
-  placeholder?: string;
   required?: boolean;
 }
 
-export default function LocalizedInput({ 
-  label, 
-  value, 
-  valueKh, 
-  valueZh, 
-  onChange, 
-  placeholder,
-  required 
-}: LocalizedInputProps) {
-  const [showKh, setShowKh] = useState(!!valueKh); // Auto-show if value exists
-  const [showZh, setShowZh] = useState(!!valueZh);
+export default function LocalizedInput({ label, value, valueKh, valueZh, onChange, required }: LocalizedInputProps) {
+  const [activeTab, setActiveTab] = useState<'en' | 'kh' | 'zh'>('en');
+  const [activeLangs, setActiveLangs] = useState<('en' | 'kh' | 'zh')[]>(() => {
+    const langs: ('en' | 'kh' | 'zh')[] = ['en'];
+    if (valueKh) langs.push('kh');
+    if (valueZh) langs.push('zh');
+    return langs;
+  });
+
+  const addLang = (lang: 'kh' | 'zh') => {
+    if (!activeLangs.includes(lang)) {
+      setActiveLangs([...activeLangs, lang]);
+    }
+    setActiveTab(lang);
+  };
 
   return (
-    <div className="space-y-3 mb-5">
-      <div className="flex justify-between items-center">
-        <label className="block text-sm font-bold text-gray-700">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-        
-        {/* Language Toggles */}
+    <div className="space-y-2">
+      <div className="flex justify-between items-end mb-1">
+        <label className="text-xs font-bold text-gray-500">{label}</label>
         <div className="flex gap-2">
-          {!showKh && (
-            <button type="button" onClick={() => setShowKh(true)} className="text-xs flex items-center gap-1 text-blue-600 font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors">
-              <Plus size={12} /> Add Khmer
+          {!activeLangs.includes('kh') && (
+            <button type="button" onClick={() => addLang('kh')} className="text-[10px] text-gray-400 hover:text-gray-900 font-bold transition-colors">
+              + Add Khmer
             </button>
           )}
-          {!showZh && (
-            <button type="button" onClick={() => setShowZh(true)} className="text-xs flex items-center gap-1 text-red-600 font-medium hover:bg-red-50 px-2 py-1 rounded transition-colors">
-              <Plus size={12} /> Add Chinese
+          {!activeLangs.includes('zh') && (
+            <button type="button" onClick={() => addLang('zh')} className="text-[10px] text-gray-400 hover:text-gray-900 font-bold transition-colors">
+              + Add Chinese
             </button>
           )}
         </div>
       </div>
-      
-      {/* 1. English Input (Always Visible) */}
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange("en", e.target.value)}
-        className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black/5 outline-none text-sm"
-        placeholder={placeholder || `${label} (English)`}
-        required={required}
-      />
 
-      {/* 2. Khmer Input (Hidden by default) */}
-      {showKh && (
-        <div className="relative animate-in slide-in-from-top-2 fade-in duration-200">
-          <input
-            type="text"
-            value={valueKh}
-            onChange={(e) => onChange("kh", e.target.value)}
-            className="w-full p-3 border border-blue-200 bg-blue-50/20 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
+      {activeLangs.length > 1 && (
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-max mb-2">
+          {activeLangs.map(l => (
+            <button 
+              key={l}
+              type="button"
+              onClick={() => setActiveTab(l)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === l ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {l === 'en' ? 'English' : l === 'kh' ? 'Khmer' : 'Chinese'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="relative">
+        <input 
+          type="text" 
+          value={value} 
+          onChange={(e) => onChange('en', e.target.value)} 
+          placeholder={`${label} (English)`}
+          required={required}
+          onInvalid={() => setActiveTab('en')}
+          className={`w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 ${activeTab === 'en' ? 'block' : 'absolute opacity-0 w-0 h-0 -z-10'}`} 
+        />
+        {activeLangs.includes('kh') && (
+          <input 
+            type="text" 
+            value={valueKh || ''} 
+            onChange={(e) => onChange('kh', e.target.value)} 
             placeholder={`${label} (Khmer)`}
+            className={`w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 ${activeTab === 'kh' ? 'block' : 'hidden'}`} 
           />
-          <button type="button" onClick={() => setShowKh(false)} className="absolute right-3 top-3 text-gray-400 hover:text-red-500">
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* 3. Chinese Input (Hidden by default) */}
-      {showZh && (
-        <div className="relative animate-in slide-in-from-top-2 fade-in duration-200">
-          <input
-            type="text"
-            value={valueZh}
-            onChange={(e) => onChange("zh", e.target.value)}
-            className="w-full p-3 border border-red-200 bg-red-50/20 rounded-xl focus:ring-2 focus:ring-red-500/20 outline-none text-sm"
+        )}
+        {activeLangs.includes('zh') && (
+          <input 
+            type="text" 
+            value={valueZh || ''} 
+            onChange={(e) => onChange('zh', e.target.value)} 
             placeholder={`${label} (Chinese)`}
+            className={`w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 ${activeTab === 'zh' ? 'block' : 'hidden'}`} 
           />
-          <button type="button" onClick={() => setShowZh(false)} className="absolute right-3 top-3 text-gray-400 hover:text-red-500">
-            <X size={16} />
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -121,7 +121,8 @@ model ShopSettings {
   name          String
   address       String?
   phone         String?
-  themeColor    String  @default("#5CB85C")
+  themeColor    String  @default("#000000")
+  headerDesign  String  @default("design1")
   logo          String?
   socials       String  @default("[]")
   facebook      String?
