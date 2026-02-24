@@ -8,6 +8,7 @@ import {
   createProduct, deleteProduct, updateProduct, 
   createCategory, updateCategory, deleteCategory,
   updateShopIdentity, updateShopBranding, updateShopSocials, 
+  addBanner, deleteBanner, reorderBanners,
   forceRevalidateAction 
 } from '@/lib/actions';
 import { 
@@ -21,6 +22,7 @@ import {
 // --- TYPES ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; logo: string | null; socials: string; }
+interface Banner { id: string; image: string; sortOrder: number; }
 interface Category { 
   id: string; 
   name: string; 
@@ -45,6 +47,7 @@ interface AdminDashboardProps {
   products: Product[]; 
   settings: ShopSettings; 
   shopSlug: string; 
+  banners?: Banner[];
 }
 
 // --- OPTIMISTIC REDUCER TYPES ---
@@ -53,14 +56,19 @@ type OptimisticAction<T> =
   | { type: 'update'; payload: T }
   | { type: 'delete'; payload: string };
 
-export default function AdminDashboard({ categories, products, settings, shopSlug }: AdminDashboardProps) {
+type OptimisticBannerAction = 
+  | { type: 'add'; payload: Banner }
+  | { type: 'delete'; payload: string }
+  | { type: 'set'; payload: Banner[] };
+
+export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [] }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
   const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
-  const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); // State for preview toggle
-  const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); // State for actual printing
+  const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); 
+  const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); 
   const [searchQuery, setSearchQuery] = useState('');
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -72,6 +80,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [dismissGuide, setDismissGuide] = useState(false);
@@ -101,16 +110,31 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   );
 
-  const [cropTarget, setCropTarget] = useState<'logo' | 'product' | null>(null);
+  const [optBanners, dispatchOptBanners] = useOptimistic(
+    banners,
+    (state, action: OptimisticBannerAction) => {
+      switch (action.type) {
+        case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder);
+        case 'delete': return state.filter(b => b.id !== action.payload);
+        case 'set': return action.payload;
+        default: return state;
+      }
+    }
+  );
+
+  const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [cropAspect, setCropAspect] = useState<number>(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState(settings.logo || '');
   const [isDirtyLogo, setIsDirtyLogo] = useState(false);
   const [logoFileBlob, setLogoFileBlob] = useState<Blob | null>(null);
+
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const productInputRef = useRef<HTMLInputElement>(null);
   const [productPreview, setProductPreview] = useState('');
@@ -126,7 +150,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const hasSettings = !!settings.address || !!settings.logo || !!settings.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
-  // Cleanup print state after printing dialog closes
   useEffect(() => {
     const afterPrint = () => setPrintFormat(null);
     window.addEventListener('afterprint', afterPrint);
@@ -157,6 +180,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
 
+  const handleForceRefresh = async () => {
+    setIsRefreshing(true);
+    await forceRevalidateAction(); 
+    setIsRefreshing(false);
+    showToast("Synced successfully!");
+  };
+
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 3000);
@@ -169,11 +199,34 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }, 500); 
   };
 
-  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product') => {
+  const handleMoveBanner = async (index: number, direction: number) => {
+    if (index + direction < 0 || index + direction >= optBanners.length) return;
+    
+    const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder);
+    
+    const tempOrder = newBanners[index].sortOrder;
+    newBanners[index].sortOrder = newBanners[index + direction].sortOrder;
+    newBanners[index + direction].sortOrder = tempOrder;
+    
+    newBanners.sort((a,b) => a.sortOrder - b.sortOrder);
+
+    dispatchOptBanners({ type: 'set', payload: newBanners });
+
+    await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
+    showToast("Banners reordered!");
+  };
+
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const reader = new FileReader();
-      reader.addEventListener('load', () => { setCropImageSrc(reader.result as string); setCropTarget(target); setZoom(1); });
+      reader.addEventListener('load', () => { 
+        setCropImageSrc(reader.result as string); 
+        setCropTarget(target); 
+        setZoom(1); 
+        // 16/9 is a safer natural crop to prevent aggressive cutting 
+        setCropAspect(target === 'banner' ? 16 / 9 : 1);
+      });
       reader.readAsDataURL(file);
       e.target.value = ''; 
     }
@@ -187,8 +240,27 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
       if (croppedBlob) {
         const objectUrl = URL.createObjectURL(croppedBlob);
-        if (cropTarget === 'logo') { setLogoFileBlob(croppedBlob); setLogoPreview(objectUrl); setIsDirtyLogo(true); } 
-        else if (cropTarget === 'product') { setProductFileBlob(croppedBlob); setProductPreview(objectUrl); }
+        if (cropTarget === 'logo') { 
+          setLogoFileBlob(croppedBlob); 
+          setLogoPreview(objectUrl); 
+          setIsDirtyLogo(true); 
+        } 
+        else if (cropTarget === 'product') { 
+          setProductFileBlob(croppedBlob); 
+          setProductPreview(objectUrl); 
+        }
+        else if (cropTarget === 'banner') {
+          const fd = new FormData();
+          fd.append('image', croppedBlob, 'banner.webp');
+          const tempId = `temp-${Date.now()}`;
+          const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1;
+          
+          dispatchOptBanners({ 
+            type: 'add', 
+            payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } 
+          });
+          addBanner(fd).then(() => showToast("Banner added!"));
+        }
         setCropImageSrc(null); setCropTarget(null);
       }
     } catch (e) { console.error(e); }
@@ -218,63 +290,75 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => (
     <div 
-      className="border-[14px] border-black rounded-[40px] flex items-center justify-center p-12 bg-white text-black relative"
+      className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-black relative"
       style={{ 
         width: format === 'landscape' ? '1000px' : '650px', 
         height: format === 'landscape' ? '650px' : '1000px',
         flexDirection: format === 'landscape' ? 'row' : 'column',
-        gap: format === 'landscape' ? '4rem' : '2rem',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        padding: format === 'landscape' ? '3rem 4rem' : '4rem 3rem'
       }}
     >
       {format === 'landscape' ? (
         <>
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-            <h1 className="text-5xl font-light text-gray-600 mb-4 tracking-wide">{settings.name}</h1>
-            <p className="text-3xl text-gray-500 mb-12 font-light">Scan to view menu</p>
-            <div className="flex items-center w-full justify-center gap-6 mb-8">
-               <div className="flex-1 h-[2px] bg-gray-300"></div>
-               <div className="relative flex items-center justify-center w-20 h-20 shrink-0">
-                  <div className="absolute inset-0 bg-[#222] rounded-full w-16 h-16 m-auto"></div>
-                  <div className="relative bg-white border-[3px] border-[#222] rounded-xl w-10 h-16 flex flex-col items-center justify-start pt-1.5 z-10 shadow-sm">
-                    <div className="w-2 h-[2px] bg-gray-300 rounded-full mb-1"></div>
-                    <QrCode size={20} className="text-black" />
-                    <div className="mt-auto mb-1 w-2 h-2 rounded-full bg-gray-300"></div>
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-4 w-1/2">
+            <h1 className="text-[3.5rem] leading-[1.1] font-light text-gray-700 mb-2 whitespace-pre-line tracking-wide">
+              {settings.name}
+            </h1>
+            <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
+              scan to view menu !
+            </p>
+            
+            <div className="flex items-center w-full justify-center gap-4 mb-6">
+               <div className="w-16 h-[2px] bg-gray-400"></div>
+               <div className="relative flex flex-col items-center justify-center">
+                  <div className="relative bg-gray-800 rounded-xl w-14 h-24 flex items-center justify-center shadow-md">
+                    <div className="bg-white w-10 h-16 rounded-md flex items-center justify-center">
+                      <QrCode size={24} className="text-black" />
+                    </div>
+                    <div className="absolute top-2 w-4 h-[2px] bg-gray-500 rounded-full"></div>
+                    <div className="absolute bottom-2 w-3 h-3 bg-gray-500 rounded-full"></div>
                   </div>
-                  <svg className="absolute left-[-8px] top-1 text-gray-600 w-6 h-6 transform -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path></svg>
+                  <svg className="absolute -top-4 -left-6 text-gray-600 w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                </div>
-               <div className="flex-1 h-[2px] bg-gray-300"></div>
+               <div className="w-16 h-[2px] bg-gray-400"></div>
             </div>
-            <p className="text-lg text-gray-500 font-medium">www.scandine.xyz</p>
+            
+            <p className="text-xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
           </div>
-          <div className="flex-1 flex justify-center items-center">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px]" />
+          <div className="flex-1 flex justify-center items-center w-1/2">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
           </div>
         </>
       ) : (
         <>
-          <div className="flex flex-col items-center justify-center text-center mt-4">
-            <h1 className="text-6xl font-light text-gray-600 mb-4 tracking-wide">{settings.name}</h1>
-            <p className="text-4xl text-gray-500 font-light">Scan to view menu</p>
+          <div className="flex flex-col items-center justify-center text-center mt-6">
+            <h1 className="text-[4rem] leading-[1.1] font-light text-gray-700 mb-2 whitespace-pre-line tracking-wide">
+              {settings.name}
+            </h1>
+            <p className="text-[3rem] text-gray-500 font-light">
+              scan to view menu !
+            </p>
           </div>
-          <div className="flex justify-center items-center my-8">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px]" />
+          <div className="flex justify-center items-center my-auto w-full">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[480px] h-[480px] object-contain" />
           </div>
-          <div className="flex flex-col items-center justify-center text-center w-full px-12 mb-4">
-            <div className="flex items-center w-full justify-center gap-6 mb-8">
-               <div className="flex-1 h-[2px] bg-gray-300"></div>
-               <div className="relative flex items-center justify-center w-20 h-20 shrink-0">
-                  <div className="absolute inset-0 bg-[#222] rounded-full w-16 h-16 m-auto"></div>
-                  <div className="relative bg-white border-[3px] border-[#222] rounded-xl w-10 h-16 flex flex-col items-center justify-start pt-1.5 z-10 shadow-sm">
-                    <div className="w-2 h-[2px] bg-gray-300 rounded-full mb-1"></div>
-                    <QrCode size={20} className="text-black" />
-                    <div className="mt-auto mb-1 w-2 h-2 rounded-full bg-gray-300"></div>
+          <div className="flex flex-col items-center justify-center text-center w-full mb-8">
+            <div className="flex items-center w-full justify-center gap-4 mb-6">
+               <div className="w-20 h-[2px] bg-gray-400"></div>
+               <div className="relative flex flex-col items-center justify-center">
+                  <div className="relative bg-gray-800 rounded-xl w-14 h-24 flex items-center justify-center shadow-md">
+                    <div className="bg-white w-10 h-16 rounded-md flex items-center justify-center">
+                      <QrCode size={24} className="text-black" />
+                    </div>
+                    <div className="absolute top-2 w-4 h-[2px] bg-gray-500 rounded-full"></div>
+                    <div className="absolute bottom-2 w-3 h-3 bg-gray-500 rounded-full"></div>
                   </div>
-                  <svg className="absolute left-[-8px] top-1 text-gray-600 w-6 h-6 transform -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path></svg>
+                  <svg className="absolute -top-4 -left-6 text-gray-600 w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                </div>
-               <div className="flex-1 h-[2px] bg-gray-300"></div>
+               <div className="w-20 h-[2px] bg-gray-400"></div>
             </div>
-            <p className="text-xl text-gray-500 font-medium">www.scandine.xyz</p>
+            <p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
           </div>
         </>
       )}
@@ -299,7 +383,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         </h1>
       </div>
 
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 h-full flex flex-col">
           <h1 className="font-bold text-xl mb-8 hidden md:block">{settings?.name || 'AdminPanel'}</h1>
           <nav className="space-y-2 flex-1">
@@ -326,6 +410,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
              >
                <ExternalLink size={14} /> View Live Menu
              </a>
+             <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
+               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync
+             </button>
              <button onClick={() => setIsQrModalOpen(true)} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
                <QrCode size={14} /> Get QR
              </button>
@@ -579,6 +666,41 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             </div>
 
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+              <button onClick={() => toggleSection('banners')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center"><div className="p-2 bg-yellow-50 text-yellow-600 rounded-xl"><ImageIcon size={20}/></div><div className="text-left font-bold text-gray-800">Promotional Banners</div></div>{openSection === 'banners' ? <ChevronUp/> : <ChevronDown/>}
+              </button>
+              <div className={openSection === 'banners' ? 'block' : 'hidden'}>
+                <div className="p-5 border-t border-gray-50 space-y-4">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     {optBanners.map((b, index) => (
+                       <div key={b.id} className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-gray-100 shadow-sm group bg-white flex items-center justify-center">
+                         <img src={b.image} className="w-full h-full object-contain" alt="Banner" />
+                         
+                         <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white text-gray-600 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-50"><ChevronUp size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white text-gray-600 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-50"><ChevronDown size={14}/></button>
+                         </div>
+
+                         <form action={async (fd) => {
+                           dispatchOptBanners({ type: 'delete', payload: b.id });
+                           await deleteBanner(fd);
+                           showToast("Banner deleted");
+                         }}>
+                           <input type="hidden" name="id" value={b.id} />
+                           <button className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                         </form>
+                       </div>
+                     ))}
+                   </div>
+                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-[var(--theme-color)] hover:text-[var(--theme-color)] transition-all flex items-center justify-center gap-2">
+                     <Plus size={16}/> Add New Banner
+                   </button>
+                   <input type="file" accept="image/*" ref={bannerInputRef} onChange={(e) => onFileSelect(e, 'banner')} className="hidden" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('socials')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center"><div className="p-2 bg-pink-50 text-pink-600 rounded-xl"><Share2 size={20}/></div><div className="text-left font-bold text-gray-800">Social Media</div></div>{openSection === 'socials' ? <ChevronUp/> : <ChevronDown/>}
               </button>
@@ -651,7 +773,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     onClick={() => handleGeneratePDF(previewFormat)} 
                     className="w-full py-4 bg-[var(--theme-color)] text-white rounded-2xl font-bold shadow-md hover:brightness-110 active:scale-95 transition-all text-lg flex items-center justify-center gap-2"
                   >
-                    <QrCode size={20} /> Print QR
+                    <QrCode size={20} /> Print / Save as PDF
                   </button>
                   <p className="text-xs text-center text-gray-400">Make sure to enable 'Background graphics' in the print dialog for best results.</p>
                </div>
@@ -693,7 +815,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-4 border-b flex justify-between items-center bg-white z-10"><h3 className="font-bold text-lg">Adjust Image</h3><button onClick={() => { setCropImageSrc(null); setCropTarget(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 hover:text-red-500"><X size={20}/></button></div>
             <div className="relative w-full h-[300px] sm:h-[400px] bg-black">
-              <Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop} onCropComplete={onCropComplete} onZoomChange={setZoom} showGrid={false} />
+              <Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onCropComplete={onCropComplete} onZoomChange={setZoom} showGrid={false} />
             </div>
             <div className="p-6 bg-white space-y-6"><div className="flex items-center gap-4"><ZoomIn size={20} className="text-gray-400"/><input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-green"/></div><button onClick={showCroppedImage} className="w-full py-4 bg-[var(--theme-color)] text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all"><Check size={20} /> Apply Crop</button></div>
           </div>

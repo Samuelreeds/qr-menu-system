@@ -11,11 +11,14 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   const resolvedParams = await params;
 
   // 3. Fetch data from DB using the resolved slug
-  const shop = await prisma.shop.findUnique({
+  const shop: any = await (prisma as any).shop.findUnique({
     where: { slug: resolvedParams.slug },
     include: {
       categories: true,
       settings: true,
+      banners: {
+        orderBy: { sortOrder: 'asc' }
+      },
       products: {
         include: {
           category: true,
@@ -41,7 +44,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: false,
     telegram: '',
     showTelegram: false,
-    socials: '[]', // ADDED DEFAULT
+    socials: '[]', 
   };
 
   // Format Settings for the Client
@@ -57,11 +60,11 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: safeSettings.showInstagram || false,
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
-    socials: safeSettings.socials || '[]', // ADDED PASSING SOCIALS
+    socials: safeSettings.socials || '[]', 
   };
 
   // Clean up Categories
-  const formattedCategories = shop.categories.map((cat) => ({
+  const formattedCategories = (shop.categories || []).map((cat: any) => ({
     id: cat.id,
     name: cat.name,
     name_kh: cat.name_kh || null,
@@ -69,7 +72,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   }));
 
   // Clean up Products
-  const formattedProducts = shop.products.map((product) => ({
+  const formattedProducts = (shop.products || []).map((product: any) => ({
     id: product.id,
     name: product.name,
     name_kh: product.name_kh || null,
@@ -83,11 +86,19 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     isPopular: product.isPopular || false,
   }));
 
+  // Clean up Banners safely
+  const formattedBanners = (shop.banners || []).map((b: any) => ({
+    id: b.id,
+    image: b.image,
+    sortOrder: b.sortOrder,
+  }));
+
   return (
     <MenuClient
       initialProducts={formattedProducts}
       categories={formattedCategories}
       shopSettings={formattedSettings}
+      banners={formattedBanners}
     />
   );
 }

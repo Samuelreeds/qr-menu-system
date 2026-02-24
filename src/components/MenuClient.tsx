@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import FoodCard from '@/components/FoodCard';
 import ShopInfoModal from '@/components/ShopInfoModal';
@@ -31,7 +31,13 @@ interface Product {
   image: string;
   categoryId: string;
   category: { name: string } | string;
-  isPopular?: boolean; // Added isPopular to type
+  isPopular?: boolean;
+}
+
+interface Banner {
+  id: string;
+  image: string;
+  sortOrder?: number;
 }
 
 interface Category { 
@@ -45,18 +51,53 @@ interface MenuClientProps {
   initialProducts: Product[];
   categories: Category[];
   shopSettings: ShopSettings;
+  banners?: Banner[];
 }
 
-export default function MenuClient({ initialProducts, categories, shopSettings }: MenuClientProps) {
+export default function MenuClient({ initialProducts, categories, shopSettings, banners = [] }: MenuClientProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  
+  // --- BANNER SLIDER STATE ---
+  const [currentBanner, setCurrentBanner] = useState(0);
+  const [touchStart, setTouchStart] = useState(0);
+  const [touchEnd, setTouchEnd] = useState(0);
+  
   const { lang } = useLanguage(); 
 
   // Default values
   const shopName = shopSettings?.name || 'Gourmet Shop';
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const logoUrl = shopSettings?.logo || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
+
+  // Auto Slider with 1 second delay
+  useEffect(() => {
+    if (!banners || banners.length <= 1) return;
+    const timer = setTimeout(() => {
+      setCurrentBanner((prev) => (prev + 1) % banners.length);
+    }, 3000); // Set to 1s
+    return () => clearTimeout(timer);
+  }, [banners, currentBanner]);
+
+  // Swipe & Click Handlers
+  const handleNext = () => setCurrentBanner((prev) => (prev + 1) % banners.length);
+  const handlePrev = () => setCurrentBanner((prev) => (prev === 0 ? banners.length - 1 : prev - 1));
+
+  const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.targetTouches[0].clientX);
+  const handleTouchMove = (e: React.TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe) handleNext();
+    if (isRightSwipe) handlePrev();
+    
+    setTouchStart(0);
+    setTouchEnd(0);
+  };
 
   const getCategoryName = (cat: Category) => {
     if (lang === 'kh') return cat.name_kh || cat.name;
@@ -172,7 +213,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
         />
       </div>
 
-      <div className="mb-8">
+      <div className="mb-6">
         <div 
           className="flex gap-3 overflow-x-auto pb-4 no-scrollbar" 
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -219,6 +260,64 @@ export default function MenuClient({ initialProducts, categories, shopSettings }
           ))}
         </div>
       </div>
+
+      {/* Banner Carousel moved under categories - Clickable & Swipeable */}
+      {banners && banners.length > 0 && (
+        <div 
+          className="w-full relative mb-8 rounded-2xl overflow-hidden shadow-sm bg-gray-50/50 border border-gray-100"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="relative w-full flex items-center justify-center group">
+            {/* Invisible placeholder to establish the container height dynamically based on the first banner */}
+            <img 
+              src={banners[0].image} 
+              className="w-full h-auto opacity-0 pointer-events-none" 
+              alt="Banner Placeholder" 
+              aria-hidden="true" 
+            />
+            {banners.map((b, i) => (
+              <img 
+                key={b.id} 
+                src={b.image} 
+                className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${i === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
+                alt={`Banner ${i + 1}`}
+              />
+            ))}
+
+            {/* Desktop Side Hitboxes for Click Navigation */}
+            {banners.length > 1 && (
+              <>
+                <button 
+                  onClick={handlePrev}
+                  className="absolute left-0 top-0 bottom-0 w-1/4 z-20 outline-none focus:outline-none opacity-0 cursor-pointer"
+                  aria-label="Previous Banner"
+                />
+                <button 
+                  onClick={handleNext}
+                  className="absolute right-0 top-0 bottom-0 w-1/4 z-20 outline-none focus:outline-none opacity-0 cursor-pointer"
+                  aria-label="Next Banner"
+                />
+              </>
+            )}
+
+            {/* Clickable Dots */}
+            {banners.length > 1 && (
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-30 pb-1">
+                {banners.map((_, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setCurrentBanner(i)}
+                    className={`h-1.5 rounded-full transition-all shadow-sm outline-none cursor-pointer ${i === currentBanner ? 'bg-[var(--brand-color)] w-5' : 'bg-gray-300/80 w-1.5 hover:bg-gray-400'}`} 
+                    aria-label={`Go to banner ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeCategory === 'All' ? (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">

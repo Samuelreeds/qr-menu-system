@@ -1,5 +1,4 @@
-// src/app/admin/page.tsx
-import { getCategories, getProducts, getShopSettings } from '@/lib/actions';
+import { getCategories, getProducts, getShopSettings, getBanners } from '@/lib/actions';
 import AdminDashboard from '@/components/AdminDashboard';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
@@ -12,6 +11,7 @@ export default async function AdminPage() {
   const categories = await getCategories();
   const products = await getProducts();
   const settingsData = await getShopSettings();
+  const banners = await getBanners(); // Fetch banners from DB
 
   const settings = settingsData || {
     id: "default",
@@ -53,6 +53,7 @@ export default async function AdminPage() {
       products={products as any}
       settings={settings as any}
       shopSlug={shopSlug}
+      banners={banners as any}
     />
   );
 }

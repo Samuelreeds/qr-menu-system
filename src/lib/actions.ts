@@ -66,14 +66,24 @@ export async function getShopSettings() {
   return settings;
 }
 
+export async function getBanners() {
+  const shopId = await getActiveShopId();
+  if (!shopId) return [];
+  const prismaAny = prisma as any;
+  return await prismaAny.banner.findMany({ 
+    where: { shopId },
+    orderBy: { sortOrder: 'asc' } 
+  });
+}
+
 // --- HELPERS ---
-async function uploadToSupabase(file: File, folder: 'products' | 'branding'): Promise<string | undefined> {
+async function uploadToSupabase(file: File, folder: 'products' | 'branding' | 'banners'): Promise<string | undefined> {
   if (!file || file.size === 0 || file.name === 'undefined') return undefined;
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     const optimizedBuffer = await sharp(buffer)
-      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
       .toFormat('webp', { quality: 80 })
       .toBuffer();
 
@@ -103,6 +113,59 @@ async function deleteFromSupabase(fullUrl: string | null) {
     }
   } catch (error) {
     console.error("Delete failed:", error);
+  }
+}
+
+// --- BANNER ACTIONS ---
+export async function addBanner(formData: FormData) {
+  const imageFile = formData.get('image') as File;
+  const shopId = await getActiveShopId();
+  if (!shopId) return;
+
+  const imagePath = await uploadToSupabase(imageFile, 'banners');
+  if (imagePath) {
+    const prismaAny = prisma as any;
+    const lastBanner = await prismaAny.banner.findFirst({
+      where: { shopId },
+      orderBy: { sortOrder: 'desc' }
+    });
+    const nextOrder = (lastBanner?.sortOrder || 0) + 1;
+
+    await prismaAny.banner.create({
+      data: { image: imagePath, sortOrder: nextOrder, shopId }
+    });
+    revalidatePath('/', 'layout');
+  }
+}
+
+export async function deleteBanner(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    const prismaAny = prisma as any;
+    const banner = await prismaAny.banner.findUnique({ where: { id }, select: { image: true } });
+    if (banner) {
+      await prismaAny.banner.delete({ where: { id } });
+      await deleteFromSupabase(banner.image);
+      revalidatePath('/', 'layout');
+    }
+  } catch (e) {}
+}
+
+export async function reorderBanners(banners: {id: string, sortOrder: number}[]) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return;
+  
+  try {
+    const prismaAny = prisma as any;
+    for (const banner of banners) {
+      await prismaAny.banner.update({
+        where: { id: banner.id },
+        data: { sortOrder: banner.sortOrder }
+      });
+    }
+    revalidatePath('/', 'layout');
+  } catch (error) {
+    console.error("Failed to reorder banners", error);
   }
 }
 
@@ -212,13 +275,12 @@ export async function updateShopIdentity(formData: FormData) {
   const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
   try {
-    // Sync the main Shop model's name and slug so the live menu URL updates automatically
     await prisma.shop.update({
       where: { id: shopId },
       data: { name, slug: newSlug }
     });
   } catch (error) {
-    console.error("Failed to update slug (might be duplicate):", error);
+    console.error("Failed to update slug:", error);
   }
 
   await prisma.shopSettings.upsert({
@@ -459,7 +521,6 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
     return { success: false, error: "Email and password are required" };
   }
 
-  // Use an exact match slug to ensure consistency
   const slug = shopName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   
   const hashedPassword = await bcrypt.hash(password, 10);
