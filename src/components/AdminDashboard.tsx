@@ -1,4 +1,3 @@
-// components/AdminDashboard.tsx
 'use client';
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic } from 'react';
@@ -468,20 +467,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       </div>
 
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-8 h-full flex flex-col mt-14 md:mt-0">
+        <div className="px-6 md:px-8 pb-6 md:pb-8 pt-20 md:pt-8 h-full flex flex-col overflow-hidden">
           <h1 className="font-bold text-xl mb-8 hidden md:block">{settings?.name || 'AdminPanel'}</h1>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button onClick={() => {setActiveTab('menu'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
             <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
             <button onClick={() => {setActiveTab('settings'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
           </nav>
-          <div className="pt-6 border-t border-gray-50 mt-auto"><button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="w-full flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition active:scale-95"><LogOut size={18}/> Log Out</button></div>
+          <div className="pt-6 border-t border-gray-50 mt-auto shrink-0">
+            <button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="w-full flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition active:scale-95"><LogOut size={18}/> Log Out</button>
+          </div>
         </div>
       </aside>
 
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      <main className="flex-1 p-4 pt-24 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-full">
+      <main className="flex-1 p-4 pt-24 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
         {activeTab !== 'settings' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
@@ -740,7 +741,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
              {optProducts.length > 0 && (
                <button 
                  onClick={() => setIsFormOpen(true)}
-                 className="md:hidden fixed bottom-6 right-6 z-40 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
+                 className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
                >
                  <Plus size={24} strokeWidth={3} />
                </button>
@@ -798,6 +799,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         {/* --- SETTINGS TAB --- */}
         {activeTab === 'settings' && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300 pb-12">
+            <header className="hidden sm:flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Settings</h2>
+            </header>
+
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <button onClick={() => toggleSection('identity')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center"><div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Store size={20}/></div><div className="text-left font-bold text-gray-800">Shop Identity</div></div>{openSection === 'identity' ? <ChevronUp/> : <ChevronDown/>}
@@ -827,16 +832,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          </span>
                       </div>
 
-                      <div className="w-full relative overflow-hidden rounded-2xl border border-gray-200 shadow-sm mb-4 group">
-                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                      <div className="w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm mb-4 group">
+                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
                            <ChevronLeft size={18}/>
                          </button>
                          
-                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
                            <ChevronRight size={18}/>
                          </button>
 
-                         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-pulse">
+                         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-pulse">
                            <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm border border-white/10">
                              Tap to change layout
                            </span>
@@ -1258,7 +1263,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {/* --- ADD/EDIT CATEGORY MODAL --- */}
       {(isCatFormOpen || editingCategory) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X size={20}/></button></div>
                <form 
                  key={editingCategory ? editingCategory.id : 'new'}

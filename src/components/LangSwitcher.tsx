@@ -28,12 +28,12 @@ export default function LangSwitcher() {
   }, []);
 
   return (
-    <div className="relative z-50" ref={dropdownRef}>
+    <div className="relative z-50 h-full" ref={dropdownRef}>
       
       {/* --- MAIN BUTTON --- */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-2 shadow-sm hover:bg-gray-50 transition-colors"
+        className="flex items-center justify-center gap-2 h-full bg-white border border-gray-100 rounded-2xl px-4 shadow-sm hover:bg-gray-50 transition-colors"
       >
         <img src={activeLang.flag} alt={activeLang.code} className="w-5 h-5 object-cover rounded-full shadow-sm" />
         <ChevronDown size={14} className={`text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />

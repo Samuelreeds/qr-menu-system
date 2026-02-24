@@ -18,20 +18,20 @@ export default function SearchBar({ value, onChange, hideSwitcher }: SearchBarPr
   };
 
   return (
-    <div className="flex gap-3 mb-2 items-center">
-      <div className="relative flex-1">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+    <div className="flex gap-3 mb-2 items-center h-[46px]">
+      <div className="relative flex-1 h-full">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
         <input 
           type="text" 
           placeholder={placeholderText[lang]}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-white border border-gray-100 pl-11 pr-4 py-3.5 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-black/5 shadow-sm text-gray-600 placeholder:text-gray-400"
+          className="w-full h-full bg-white border border-gray-100 pl-11 pr-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-black/5 shadow-sm text-gray-600 placeholder:text-gray-400"
         />
       </div>
       
       {!hideSwitcher && (
-        <div className="shrink-0">
+        <div className="shrink-0 h-full">
           <LangSwitcher />
         </div>
       )}

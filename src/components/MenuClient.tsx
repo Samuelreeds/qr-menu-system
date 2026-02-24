@@ -139,7 +139,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
     {/* --- HEADER SECTION --- */}
     <header
-      className="relative overflow-hidden pb-8 pt-4 transition-colors duration-300 min-h-[140px]"
+      className="relative overflow-hidden pb-12 pt-4 transition-colors duration-300 min-h-[140px]"
       style={{ background: themeColor }}
     >
       <div className="absolute inset-0 bg-black/10 z-0" />
@@ -209,8 +209,9 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
     </header>
 
     {/* --- BODY SECTION --- */}
-    <div className="px-4 sm:px-6 lg:px-8 mt-6 sm:mt-8 max-w-7xl mx-auto w-full">
-      <div className="mb-6 sm:mb-8 max-w-3xl mx-auto">
+    <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      {/* Overlapping Search & Lang Container */}
+      <div className="relative z-30 -mt-6 sm:-mt-8 mb-6 sm:mb-8 max-w-3xl mx-auto">
         <SearchBar 
           value={searchQuery} 
           onChange={setSearchQuery} 
