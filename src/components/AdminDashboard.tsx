@@ -20,7 +20,18 @@ import {
 
 // --- TYPES ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
-interface ShopSettings { name: string; address: string | null; phone: string | null; themeColor: string; headerDesign: string; logo: string | null; socials: string; }
+interface ShopSettings { 
+  name: string; 
+  name_kh?: string | null; 
+  nameDisplay?: string; 
+  address: string | null; 
+  phone: string | null; 
+  openingHours: string | null;
+  themeColor: string; 
+  headerDesign: string; 
+  logo: string | null; 
+  socials: string; 
+}
 interface Banner { id: string; image: string; sortOrder: number; }
 interface Category { 
   id: string; 
@@ -80,6 +91,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   // --- LOCALIZED INPUT STATE ---
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
+
+  // --- SHOP IDENTITY STATE (For live preview) ---
+  const [previewNameEn, setPreviewNameEn] = useState(settings.name || '');
+  const [previewNameKh, setPreviewNameKh] = useState(settings.name_kh || '');
+  const [previewDisplay, setPreviewDisplay] = useState(settings.nameDisplay || 'EN');
 
   // --- FORM STATES ---
   const [prepTime, setPrepTime] = useState('15');
@@ -229,6 +245,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     handleGeneratePDF(previewFormat);
   };
 
+  // --- DYNAMIC NAME HELPER ---
+  const getShopNamePreview = () => {
+    if (previewDisplay === 'KH' && previewNameKh) return previewNameKh;
+    if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`;
+    return previewNameEn || 'Shop Name';
+  };
+
   // --- DRAG AND DROP & ORDERING HANDLERS ---
   const handleMoveBanner = async (index: number, direction: number) => {
     if (index + direction < 0 || index + direction >= optBanners.length) return;
@@ -338,13 +361,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
-  const handlePrevDesign = () => {
+  const handlePrevDesign = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const designs = ['design1', 'design2', 'design3', 'design4'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx - 1 + designs.length) % designs.length]);
   };
 
-  const handleNextDesign = () => {
+  const handleNextDesign = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const designs = ['design1', 'design2', 'design3', 'design4'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx + 1) % designs.length]);
@@ -373,8 +398,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         {format === 'landscape' ? (
           <>
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2">
-              <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
-                {settings.name}
+              <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">
+                {getShopNamePreview()}
               </h1>
               <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
                 scan to view menu !
@@ -405,8 +430,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         ) : (
           <>
             <div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4">
-              <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
-                {settings.name}
+              <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">
+                {getShopNamePreview()}
               </h1>
               <p className="text-[3rem] text-gray-500 font-light">
                 scan to view menu !
@@ -457,8 +482,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
             <Menu size={22} className="text-gray-700" />
           </button>
-          <h1 className="font-bold text-xl tracking-tight text-gray-900 truncate">
-            {settings?.name || 'AdminPanel'}
+          <h1 className="font-bold text-xl tracking-tight text-gray-900 truncate font-sans">
+            {getShopNamePreview() || 'AdminPanel'}
           </h1>
         </div>
         <button onClick={() => setActiveTab('settings')} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-gray-700 active:scale-95 transition-transform">
@@ -468,7 +493,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-6 md:px-8 pb-6 md:pb-8 pt-20 md:pt-8 h-full flex flex-col overflow-hidden">
-          <h1 className="font-bold text-xl mb-8 hidden md:block">{settings?.name || 'AdminPanel'}</h1>
+          <h1 className="font-bold text-xl mb-8 hidden md:block font-sans">{getShopNamePreview() || 'AdminPanel'}</h1>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button onClick={() => {setActiveTab('menu'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
             <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
@@ -753,7 +778,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         {activeTab === 'categories' && (
            <div className="animate-in fade-in duration-300">
              <div className="flex justify-between items-center gap-4 mb-6">
-                <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
+                 <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
                 <button onClick={() => setIsCatFormOpen(true)} className="ml-auto shrink-0 bg-gray-900 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
                   <Plus size={18} strokeWidth={3}/> Add New
                 </button>
@@ -809,9 +834,29 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               </button>
               <div className={openSection === 'identity' ? 'block' : 'hidden'}>
                 <form action={async (fd) => { setIsSaving(true); await updateShopIdentity(fd); setIsSaving(false); showToast("Identity saved successfully!"); }} className="p-5 border-t border-gray-50 space-y-4">
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name</label><input name="name" defaultValue={settings.name} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900"/></div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name (English)</label>
+                      <input name="name" value={previewNameEn} onChange={e => setPreviewNameEn(e.target.value)} required placeholder="e.g. Banlung City" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
+                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">This will be used for your unique URL link.</p>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name (Khmer) - Optional</label>
+                      <input name="name_kh" value={previewNameKh} onChange={e => setPreviewNameKh(e.target.value)} placeholder="e.g. បានលុង ស៊ីធី" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Display Preference</label>
+                      <select name="nameDisplay" value={previewDisplay} onChange={e => setPreviewDisplay(e.target.value)} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans">
+                        <option value="EN">English Only</option>
+                        <option value="KH">Khmer Only</option>
+                        <option value="BOTH">Show Both</option>
+                      </select>
+                   </div>
+                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/></div>
+                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/></div>
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Opening Hours</label>
+                     <input name="openingHours" defaultValue={settings.openingHours || ''} placeholder="e.g. 8:00 AM - 10:00 PM" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
+                   </div>
                    <div className="flex justify-end pt-2"><button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">{isSaving ? 'Saving...' : <><Save size={16}/> Save Identity</>}</button></div>
                 </form>
               </div>
@@ -849,46 +894,49 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                          <header 
                            onClick={handleNextDesign}
-                           className="relative overflow-hidden pt-12 pb-8 transition-colors duration-300 min-h-[140px] flex flex-col justify-center cursor-pointer" 
+                           className="relative overflow-hidden pb-8 pt-4 transition-colors duration-300 min-h-[140px] cursor-pointer" 
                            style={{ background: themeColorPreview }}
                          >
                             <div className="absolute inset-0 bg-black/10 z-0 pointer-events-none" />
                             <div className="absolute inset-0 pointer-events-none z-0 opacity-30" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")` }} />
-                            
-                            <div className="absolute top-3 left-4 z-20 pointer-events-none">
-                               <div className="p-1.5 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 text-white shadow-sm flex items-center justify-center">
-                                 <Menu size={20} strokeWidth={2.5}/>
-                               </div>
-                            </div>
+                            <div className="absolute pointer-events-none z-0" style={{ top: -20, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, background: 'radial-gradient(ellipse, rgba(255,255,255,0.2) 0%, transparent 70%)' }} />
 
-                            <div className="relative z-10 flex items-center justify-center px-4 w-full h-full pointer-events-none">
-                               {headerDesign === 'design2' ? (
-                                 <h1 className="text-white tracking-wide text-center text-3xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
-                               ) : headerDesign === 'design3' ? (
-                                 <div className="flex flex-col items-center gap-3">
-                                   <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
-                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
-                                   </div>
-                                   <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
-                                 </div>
-                               ) : headerDesign === 'design4' ? (
-                                 <div className="flex items-center gap-4">
-                                   <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
-                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
-                                   </div>
-                                   <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
-                                 </div>
-                               ) : (
-                                 <div className="flex flex-col items-center gap-2">
-                                   <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                     <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
-                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
-                                   </div>
-                                   <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{settings.name || 'Shop Name'}</h1>
-                                 </div>
-                               )}
+                            <div className="relative z-10 flex flex-col h-full w-full pointer-events-none">
+                               <div className="absolute top-2 left-4 z-20 pointer-events-none">
+                                  <div className="p-1.5 sm:p-2 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white shadow-sm flex items-center justify-center">
+                                    <Menu size={20} strokeWidth={2.5}/>
+                                  </div>
+                               </div>
+
+                               <div className="flex items-center justify-center px-4 pt-12 pb-2 w-full h-full pointer-events-none">
+                                  {headerDesign === 'design2' ? (
+                                    <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 w-full">{getShopNamePreview()}</h1>
+                                  ) : headerDesign === 'design3' ? (
+                                    <div className="flex flex-col items-center gap-3 max-w-full">
+                                      <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      </div>
+                                      <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
+                                    </div>
+                                  ) : headerDesign === 'design4' ? (
+                                    <div className="flex items-center justify-center gap-3 max-w-full">
+                                      <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      </div>
+                                      <h1 className="text-white tracking-wide text-left text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words flex-1">{getShopNamePreview()}</h1>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-2 max-w-full">
+                                      <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      </div>
+                                      <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
+                                    </div>
+                                  )}
+                               </div>
                             </div>
                          </header>
                       </div>
@@ -980,7 +1028,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option>
                           </select>
                        </div>
-                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 p-3 bg-white rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900"/>
+                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 p-3 bg-white rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
                        <div className="flex items-center gap-2 justify-end">
                           <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div></label>
                           <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
@@ -1046,7 +1094,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                <div className="mb-3 flex flex-col items-center justify-center">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">QR will open:</span>
                   <div className="bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg max-w-[280px] w-full text-center truncate shadow-sm">
-                     <span className="text-xs text-gray-500 font-medium">
+                     <span className="text-xs text-gray-500 font-medium font-sans">
                        {origin ? `${origin}/${shopSlug}` : `.../${shopSlug}`}
                      </span>
                   </div>
@@ -1220,7 +1268,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         value={prepTime}
                         onChange={(e) => setPrepTime(e.target.value)}
                         placeholder="15" 
-                        className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 pr-12" 
+                        className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 pr-12 font-sans" 
                       />
                       <span className="absolute right-4 text-gray-400 font-medium text-sm pointer-events-none">min</span>
                       <input type="hidden" name="time" value={prepTime ? `${prepTime}min` : ''} />
@@ -1263,7 +1311,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       {/* --- ADD/EDIT CATEGORY MODAL --- */}
       {(isCatFormOpen || editingCategory) && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
                <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X size={20}/></button></div>
                <form 
                  key={editingCategory ? editingCategory.id : 'new'}
@@ -1301,13 +1349,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-gray-500">Discount (%)</label>
-                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" />
+                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans" />
                       <p className="text-[10px] text-gray-500 mt-1 leading-tight">Displayed as a sale badge on the customer menu</p>
                     </div>
                     {editingCategory && (
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-gray-500">Sort Order</label>
-                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required />
+                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans" required />
                       </div>
                     )}
                   </div>
