@@ -71,12 +71,12 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const logoUrl = shopSettings?.logo || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
 
-  // Auto Slider with 1 second delay
+  // Auto Slider with 3 second delay
   useEffect(() => {
     if (!banners || banners.length <= 1) return;
     const timer = setTimeout(() => {
       setCurrentBanner((prev) => (prev + 1) % banners.length);
-    }, 3000); // Set to 1s
+    }, 3000); 
     return () => clearTimeout(timer);
   }, [banners, currentBanner]);
 
@@ -124,7 +124,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
   return (
   <main 
-    className="font-sans min-h-screen bg-gray-50/30 w-full max-w-2xl mx-auto relative pb-24 shadow-sm"
+    className="font-sans min-h-screen bg-gray-50/30 w-full relative pb-24 shadow-sm"
     style={{ '--brand-color': themeColor } as React.CSSProperties}
   >
     <ShopInfoModal 
@@ -160,28 +160,28 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         }}
       />
 
-      <div className="relative z-10 flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 pt-6 pb-6 lg:pt-10 lg:pb-8">
+      <div className="relative z-10 flex flex-col h-full max-w-7xl mx-auto w-full">
+        <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 pt-6 pb-6 lg:pt-10 lg:pb-8">
           {/* Left — Info */}
           <button
             onClick={() => setIsInfoOpen(true)}
             aria-label="Shop info"
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md"
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md hover:scale-105 active:scale-95"
             style={{ border: '1px solid rgba(255,255,255,0.2)', background: '#fff' }}
           >
-            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
           </button>
 
           {/* Center — Logo + Name */}
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-2">
             <div
               className="rounded-full overflow-hidden flex-shrink-0 bg-white"
               style={{
-                width: 60,
-                height: 60,
+                width: 68,
+                height: 68,
                 padding: 0,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               }}
@@ -192,20 +192,20 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                 className="w-full h-full object-cover rounded-full"
               />
             </div>
-            <h1 className="text-white tracking-wide text-center text-xl lg:text-3xl mt-1 font-bold drop-shadow-sm">
+            <h1 className="text-white tracking-wide text-center text-xl sm:text-2xl lg:text-3xl mt-1 font-bold drop-shadow-sm">
               {shopName}
             </h1>
           </div>
 
           {/* Right — Spacer */}
-          <div className="w-10 h-10 flex-shrink-0" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0" />
         </div>
       </div>
     </header>
 
     {/* --- BODY SECTION --- */}
-    <div className="px-4 mt-6">
-      <div className="mb-6">
+    <div className="px-4 sm:px-6 lg:px-8 mt-6 sm:mt-8 max-w-7xl mx-auto w-full">
+      <div className="mb-6 sm:mb-8 max-w-3xl mx-auto">
         <SearchBar 
           value={searchQuery} 
           onChange={setSearchQuery} 
@@ -213,7 +213,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         />
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 sm:mb-8">
         <div 
           className="flex gap-3 overflow-x-auto pb-4 no-scrollbar" 
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -264,19 +264,12 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       {/* Banner Carousel moved under categories - Clickable & Swipeable */}
       {banners && banners.length > 0 && (
         <div 
-          className="w-full relative mb-8 rounded-2xl overflow-hidden shadow-sm bg-gray-50/50 border border-gray-100"
+          className="w-full relative aspect-[21/9] sm:aspect-[4/1] md:aspect-[5/1] max-h-[250px] md:max-h-[300px] mb-8 rounded-2xl overflow-hidden shadow-sm bg-gray-50 border border-gray-100"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="relative w-full flex items-center justify-center group">
-            {/* Invisible placeholder to establish the container height dynamically based on the first banner */}
-            <img 
-              src={banners[0].image} 
-              className="w-full h-auto opacity-0 pointer-events-none" 
-              alt="Banner Placeholder" 
-              aria-hidden="true" 
-            />
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center group">
             {banners.map((b, i) => (
               <img 
                 key={b.id} 
@@ -320,7 +313,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       )}
 
       {activeCategory === 'All' ? (
-        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-10 sm:space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {categories.map((cat) => {
             const catProducts = initialProducts.filter(p => getProductCategoryString(p) === cat.name);
             const visibleProducts = getProductsBySearch(catProducts);
@@ -328,11 +321,11 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
             return (
               <section key={cat.id}>
-                <h2 className="font-extrabold text-xl text-gray-900 mb-5 px-1 flex items-center gap-3">
+                <h2 className="font-extrabold text-xl sm:text-2xl text-gray-900 mb-5 sm:mb-6 px-1 flex items-center gap-3">
                   {getCategoryName(cat)}
                   <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{visibleProducts.length}</span>
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
                   {visibleProducts.map((item) => (
                     <FoodCard key={item.id} item={item} themeColor={themeColor} />
                   ))}
@@ -342,7 +335,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           })}
         </div>
       ) : activeCategory === 'Hot Sale' ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6 animate-in fade-in duration-300">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6 animate-in fade-in duration-300">
           {getProductsBySearch(initialProducts.filter(p => p.isPopular))
             .map((item) => (
               <FoodCard key={item.id} item={item} themeColor={themeColor} />
@@ -350,7 +343,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           }
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-6 animate-in fade-in duration-300">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6 animate-in fade-in duration-300">
           {getProductsBySearch(initialProducts.filter(p => getProductCategoryString(p) === activeCategory))
             .map((item) => (
               <FoodCard key={item.id} item={item} themeColor={themeColor} />

@@ -4,13 +4,10 @@ import MenuClient from '@/components/MenuClient';
 
 export const revalidate = 0; // Force dynamic fetching
 
-// 1. Update the type to expect a Promise for params (Next.js 15 requirement)
 export default async function ShopMenuPage({ params }: { params: Promise<{ slug: string }> }) {
   
-  // 2. Await the params before using them!
   const resolvedParams = await params;
 
-  // 3. Fetch data from DB using the resolved slug
   const shop: any = await (prisma as any).shop.findUnique({
     where: { slug: resolvedParams.slug },
     include: {
@@ -31,7 +28,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
-  // Safely grab settings with a guaranteed fallback object
   const safeSettings = shop.settings || {
     name: shop.name,
     address: '',
@@ -47,7 +43,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     socials: '[]', 
   };
 
-  // Format Settings for the Client
   const formattedSettings = {
     name: safeSettings.name || shop.name,
     address: safeSettings.address || '',
@@ -63,15 +58,14 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     socials: safeSettings.socials || '[]', 
   };
 
-  // Clean up Categories
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
     id: cat.id,
     name: cat.name,
     name_kh: cat.name_kh || null,
     name_zh: cat.name_zh || null,
+    discount: cat.discount || 0,
   }));
 
-  // Clean up Products
   const formattedProducts = (shop.products || []).map((product: any) => ({
     id: product.id,
     name: product.name,
@@ -82,11 +76,14 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     time: product.time || '10-15 min', 
     image: product.image || '', 
     categoryId: product.categoryId,
-    category: { name: product.category?.name || 'Uncategorized' },
+    category: { 
+      name: product.category?.name || 'Uncategorized',
+      discount: product.category?.discount || 0
+    },
     isPopular: product.isPopular || false,
+    discount: product.discount || 0,
   }));
 
-  // Clean up Banners safely
   const formattedBanners = (shop.banners || []).map((b: any) => ({
     id: b.id,
     image: b.image,

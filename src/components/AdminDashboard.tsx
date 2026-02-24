@@ -29,6 +29,7 @@ interface Category {
   name_kh?: string | null; 
   name_zh?: string | null; 
   sortOrder: number; 
+  discount?: number;
 } 
 interface Product { 
   id: string; 
@@ -40,6 +41,7 @@ interface Product {
   category: { name: string }; 
   time: string;
   isPopular?: boolean; 
+  discount?: number;
 }
 
 interface AdminDashboardProps { 
@@ -84,6 +86,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [dismissGuide, setDismissGuide] = useState(false);
+
+  const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
 
   // --- ⚡ OPTIMISTIC HOOKS ---
   const [optProducts, dispatchOptProducts] = useOptimistic(
@@ -199,18 +203,47 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }, 500); 
   };
 
+  // --- DRAG AND DROP & ORDERING HANDLERS ---
   const handleMoveBanner = async (index: number, direction: number) => {
     if (index + direction < 0 || index + direction >= optBanners.length) return;
     
     const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder);
-    
     const tempOrder = newBanners[index].sortOrder;
     newBanners[index].sortOrder = newBanners[index + direction].sortOrder;
     newBanners[index + direction].sortOrder = tempOrder;
-    
     newBanners.sort((a,b) => a.sortOrder - b.sortOrder);
 
     dispatchOptBanners({ type: 'set', payload: newBanners });
+    await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
+    showToast("Banners reordered!");
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedBannerIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedBannerIndex === null || draggedBannerIndex === dropIndex) {
+      setDraggedBannerIndex(null);
+      return;
+    }
+    
+    const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder);
+    const draggedItem = newBanners[draggedBannerIndex];
+    
+    newBanners.splice(draggedBannerIndex, 1);
+    newBanners.splice(dropIndex, 0, draggedItem);
+    newBanners.forEach((b, i) => b.sortOrder = i + 1);
+
+    dispatchOptBanners({ type: 'set', payload: newBanners });
+    setDraggedBannerIndex(null);
 
     await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
     showToast("Banners reordered!");
@@ -224,7 +257,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         setCropImageSrc(reader.result as string); 
         setCropTarget(target); 
         setZoom(1); 
-        // 16/9 is a safer natural crop to prevent aggressive cutting 
         setCropAspect(target === 'banner' ? 16 / 9 : 1);
       });
       reader.readAsDataURL(file);
@@ -290,7 +322,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => (
     <div 
-      className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-black relative"
+      className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-[#4a4a4a] relative font-sans"
       style={{ 
         width: format === 'landscape' ? '1000px' : '650px', 
         height: format === 'landscape' ? '650px' : '1000px',
@@ -301,62 +333,66 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     >
       {format === 'landscape' ? (
         <>
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-4 w-1/2">
-            <h1 className="text-[3.5rem] leading-[1.1] font-light text-gray-700 mb-2 whitespace-pre-line tracking-wide">
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2">
+            <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
               {settings.name}
             </h1>
             <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
               scan to view menu !
             </p>
             
-            <div className="flex items-center w-full justify-center gap-4 mb-6">
-               <div className="w-16 h-[2px] bg-gray-400"></div>
-               <div className="relative flex flex-col items-center justify-center">
-                  <div className="relative bg-gray-800 rounded-xl w-14 h-24 flex items-center justify-center shadow-md">
-                    <div className="bg-white w-10 h-16 rounded-md flex items-center justify-center">
-                      <QrCode size={24} className="text-black" />
+            <div className="flex items-center w-full justify-center gap-4 mb-8">
+               <div className="flex-1 h-[1px] bg-gray-400"></div>
+               <div className="relative flex items-center justify-center px-4">
+                  <div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div>
+                  <div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                    <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center">
+                      <QrCode size={18} className="text-black" />
                     </div>
-                    <div className="absolute top-2 w-4 h-[2px] bg-gray-500 rounded-full"></div>
-                    <div className="absolute bottom-2 w-3 h-3 bg-gray-500 rounded-full"></div>
+                    <div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div>
+                    <div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
                   </div>
-                  <svg className="absolute -top-4 -left-6 text-gray-600 w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
+                  <svg className="absolute -top-3 -left-1 text-gray-500 w-6 h-6 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                </div>
-               <div className="w-16 h-[2px] bg-gray-400"></div>
+               <div className="flex-1 h-[1px] bg-gray-400"></div>
             </div>
             
-            <p className="text-xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
+            <p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
           </div>
-          <div className="flex-1 flex justify-center items-center w-1/2">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
+          <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" />
           </div>
         </>
       ) : (
         <>
-          <div className="flex flex-col items-center justify-center text-center mt-6">
-            <h1 className="text-[4rem] leading-[1.1] font-light text-gray-700 mb-2 whitespace-pre-line tracking-wide">
+          <div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4">
+            <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full">
               {settings.name}
             </h1>
             <p className="text-[3rem] text-gray-500 font-light">
               scan to view menu !
             </p>
           </div>
-          <div className="flex justify-center items-center my-auto w-full">
-            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[480px] h-[480px] object-contain" />
+          
+          <div className="flex justify-center items-center flex-1 w-full my-6">
+            <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
           </div>
-          <div className="flex flex-col items-center justify-center text-center w-full mb-8">
-            <div className="flex items-center w-full justify-center gap-4 mb-6">
-               <div className="w-20 h-[2px] bg-gray-400"></div>
-               <div className="relative flex flex-col items-center justify-center">
-                  <div className="relative bg-gray-800 rounded-xl w-14 h-24 flex items-center justify-center shadow-md">
-                    <div className="bg-white w-10 h-16 rounded-md flex items-center justify-center">
-                      <QrCode size={24} className="text-black" />
+
+          <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4">
+            <div className="flex items-center w-full justify-center gap-4 mb-8">
+               <div className="flex-1 h-[1px] bg-gray-400"></div>
+               <div className="relative flex items-center justify-center px-4">
+                  <div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div>
+                  <div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                    <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center">
+                      <QrCode size={22} className="text-black" />
                     </div>
-                    <div className="absolute top-2 w-4 h-[2px] bg-gray-500 rounded-full"></div>
-                    <div className="absolute bottom-2 w-3 h-3 bg-gray-500 rounded-full"></div>
+                    <div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div>
+                    <div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div>
                   </div>
-                  <svg className="absolute -top-4 -left-6 text-gray-600 w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
+                  <svg className="absolute -top-3 -left-1 text-gray-500 w-7 h-7 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                </div>
-               <div className="w-20 h-[2px] bg-gray-400"></div>
+               <div className="flex-1 h-[1px] bg-gray-400"></div>
             </div>
             <p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
           </div>
@@ -399,21 +435,18 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       <main className="flex-1 p-4 pt-24 md:p-8 overflow-y-auto">
         
-        <header className="hidden md:flex justify-between mb-8 items-center">
-           <h2 className="text-2xl font-bold capitalize">{activeTab}</h2>
-           <div className="flex gap-3">
+        <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
+           <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
+           <div className="flex gap-2 w-full sm:w-auto">
              <a 
                href={`/${shopSlug}`} 
                target="_blank" 
                rel="noopener noreferrer"
-               className="flex gap-2 px-4 py-2 bg-[var(--theme-color)] text-white rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-sm active:scale-95 items-center"
+               className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[var(--theme-color)] text-white rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-sm active:scale-95 items-center"
              >
                <ExternalLink size={14} /> View Live Menu
              </a>
-             <button onClick={handleForceRefresh} disabled={isRefreshing} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
-               <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''}/> Sync
-             </button>
-             <button onClick={() => setIsQrModalOpen(true)} className="flex gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
+             <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-[var(--theme-color)] hover:border-[var(--theme-color)] transition-all shadow-sm active:scale-95 items-center">
                <QrCode size={14} /> Get QR
              </button>
            </div>
@@ -462,8 +495,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         {/* --- MENU TAB --- */}
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
-             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
-                <div className="relative w-full sm:flex-1 sm:max-w-md">
+             <div className="flex flex-col md:flex-row items-center justify-between gap-3 mb-6">
+                <div className="relative w-full md:flex-1 md:max-w-md">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
                   <input 
                     placeholder="Search menu..." 
@@ -472,7 +505,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-[var(--theme-color)]"
                   />
                 </div>
-                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-3">
+                <div className="flex w-full md:w-auto items-center justify-between md:justify-end gap-3 flex-wrap">
                   <div className="flex bg-gray-200/50 p-1 rounded-xl">
                     <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
                     <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-[var(--theme-color)]' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
@@ -484,12 +517,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
              </div>
              
              {viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {filteredProducts.map(item => (
                     <div key={item.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 group">
                       <div className="relative w-full h-40 rounded-2xl overflow-hidden bg-gray-100">
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"/>
-                        {item.isPopular && <span className="absolute top-2 right-2 bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
+                        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                           {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
+                           {item.discount && item.discount > 0 ? <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{item.discount}%</span> : null}
+                        </div>
                       </div>
                       <div>
                         <h4 className="font-bold text-gray-800 leading-tight truncate">{item.name}</h4>
@@ -499,8 +535,17 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         </div>
                       </div>
                       <div className="flex justify-between items-center mt-auto pt-2 border-t border-gray-50">
-                        <span className="font-extrabold text-lg text-gray-900">${item.price.toFixed(2)}</span>
-                        <div className="flex gap-1">
+                        <div className="flex flex-col">
+                           {item.discount && item.discount > 0 ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-lg text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
+                              </div>
+                            ) : (
+                              <span className="font-extrabold text-lg text-gray-900">${item.price.toFixed(2)}</span>
+                            )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
                           <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)] transition-colors"><Pencil size={16} /></button>
                           <form action={async (fd) => { 
                               dispatchOptProducts({ type: 'delete', payload: item.id }); 
@@ -520,8 +565,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 </div>
              ) : (
                 <>
-                  <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                    <table className="w-full text-left border-collapse">
+                  <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
                       <tbody className="divide-y divide-gray-50">
                         {filteredProducts.map((item) => (
@@ -531,10 +576,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               <span className="font-bold text-gray-700 flex items-center gap-2">
                                 {item.name}
                                 {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                                {item.discount && item.discount > 0 ? <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{item.discount}%</span> : null}
                               </span>
                             </td>
                             <td className="p-4 text-sm text-gray-500 font-medium"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">{item.category?.name}</span></td>
-                            <td className="p-4 font-bold text-gray-900">${item.price.toFixed(2)}</td>
+                            <td className="p-4 font-bold text-gray-900">
+                               {item.discount && item.discount > 0 ? (
+                                 <div className="flex flex-col">
+                                   <span className="text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                   <span className="text-xs text-gray-400 line-through font-normal">${item.price.toFixed(2)}</span>
+                                 </div>
+                              ) : (
+                                 `$${item.price.toFixed(2)}`
+                              )}
+                            </td>
                             <td className="p-4 text-sm text-gray-400">{item.time}</td>
                             <td className="p-4 text-right flex items-center justify-end gap-2">
                               <button onClick={() => setEditingProduct(item)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
@@ -567,10 +622,19 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                   {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
                                 </h4>
                                 <p className="text-[11px] font-medium text-gray-500 mb-1">{item.category?.name} • {item.time}</p>
-                                <p className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</p>
+                                <div className="flex flex-col">
+                                   {item.discount && item.discount > 0 ? (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-extrabold text-sm text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                        <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="font-extrabold text-sm text-gray-900">${item.price.toFixed(2)}</span>
+                                    )}
+                                </div>
                               </div>
                            </div>
-                           <div className="flex flex-col gap-2">
+                           <div className="flex flex-col gap-2 shrink-0">
                             <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-[var(--theme-color)]"><Pencil size={16} /></button>
                             <form action={async (fd) => { 
                                 dispatchOptProducts({ type: 'delete', payload: item.id }); 
@@ -602,14 +666,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 </button>
              </div>
              
-             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Name</th><th className="p-5">Sort Order</th><th className="p-5 text-right">Action</th></tr></thead>
+             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[500px]">
+                <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Name</th><th className="p-5">Sort Order</th><th className="p-5">Discount</th><th className="p-5 text-right">Action</th></tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {optCategories.map((cat) => (
                     <tr key={cat.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 font-bold text-gray-700">{cat.name}</td>
                       <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
+                      <td className="p-4 text-sm text-gray-500">{cat.discount ? `${cat.discount}%` : '-'}</td>
                       <td className="p-4 text-right flex items-center justify-end gap-2">
                         <button onClick={() => setEditingCategory(cat)} className="text-gray-300 hover:text-[var(--theme-color)] p-2 hover:bg-gray-50 rounded-lg transition"><Pencil size={18} /></button>
                         <form action={async (fd) => { 
@@ -671,14 +736,21 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               </button>
               <div className={openSection === 'banners' ? 'block' : 'hidden'}>
                 <div className="p-5 border-t border-gray-50 space-y-4">
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                      {optBanners.map((b, index) => (
-                       <div key={b.id} className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-gray-100 shadow-sm group bg-white flex items-center justify-center">
-                         <img src={b.image} className="w-full h-full object-contain" alt="Banner" />
+                       <div 
+                         key={b.id} 
+                         draggable
+                         onDragStart={(e) => handleDragStart(e, index)}
+                         onDragOver={(e) => handleDragOver(e, index)}
+                         onDrop={(e) => handleDrop(e, index)}
+                         className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-[var(--theme-color)] opacity-50' : 'border-gray-100'} shadow-sm group bg-white flex items-center justify-center cursor-move`}
+                       >
+                         <img src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                          
-                         <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white text-gray-600 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-50"><ChevronUp size={14}/></button>
-                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white text-gray-600 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-50"><ChevronDown size={14}/></button>
+                         <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm"><ChevronUp size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm"><ChevronDown size={14}/></button>
                          </div>
 
                          <form action={async (fd) => {
@@ -687,7 +759,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                            showToast("Banner deleted");
                          }}>
                            <input type="hidden" name="id" value={b.id} />
-                           <button className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                           <button className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm"><Trash2 size={14}/></button>
                          </form>
                        </div>
                      ))}
@@ -757,9 +829,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                </div>
 
                {/* Preview Container */}
-               <div className="w-full bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center mb-6" style={{ height: '350px' }}>
+               <div className="w-full bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center mb-6 overflow-x-auto" style={{ height: '350px' }}>
                   <div 
-                    className="origin-center transform transition-transform duration-300 flex items-center justify-center"
+                    className="origin-center transform transition-transform duration-300 flex items-center justify-center min-w-max"
                     style={{ 
                       transform: previewFormat === 'portrait' ? 'scale(0.32)' : 'scale(0.32)' 
                     }}
@@ -841,6 +913,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      name_kh: prodName.kh,
                      name_zh: prodName.zh,
                      price: parseFloat(fd.get('price') as string),
+                     discount: parseFloat(fd.get('discount') as string) || 0,
                      image: productPreview || editingProduct?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
@@ -880,8 +953,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                   <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required /></div>
+                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Discount (%)</label><input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" /></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Category</label><select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>
 
@@ -923,7 +997,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       name: catName.en,
                       name_kh: catName.kh,
                       name_zh: catName.zh,
-                      sortOrder: editingCategory ? parseInt(fd.get('sortOrder') as string) : categories.length + 1
+                      sortOrder: editingCategory ? parseInt(fd.get('sortOrder') as string) : categories.length + 1,
+                      discount: parseFloat(fd.get('discount') as string) || 0
                     };
 
                     dispatchOptCategories({ type: editingCategory ? 'update' : 'add', payload: tempCat });
@@ -943,7 +1018,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                >
                   {editingCategory && <input type="hidden" name="id" value={editingCategory.id} />}
                   <LocalizedInput label="Category Name" value={catName.en} valueKh={catName.kh} valueZh={catName.zh} onChange={(lang, val) => setCatName(prev => ({ ...prev, [lang]: val }))} required />
-                  {editingCategory && (<div className="space-y-1"><label className="text-xs font-bold text-gray-500">Sort Order</label><input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required /></div>)}
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500">Discount (%)</label>
+                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" />
+                    </div>
+                    {editingCategory && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">Sort Order</label>
+                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[var(--theme-color)]" required />
+                      </div>
+                    )}
+                  </div>
+
                   <button className="w-full bg-[var(--theme-color)] text-white py-4 rounded-xl font-bold shadow-md hover:brightness-110 active:scale-95 transition-all mt-6">{editingCategory ? 'Update' : 'Create'}</button>
                </form>
             </div>

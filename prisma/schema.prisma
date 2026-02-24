@@ -40,7 +40,7 @@ model Shop {
   categories  Category[]
   products    Product[]
   settings    ShopSettings?
-  banners     Banner[]     // <-- Added Banners relation
+  banners     Banner[]
 }
 
 model ShopUser {
@@ -74,6 +74,7 @@ model Category {
   name_kh   String?
   name_zh   String?
   sortOrder Int       @default(0)
+  discount  Float     @default(0) 
   
   shopId    String
   shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -92,6 +93,7 @@ model Product {
   rating      Float    @default(0)
   description String?
   isPopular   Boolean  @default(false) 
+  discount    Float    @default(0) 
 
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)

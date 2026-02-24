@@ -174,6 +174,7 @@ export async function createCategory(formData: FormData) {
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
+  const discount = parseFloat(formData.get('discount') as string) || 0;
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -184,7 +185,7 @@ export async function createCategory(formData: FormData) {
   const nextOrder = (lastCategory?.sortOrder || 0) + 1;
   
   await prisma.category.create({ 
-    data: { name, name_kh, name_zh, sortOrder: nextOrder, shopId } 
+    data: { name, name_kh, name_zh, sortOrder: nextOrder, discount, shopId } 
   });
   revalidatePath('/', 'layout');
 }
@@ -195,10 +196,11 @@ export async function updateCategory(formData: FormData) {
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const sortOrder = parseInt(formData.get('sortOrder') as string);
+  const discount = parseFloat(formData.get('discount') as string) || 0;
   
   await prisma.category.update({ 
     where: { id }, 
-    data: { name, name_kh, name_zh, sortOrder } 
+    data: { name, name_kh, name_zh, sortOrder, discount } 
   });
   revalidatePath('/', 'layout');
 }
@@ -215,6 +217,7 @@ export async function createProduct(formData: FormData) {
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const price = parseFloat(formData.get('price') as string)
+  const discount = parseFloat(formData.get('discount') as string) || 0
   const categoryId = formData.get('categoryId') as string
   const time = formData.get('time') as string || '15min'
   const imageFile = formData.get('image') as File
@@ -225,7 +228,7 @@ export async function createProduct(formData: FormData) {
   if (!imagePath) imagePath = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
 
   await prisma.product.create({
-    data: { name, name_kh, name_zh, price, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
+    data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
   })
   revalidatePath('/', 'layout');
 }
@@ -236,6 +239,7 @@ export async function updateProduct(formData: FormData) {
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const price = parseFloat(formData.get('price') as string);
+  const discount = parseFloat(formData.get('discount') as string) || 0;
   const categoryId = formData.get('categoryId') as string;
   const time = formData.get('time') as string || '15min';
   const imageFile = formData.get('image') as File;
@@ -249,7 +253,7 @@ export async function updateProduct(formData: FormData) {
 
   await prisma.product.update({
     where: { id },
-    data: { name, name_kh, name_zh, price, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on' }
+    data: { name, name_kh, name_zh, price, discount, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on' }
   });
   revalidatePath('/', 'layout');
 }
@@ -280,7 +284,7 @@ export async function updateShopIdentity(formData: FormData) {
       data: { name, slug: newSlug }
     });
   } catch (error) {
-    console.error("Failed to update slug:", error);
+    console.error("Failed to update slug (might be duplicate):", error);
   }
 
   await prisma.shopSettings.upsert({
