@@ -44,8 +44,8 @@ export default async function AdminPage() {
 
   const activeShop = user?.shopUsers[0]?.shop;
   
-  // Use the actual slug from the Shop record, fallback to a generated one if somehow missing
-  const shopSlug = activeShop?.slug || settings.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  // Use the actual ID from the Shop record as the slug for the URL
+  const shopSlug = activeShop?.id || "";
 
   return (
     <AdminDashboard 

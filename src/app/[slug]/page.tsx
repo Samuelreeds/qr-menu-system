@@ -9,7 +9,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   const resolvedParams = await params;
 
   const shop: any = await (prisma as any).shop.findUnique({
-    where: { slug: resolvedParams.slug },
+    where: { id: resolvedParams.slug },
     include: {
       categories: true,
       settings: true,
