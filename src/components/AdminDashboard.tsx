@@ -1176,9 +1176,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                
                <form 
                  key={editingProduct ? editingProduct.id : 'new'} 
-                 action={async (fd) => { 
-                   setIsSaving(true);
-                   const tempId = editingProduct ? editingProduct.id : `temp-${Date.now()}`;
+                 onSubmit={(e) => { 
+                   e.preventDefault();
+                   const fd = new FormData(e.currentTarget);
+                   const isEdit = !!editingProduct;
+                   const tempId = isEdit ? editingProduct!.id : `temp-${Date.now()}`;
                    const catId = fd.get('categoryId') as string;
                    const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown';
 
@@ -1196,23 +1198,31 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    };
 
                    startTransition(() => {
-                     dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
+                     dispatchOptProducts({ type: isEdit ? 'update' : 'add', payload: tempProduct });
                    });
+                   
+                   // Close immediately without waiting for server action
                    setIsFormOpen(false); 
                    setEditingProduct(null); 
                    
-                   if (productFileBlob) fd.set('image', productFileBlob, 'product.webp');
-                   fd.set('name', prodName.en);
-                   fd.set('name_kh', prodName.kh);
-                   fd.set('name_zh', prodName.zh);
-                   fd.set('isPopular', isHotSale ? 'on' : 'off');
-                   
-                   if (editingProduct) await updateProduct(fd);
-                   else await createProduct(fd); 
-                   
-                   setProductFileBlob(null);
-                   setIsSaving(false);
-                   showToast("Product saved successfully!");
+                   // Execute request in background without blocking UI
+                   setTimeout(async () => {
+                     if (productFileBlob) fd.set('image', productFileBlob, 'product.webp');
+                     fd.set('name', prodName.en);
+                     fd.set('name_kh', prodName.kh);
+                     fd.set('name_zh', prodName.zh);
+                     fd.set('isPopular', isHotSale ? 'on' : 'off');
+                     
+                     try {
+                       if (isEdit) await updateProduct(fd);
+                       else await createProduct(fd); 
+                       
+                       setProductFileBlob(null);
+                       showToast("Product saved successfully!");
+                     } catch (err) {
+                       showToast("Failed to save product.");
+                     }
+                   }, 0);
                  }} 
                  className="space-y-4"
                >
@@ -1282,8 +1292,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button disabled={isSaving} className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                    {isSaving ? 'Saving...' : (editingProduct ? 'Update Product' : 'Save Product')}
+                  <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all">
+                    {editingProduct ? 'Update Product' : 'Save Product'}
                   </button>
                </form>
             </div>
@@ -1297,33 +1307,42 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingCategory ? 'Edit Category' : 'New Category'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}><X size={20}/></button></div>
                <form 
                  key={editingCategory ? editingCategory.id : 'new'}
-                 action={async (fd) => { 
-                    setIsSaving(true);
-                    const tempId = editingCategory ? editingCategory.id : `temp-${Date.now()}`;
+                 onSubmit={(e) => { 
+                    e.preventDefault();
+                    const fd = new FormData(e.currentTarget);
+                    const isEdit = !!editingCategory;
+                    const tempId = isEdit ? editingCategory!.id : `temp-${Date.now()}`;
                     const tempCat: Category = {
                       id: tempId,
                       name: catName.en,
                       name_kh: catName.kh,
                       name_zh: catName.zh,
-                      sortOrder: editingCategory ? parseInt(fd.get('sortOrder') as string) : categories.length + 1,
+                      sortOrder: isEdit ? parseInt(fd.get('sortOrder') as string) : categories.length + 1,
                       discount: parseFloat(fd.get('discount') as string) || 0
                     };
 
                     startTransition(() => {
-                      dispatchOptCategories({ type: editingCategory ? 'update' : 'add', payload: tempCat });
+                      dispatchOptCategories({ type: isEdit ? 'update' : 'add', payload: tempCat });
                     });
+                    
+                    // Close immediately without waiting for server action
                     setIsCatFormOpen(false); 
                     setEditingCategory(null); 
 
-                    fd.set('name', catName.en);
-                    fd.set('name_kh', catName.kh);
-                    fd.set('name_zh', catName.zh);
+                    // Execute request in background
+                    setTimeout(async () => {
+                      fd.set('name', catName.en);
+                      fd.set('name_kh', catName.kh);
+                      fd.set('name_zh', catName.zh);
 
-                   if (editingCategory) await updateCategory(fd); 
-                   else await createCategory(fd); 
-                   
-                   setIsSaving(false);
-                   showToast("Category saved successfully!");
+                      try {
+                        if (isEdit) await updateCategory(fd); 
+                        else await createCategory(fd); 
+                        showToast("Category saved successfully!");
+                      } catch (err) {
+                        showToast("Failed to save category.");
+                      }
+                    }, 0);
                  }} 
                  className="space-y-4"
                >
@@ -1344,8 +1363,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button disabled={isSaving} className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {isSaving ? 'Saving...' : (editingCategory ? 'Update' : 'Create')}
+                  <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all mt-6">
+                    {editingCategory ? 'Update' : 'Create'}
                   </button>
                </form>
             </div>
