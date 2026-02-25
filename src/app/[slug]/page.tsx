@@ -2,14 +2,20 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import MenuClient from '@/components/MenuClient';
 
-export const revalidate = 0; // Force dynamic fetching
+export const revalidate = 0; 
 
 export default async function ShopMenuPage({ params }: { params: Promise<{ slug: string }> }) {
   
   const resolvedParams = await params;
 
-  const shop: any = await (prisma as any).shop.findUnique({
-    where: { id: resolvedParams.slug },
+  // Use findFirst with OR to support both the new slug and legacy shop IDs
+  const shop: any = await (prisma as any).shop.findFirst({
+    where: { 
+      OR: [
+        { slug: resolvedParams.slug },
+        { id: resolvedParams.slug }
+      ]
+    },
     include: {
       categories: true,
       settings: true,
