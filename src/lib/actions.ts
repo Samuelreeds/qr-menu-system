@@ -56,8 +56,11 @@ export async function getShopSettings() {
     return {
       id: "default", 
       name: "Scandine", 
+      name_kh: null,
+      nameDisplay: "EN",
       address: "", 
       phone: "", 
+      openingHours: null,
       themeColor: "#000000",
       headerDesign: "design1",
       logo: null, 
@@ -272,8 +275,11 @@ export async function deleteProduct(formData: FormData) {
 // --- SETTINGS ACTIONS ---
 export async function updateShopIdentity(formData: FormData) {
   const name = formData.get('name') as string;
-  const address = formData.get('address') as string;
-  const phone = formData.get('phone') as string;
+  const name_kh = formData.get('name_kh') as string || null;
+  const nameDisplay = formData.get('nameDisplay') as string || 'EN';
+  const address = formData.get('address') as string || null;
+  const phone = formData.get('phone') as string || null;
+  const openingHours = formData.get('openingHours') as string || null;
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -290,9 +296,9 @@ export async function updateShopIdentity(formData: FormData) {
 
   await prisma.shopSettings.upsert({
     where: { shopId },
-    update: { name, address, phone },
+    update: { name, name_kh, nameDisplay, address, phone, openingHours },
     create: { 
-      shopId, name, address, phone,
+      shopId, name, name_kh, nameDisplay, address, phone, openingHours,
       themeColor: '#000000',
       headerDesign: 'design1'
     }

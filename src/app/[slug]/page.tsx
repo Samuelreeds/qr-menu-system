@@ -30,8 +30,11 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
 
   const safeSettings = shop.settings || {
     name: shop.name,
+    name_kh: '',
+    nameDisplay: 'EN',
     address: '',
     phone: '',
+    openingHours: '',
     themeColor: '#000000',
     headerDesign: 'design1',
     logo: '', 
@@ -46,8 +49,11 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
 
   const formattedSettings = {
     name: safeSettings.name || shop.name,
+    name_kh: safeSettings.name_kh || '',
+    nameDisplay: safeSettings.nameDisplay || 'EN',
     address: safeSettings.address || '',
     phone: safeSettings.phone || '',
+    openingHours: safeSettings.openingHours || '',
     themeColor: safeSettings.themeColor || '#000000',
     headerDesign: safeSettings.headerDesign || 'design1',
     logo: safeSettings.logo || '', 

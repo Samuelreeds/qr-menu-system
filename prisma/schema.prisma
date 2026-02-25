@@ -1,4 +1,7 @@
-// PHASE 1: PRISMA SCHEMA CHANGES
+// IMPORTANT: AFTER SAVING THIS FILE, YOU MUST RUN IN YOUR TERMINAL:
+// 1. npx prisma db push
+// 2. npx prisma generate
+// 3. Restart your Next.js development server
 
 generator client {
   provider = "prisma-client-js"
@@ -17,11 +20,8 @@ model User {
   password         String
   failedAttempts   Int       @default(0) 
   lockoutUntil     DateTime?
-  
-  // Necessary fields for reset logic
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
-
   shopUsers        ShopUser[]
 }
 
@@ -119,8 +119,11 @@ model Banner {
 model ShopSettings {
   id            String  @id @default(cuid())
   name          String
+  name_kh       String?
+  nameDisplay   String  @default("EN")
   address       String?
   phone         String?
+  openingHours  String?
   themeColor    String  @default("#000000")
   headerDesign  String  @default("design1")
   logo          String?

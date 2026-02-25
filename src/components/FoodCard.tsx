@@ -20,9 +20,10 @@ interface MenuItem {
 interface FoodCardProps {
   item: MenuItem;
   themeColor?: string; 
+  onClick?: () => void;
 }
 
-export default function FoodCard({ item }: FoodCardProps) {
+export default function FoodCard({ item, onClick }: FoodCardProps) {
   const { lang } = useLanguage(); 
 
   const displayName = 
@@ -35,7 +36,7 @@ export default function FoodCard({ item }: FoodCardProps) {
   const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
 
   return (
-    <div className="bg-white p-3 sm:p-4 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-shadow group cursor-pointer">
+    <div onClick={onClick} className="bg-white p-3 sm:p-4 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group cursor-pointer active:scale-[0.98]">
       
       {/* Badges */}
       <div className="absolute top-5 right-5 flex flex-col gap-1.5 items-end z-10">
@@ -52,7 +53,7 @@ export default function FoodCard({ item }: FoodCardProps) {
       </div>
 
       {/* Image Container */}
-      <div className="relative h-32 sm:h-40 md:h-48 w-full mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
+      <div className="relative w-full aspect-square mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
         <img 
           src={item.image} 
           alt={displayName} 

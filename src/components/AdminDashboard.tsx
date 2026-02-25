@@ -1,6 +1,6 @@
 'use client';
 import LocalizedInput from "@/components/LocalizedInput"; 
-import { useState, useRef, useEffect, useOptimistic } from 'react';
+import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
 import { signOut } from "next-auth/react"; 
 import Cropper from 'react-easy-crop'; 
 import getCroppedImg from '@/lib/cropImage'; 
@@ -62,7 +62,6 @@ interface AdminDashboardProps {
   banners?: Banner[];
 }
 
-// --- OPTIMISTIC REDUCER TYPES ---
 type OptimisticAction<T> = 
   | { type: 'add'; payload: T }
   | { type: 'update'; payload: T }
@@ -88,20 +87,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
 
-  // --- LOCALIZED INPUT STATE ---
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
 
-  // --- SHOP IDENTITY STATE (For live preview) ---
   const [previewNameEn, setPreviewNameEn] = useState(settings.name || '');
   const [previewNameKh, setPreviewNameKh] = useState(settings.name_kh || '');
   const [previewDisplay, setPreviewDisplay] = useState(settings.nameDisplay || 'EN');
 
-  // --- FORM STATES ---
   const [prepTime, setPrepTime] = useState('15');
   const [isHotSale, setIsHotSale] = useState(false);
 
-  // --- LOADING STATES ---
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -113,11 +108,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
 
-  // --- DESIGN PREVIEW STATE ---
   const [headerDesign, setHeaderDesign] = useState(settings.headerDesign || 'design1');
   const [themeColorPreview, setThemeColorPreview] = useState(settings.themeColor || '#000000');
 
-  // --- ⚡ OPTIMISTIC HOOKS ---
   const [optProducts, dispatchOptProducts] = useOptimistic(
     products,
     (state, action: OptimisticAction<Product>) => {
@@ -176,7 +169,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     try { return settings.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
   });
 
-  // --- ONBOARDING GUIDE PROGRESS ---
   const hasCategory = optCategories.length > 0;
   const hasProduct = optProducts.length > 0;
   const hasSettings = !!settings.address || !!settings.logo || !!settings.phone;
@@ -241,18 +233,14 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
-  const handleDownloadPDF = () => {
-    handleGeneratePDF(previewFormat);
-  };
+  const handleDownloadPDF = () => handleGeneratePDF(previewFormat);
 
-  // --- DYNAMIC NAME HELPER ---
   const getShopNamePreview = () => {
     if (previewDisplay === 'KH' && previewNameKh) return previewNameKh;
     if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`;
     return previewNameEn || 'Shop Name';
   };
 
-  // --- DRAG AND DROP & ORDERING HANDLERS ---
   const handleMoveBanner = async (index: number, direction: number) => {
     if (index + direction < 0 || index + direction >= optBanners.length) return;
     
@@ -262,7 +250,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     newBanners[index + direction].sortOrder = tempOrder;
     newBanners.sort((a,b) => a.sortOrder - b.sortOrder);
 
-    dispatchOptBanners({ type: 'set', payload: newBanners });
+    startTransition(() => {
+      dispatchOptBanners({ type: 'set', payload: newBanners });
+    });
+    
     await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
     showToast("Banners reordered!");
   };
@@ -291,7 +282,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     newBanners.splice(dropIndex, 0, draggedItem);
     newBanners.forEach((b, i) => b.sortOrder = i + 1);
 
-    dispatchOptBanners({ type: 'set', payload: newBanners });
+    startTransition(() => {
+      dispatchOptBanners({ type: 'set', payload: newBanners });
+    });
+    
     setDraggedBannerIndex(null);
 
     await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
@@ -336,10 +330,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           const tempId = `temp-${Date.now()}`;
           const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1;
           
-          dispatchOptBanners({ 
-            type: 'add', 
-            payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } 
+          startTransition(() => {
+            dispatchOptBanners({ 
+              type: 'add', 
+              payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } 
+            });
           });
+          
           addBanner(fd).then(() => showToast("Banner added!"));
         }
         setCropImageSrc(null); setCropTarget(null);
@@ -380,7 +377,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- REUSABLE PRINT TEMPLATE ---
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => {
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(origin ? `${origin}/${shopSlug}` : `https://scandine.xyz/${shopSlug}`)}`;
     
@@ -401,26 +397,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               <h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">
                 {getShopNamePreview()}
               </h1>
-              <p className="text-[2.5rem] text-gray-500 mb-12 font-light">
-                scan to view menu !
-              </p>
+              <p className="text-[2.5rem] text-gray-500 mb-12 font-light">scan to view menu !</p>
               
               <div className="flex items-center w-full justify-center gap-4 mb-8">
                  <div className="flex-1 h-[1px] bg-gray-400"></div>
                  <div className="relative flex items-center justify-center px-4">
                     <div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div>
                     <div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
-                      <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center">
-                        <QrCode size={18} className="text-black" />
-                      </div>
+                      <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center"><QrCode size={18} className="text-black" /></div>
                       <div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div>
                       <div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
                     </div>
-                    <svg className="absolute -top-3 -left-1 text-gray-500 w-6 h-6 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                  </div>
                  <div className="flex-1 h-[1px] bg-gray-400"></div>
               </div>
-              
               <p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
             </div>
             <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
@@ -433,28 +423,21 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               <h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">
                 {getShopNamePreview()}
               </h1>
-              <p className="text-[3rem] text-gray-500 font-light">
-                scan to view menu !
-              </p>
+              <p className="text-[3rem] text-gray-500 font-light">scan to view menu !</p>
             </div>
-            
             <div className="flex justify-center items-center flex-1 w-full my-6">
               <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
             </div>
-
             <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4">
               <div className="flex items-center w-full justify-center gap-4 mb-8">
                  <div className="flex-1 h-[1px] bg-gray-400"></div>
                  <div className="relative flex items-center justify-center px-4">
                     <div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div>
                     <div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
-                      <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center">
-                        <QrCode size={22} className="text-black" />
-                      </div>
+                      <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center"><QrCode size={22} className="text-black" /></div>
                       <div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div>
                       <div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div>
                     </div>
-                    <svg className="absolute -top-3 -left-1 text-gray-500 w-7 h-7 z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path></svg>
                  </div>
                  <div className="flex-1 h-[1px] bg-gray-400"></div>
               </div>
@@ -528,7 +511,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           </header>
         )}
 
-        {/* --- PHASE 3: ONBOARDING GUIDE --- */}
         {!isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
@@ -568,7 +550,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           </div>
         )}
 
-        {/* --- MENU TAB --- */}
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
              <div className="flex flex-col md:flex-row items-center justify-between gap-3 mb-6">
@@ -645,7 +626,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
                           <form action={async (fd) => { 
                               setDeletingId(item.id);
-                              dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                              startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
                               await deleteProduct(fd); 
                               setDeletingId(null);
                               showToast("Product deleted"); 
@@ -695,7 +676,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               <button onClick={() => setEditingProduct(item)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
                               <form action={async (fd) => { 
                                 setDeletingId(item.id);
-                                dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
                                 await deleteProduct(fd); 
                                 setDeletingId(null);
                                 showToast("Product deleted"); 
@@ -742,7 +723,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={16} /></button>
                             <form action={async (fd) => { 
                                 setDeletingId(item.id);
-                                dispatchOptProducts({ type: 'delete', payload: item.id }); 
+                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
                                 await deleteProduct(fd); 
                                 setDeletingId(null);
                                 showToast("Product deleted"); 
@@ -762,7 +743,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 </>
              )}
 
-             {/* Mobile Primary Action (FAB) */}
              {optProducts.length > 0 && (
                <button 
                  onClick={() => setIsFormOpen(true)}
@@ -797,7 +777,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         <button onClick={() => setEditingCategory(cat)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
                         <form action={async (fd) => { 
                           setDeletingId(cat.id);
-                          dispatchOptCategories({ type: 'delete', payload: cat.id }); 
+                          startTransition(() => dispatchOptCategories({ type: 'delete', payload: cat.id })); 
                           await deleteCategory(fd); 
                           setDeletingId(null);
                           showToast("Category deleted"); 
@@ -992,7 +972,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                          <form action={async (fd) => {
                            setDeletingId(b.id);
-                           dispatchOptBanners({ type: 'delete', payload: b.id });
+                           startTransition(() => dispatchOptBanners({ type: 'delete', payload: b.id }));
                            await deleteBanner(fd);
                            setDeletingId(null);
                            showToast("Banner deleted");
@@ -1215,7 +1195,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      isPopular: isHotSale, 
                    };
 
-                   dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
+                   startTransition(() => {
+                     dispatchOptProducts({ type: editingProduct ? 'update' : 'add', payload: tempProduct });
+                   });
                    setIsFormOpen(false); 
                    setEditingProduct(null); 
                    
@@ -1327,7 +1309,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       discount: parseFloat(fd.get('discount') as string) || 0
                     };
 
-                    dispatchOptCategories({ type: editingCategory ? 'update' : 'add', payload: tempCat });
+                    startTransition(() => {
+                      dispatchOptCategories({ type: editingCategory ? 'update' : 'add', payload: tempCat });
+                    });
                     setIsCatFormOpen(false); 
                     setEditingCategory(null); 
 

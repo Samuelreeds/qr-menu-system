@@ -6,13 +6,16 @@ import FoodCard from '@/components/FoodCard';
 import ShopInfoModal from '@/components/ShopInfoModal';
 import CartFloat from '@/components/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
-import { Menu } from 'lucide-react';
+import { Menu, X, Star } from 'lucide-react';
 
 // --- TYPES ---
 interface ShopSettings {
   name: string;
+  name_kh?: string | null;
+  nameDisplay?: string;
   address?: string;
   phone?: string;
+  openingHours?: string | null;
   themeColor: string;
   headerDesign?: string;
   logo?: string;
@@ -32,7 +35,8 @@ interface Product {
   time: string;
   image: string;
   categoryId: string;
-  category: { name: string } | string;
+  category: { name: string, discount?: number } | string;
+  discount?: number;
   isPopular?: boolean;
 }
 
@@ -60,6 +64,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   
   // --- BANNER SLIDER STATE ---
   const [currentBanner, setCurrentBanner] = useState(0);
@@ -69,7 +74,18 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const { lang } = useLanguage(); 
 
   // Default values
-  const shopName = shopSettings?.name || 'Gourmet Shop';
+  const shopNameEn = shopSettings?.name || 'Gourmet Shop';
+  const shopNameKh = shopSettings?.name_kh || '';
+  const nameDisplay = shopSettings?.nameDisplay || 'EN';
+
+  const getShopName = () => {
+    if (nameDisplay === 'KH' && shopNameKh) return shopNameKh;
+    if (nameDisplay === 'BOTH' && shopNameKh) return `${shopNameEn} ${shopNameKh}`;
+    return shopNameEn;
+  };
+
+  const displayShopName = getShopName();
+
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const headerDesign = shopSettings?.headerDesign || 'design1';
   const logoUrl = shopSettings?.logo || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
@@ -164,7 +180,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       />
 
       <div className="relative z-10 flex flex-col h-full max-w-7xl mx-auto w-full">
-        {/* Top Left Menu Button */}
         <div className="absolute top-2 left-4 sm:left-6 lg:left-8 z-20">
           <button
             onClick={() => setIsInfoOpen(true)}
@@ -175,33 +190,31 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           </button>
         </div>
 
-        {/* Header Content Variations */}
         <div className="flex items-center justify-center px-4 sm:px-6 lg:px-8 pt-12 pb-2 w-full h-full">
           {headerDesign === 'design2' ? (
             <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">
-              {shopName}
+              {displayShopName}
             </h1>
           ) : headerDesign === 'design3' ? (
             <div className="flex flex-col items-center gap-3">
               <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5">
-                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-[14px]" />
+                <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-[14px]" />
               </div>
-              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
             </div>
           ) : headerDesign === 'design4' ? (
             <div className="flex items-center gap-4">
               <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5">
-                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-full" />
+                <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-full" />
               </div>
-              <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+              <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
             </div>
           ) : (
-            // default design1
             <div className="flex flex-col items-center gap-2">
               <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5">
-                <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-full" />
+                <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-full" />
               </div>
-              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{shopName}</h1>
+              <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
             </div>
           )}
         </div>
@@ -210,7 +223,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
     {/* --- BODY SECTION --- */}
     <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
-      {/* Overlapping Search & Lang Container */}
       <div className="relative z-30 -mt-6 sm:-mt-8 mb-6 sm:mb-8 max-w-3xl mx-auto">
         <SearchBar 
           value={searchQuery} 
@@ -267,7 +279,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         </div>
       </div>
 
-      {/* Banner Carousel moved under categories - Clickable & Swipeable */}
       {banners && banners.length > 0 && (
         <div 
           className="w-full relative aspect-[21/9] sm:aspect-[4/1] md:aspect-[5/1] max-h-[250px] md:max-h-[300px] mb-8 rounded-2xl overflow-hidden shadow-sm bg-gray-50 border border-gray-100"
@@ -285,7 +296,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               />
             ))}
 
-            {/* Desktop Side Hitboxes for Click Navigation */}
             {banners.length > 1 && (
               <>
                 <button 
@@ -301,7 +311,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               </>
             )}
 
-            {/* Clickable Dots */}
             {banners.length > 1 && (
               <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-30 pb-1">
                 {banners.map((_, i) => (
@@ -333,7 +342,12 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
                   {visibleProducts.map((item) => (
-                    <FoodCard key={item.id} item={item} themeColor={themeColor} />
+                    <FoodCard 
+                      key={item.id} 
+                      item={item as any} 
+                      themeColor={themeColor} 
+                      onClick={() => setSelectedItem(item)} 
+                    />
                   ))}
                 </div>
               </section>
@@ -344,7 +358,12 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6 animate-in fade-in duration-300">
           {getProductsBySearch(initialProducts.filter(p => p.isPopular))
             .map((item) => (
-              <FoodCard key={item.id} item={item} themeColor={themeColor} />
+              <FoodCard 
+                key={item.id} 
+                item={item as any} 
+                themeColor={themeColor} 
+                onClick={() => setSelectedItem(item)}
+              />
             ))
           }
         </div>
@@ -352,12 +371,99 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6 animate-in fade-in duration-300">
           {getProductsBySearch(initialProducts.filter(p => getProductCategoryString(p) === activeCategory))
             .map((item) => (
-              <FoodCard key={item.id} item={item} themeColor={themeColor} />
+              <FoodCard 
+                key={item.id} 
+                item={item as any} 
+                themeColor={themeColor} 
+                onClick={() => setSelectedItem(item)}
+              />
             ))
           }
         </div>
       )}
     </div>
+
+    {/* --- PREVIEW MODAL --- */}
+    {selectedItem && (
+      <div 
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        onClick={() => setSelectedItem(null)}
+      >
+        <div 
+          className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 duration-200"
+          onClick={e => e.stopPropagation()}
+        >
+          <button 
+            onClick={() => setSelectedItem(null)}
+            className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full backdrop-blur-md z-10 hover:bg-black/60 active:scale-95 transition-all"
+          >
+            <X size={20} />
+          </button>
+          
+          <div className="w-full aspect-square bg-gray-100 relative">
+            <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-full object-cover" />
+            <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
+              {selectedItem.isPopular && (
+                 <span className="bg-orange-500 text-white text-xs px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+                   Hot
+                 </span>
+              )}
+              {(() => {
+                const catDiscount = typeof selectedItem.category === 'object' ? ((selectedItem.category as any).discount || 0) : 0;
+                const effDiscount = (selectedItem.discount && selectedItem.discount > 0) ? selectedItem.discount : catDiscount;
+                return effDiscount > 0 ? (
+                  <span className="bg-red-500 text-white text-xs px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+                    -{effDiscount}%
+                  </span>
+                ) : null;
+              })()}
+            </div>
+          </div>
+          
+          <div className="p-6">
+            <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-2">
+              {lang === 'kh' ? (selectedItem.name_kh || selectedItem.name) : lang === 'zh' ? (selectedItem.name_zh || selectedItem.name) : selectedItem.name}
+            </h2>
+            
+            <div className="flex items-center gap-3 text-gray-500 text-sm mb-4 font-medium">
+              {selectedItem.time && <span>{selectedItem.time}</span>}
+              {selectedItem.rating && (
+                <div className="flex items-center gap-1">
+                  <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                  <span>{selectedItem.rating}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+               <div>
+                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Price</p>
+                 {(() => {
+                    const catDiscount = typeof selectedItem.category === 'object' ? ((selectedItem.category as any).discount || 0) : 0;
+                    const effDiscount = (selectedItem.discount && selectedItem.discount > 0) ? selectedItem.discount : catDiscount;
+                    const discountedPrice = effDiscount > 0 ? selectedItem.price * (1 - effDiscount / 100) : selectedItem.price;
+                    
+                    return effDiscount > 0 ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-2xl" style={{ color: 'var(--brand-color)' }}>
+                          ${discountedPrice.toFixed(2)}
+                        </span>
+                        <span className="font-medium text-sm text-gray-400 line-through">
+                          ${selectedItem.price.toFixed(2)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="font-extrabold text-2xl" style={{ color: 'var(--brand-color)' }}>
+                        ${selectedItem.price.toFixed(2)}
+                      </span>
+                    );
+                 })()}
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
     <CartFloat themeColor={themeColor} />
   </main>
