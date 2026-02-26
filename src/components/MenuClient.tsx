@@ -78,13 +78,10 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const shopNameKh = shopSettings?.name_kh || '';
   const nameDisplay = shopSettings?.nameDisplay || 'EN';
 
-  const getShopName = () => {
-    if (nameDisplay === 'KH' && shopNameKh) return shopNameKh;
-    if (nameDisplay === 'BOTH' && shopNameKh) return `${shopNameEn} ${shopNameKh}`;
-    return shopNameEn;
-  };
-
-  const displayShopName = getShopName();
+  // Strictly follow the shop setting for name display
+  const displayShopName = nameDisplay === 'KH' && shopNameKh ? shopNameKh 
+                        : nameDisplay === 'BOTH' && shopNameKh ? `${shopNameEn} ${shopNameKh}` 
+                        : shopNameEn;
 
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const headerDesign = shopSettings?.headerDesign || 'design1';
@@ -149,7 +146,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
     <ShopInfoModal 
       isOpen={isInfoOpen} 
       onClose={() => setIsInfoOpen(false)} 
-      // @ts-ignore
       settings={shopSettings}
     />
 

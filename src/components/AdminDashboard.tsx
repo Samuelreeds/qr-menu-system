@@ -16,7 +16,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock
+  Info, Loader2, Clock, AlertTriangle, Star
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -49,7 +49,7 @@ interface Product {
   name_zh?: string | null; 
   price: number; 
   image: string; 
-  category: { name: string }; 
+  category: { name: string, discount?: number }; 
   time: string;
   isPopular?: boolean; 
   discount?: number;
@@ -75,7 +75,7 @@ type OptimisticBannerAction =
 
 export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [] }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
   const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
@@ -94,6 +94,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [previewNameEn, setPreviewNameEn] = useState(settings.name || '');
   const [previewNameKh, setPreviewNameKh] = useState(settings.name_kh || '');
   const [previewDisplay, setPreviewDisplay] = useState(settings.nameDisplay || 'EN');
+  
+  const [address, setAddress] = useState(settings.address || '');
+  const [phone, setPhone] = useState(settings.phone || '');
 
   // Parse existing opening hours or set defaults
   const getInitialHours = () => {
@@ -125,6 +128,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [headerDesign, setHeaderDesign] = useState(settings.headerDesign || 'design1');
   const [themeColorPreview, setThemeColorPreview] = useState(settings.themeColor || '#000000');
+
+  const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({});
+  const [pendingNav, setPendingNav] = useState<{ type: 'tab' | 'section', payload: any, source: string } | null>(null);
+
+  const markDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: true }));
+  const clearDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: false }));
 
   const [optProducts, dispatchOptProducts] = useOptimistic(
     products,
@@ -222,8 +231,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   }, [editingCategory, isCatFormOpen]);
 
-  const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
-
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 3000);
@@ -248,12 +255,144 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
-  const handleDownloadPDF = () => handleGeneratePDF(previewFormat);
-
+  // Directly reflect the name display logic chosen
   const getShopNamePreview = () => {
     if (previewDisplay === 'KH' && previewNameKh) return previewNameKh;
     if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`;
     return previewNameEn || 'Shop Name';
+  };
+
+  // --- NAVIGATION & UNSAVED CHANGES LOGIC ---
+  const executeNav = (type: 'tab' | 'section', payload: any) => {
+    if (type === 'tab') {
+      setActiveTab(payload);
+      setIsMobileMenuOpen(false);
+    } else if (type === 'section') {
+      setOpenSection(openSection === payload ? null : payload);
+    }
+  };
+
+  const handleTabClick = (tab: any) => {
+    if (activeTab === tab) return;
+    if (activeTab === 'settings' && openSection && dirtySections[openSection]) {
+      setPendingNav({ type: 'tab', payload: tab, source: openSection });
+    } else {
+      executeNav('tab', tab);
+    }
+  };
+
+  const handleSectionClick = (section: string) => {
+    if (openSection && dirtySections[openSection]) {
+      if (openSection === section) {
+         setPendingNav({ type: 'section', payload: null, source: openSection });
+      } else {
+         setPendingNav({ type: 'section', payload: section, source: openSection });
+      }
+    } else {
+      executeNav('section', section);
+    }
+  };
+
+  const discardChanges = (source: string) => {
+    if (source === 'identity') {
+      setPreviewNameEn(settings.name || '');
+      setPreviewNameKh(settings.name_kh || '');
+      setPreviewDisplay(settings.nameDisplay || 'EN');
+      setAddress(settings.address || '');
+      setPhone(settings.phone || '');
+      const initH = getInitialHours();
+      setOpenTime(initH.open);
+      setCloseTime(initH.close);
+    } else if (source === 'branding') {
+      setHeaderDesign(settings.headerDesign || 'design1');
+      setThemeColorPreview(settings.themeColor || '#000000');
+      setLogoPreview(settings.logo || '');
+      setIsDirtyLogo(false);
+      setLogoFileBlob(null);
+    } else if (source === 'socials') {
+      try { setSocialLinks(settings.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); }
+    }
+  };
+
+  const saveIdentityForm = async () => {
+    if (!previewNameEn.trim() && !previewNameKh.trim()) {
+      showToast("Please enter at least one shop name.");
+      return false;
+    }
+    const fd = new FormData();
+    if (!previewNameEn.trim() && previewNameKh.trim()) {
+       fd.set('name', previewNameKh.trim());
+    } else {
+       fd.set('name', previewNameEn.trim());
+    }
+    if (previewNameKh.trim()) fd.set('name_kh', previewNameKh.trim());
+    fd.set('nameDisplay', previewDisplay);
+    fd.set('address', address);
+    fd.set('phone', phone);
+    fd.set('openingHours', `${openTime} - ${closeTime}`);
+    
+    try {
+      await updateShopIdentity(fd); 
+      showToast("Basic information saved!"); 
+      clearDirty('identity');
+      return true;
+    } catch(e) {
+      showToast("Error saving information.");
+      return false;
+    }
+  };
+
+  const saveBrandingForm = async () => {
+     const fd = new FormData();
+     fd.set('headerDesign', headerDesign);
+     fd.set('themeColor', themeColorPreview);
+     if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp');
+     try {
+       await updateShopBranding(fd);
+       setIsDirtyLogo(false); 
+       setLogoFileBlob(null); 
+       showToast("Branding updated!"); 
+       clearDirty('branding');
+       return true;
+     } catch (e) {
+       showToast("Error saving branding.");
+       return false;
+     }
+  };
+
+  const saveSocialsForm = async () => {
+    const fd = new FormData();
+    fd.set('socials', JSON.stringify(socialLinks));
+    try {
+      await updateShopSocials(fd); 
+      showToast("Social Media Links saved!"); 
+      clearDirty('socials');
+      return true;
+    } catch (e) {
+      showToast("Error saving socials.");
+      return false;
+    }
+  };
+
+  const onIdentitySubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    await saveIdentityForm();
+    setIsSaving(false);
+  };
+
+  const onBrandingSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    await saveBrandingForm();
+    setIsSaving(false);
+  };
+
+  const onSocialsSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    await saveSocialsForm();
+    setIsSaving(false);
   };
 
   const handleMoveBanner = async (index: number, direction: number) => {
@@ -334,6 +473,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           setLogoFileBlob(croppedBlob); 
           setLogoPreview(objectUrl); 
           setIsDirtyLogo(true); 
+          markDirty('branding');
         } 
         else if (cropTarget === 'product') { 
           setProductFileBlob(croppedBlob); 
@@ -361,9 +501,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const cancelLogoChange = () => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); setLogoFileBlob(null); };
 
-  const addSocialLink = () => setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]);
-  const removeSocialLink = (id: string) => setSocialLinks(socialLinks.filter(l => l.id !== id));
-  const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l));
+  const addSocialLink = () => { setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]); markDirty('socials'); };
+  const removeSocialLink = (id: string) => { setSocialLinks(socialLinks.filter(l => l.id !== id)); markDirty('socials'); };
+  const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => { setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l)); markDirty('socials'); };
+  
   const getPlatformIcon = (platform: string) => {
     switch (platform) {
       case 'facebook': return <Facebook size={18}/>; case 'instagram': return <Instagram size={18}/>;
@@ -378,6 +519,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     const designs = ['design1', 'design2', 'design3', 'design4'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx - 1 + designs.length) % designs.length]);
+    markDirty('branding');
   };
 
   const handleNextDesign = (e?: React.MouseEvent) => {
@@ -385,6 +527,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     const designs = ['design1', 'design2', 'design3', 'design4'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx + 1) % designs.length]);
+    markDirty('branding');
   };
 
   const filteredProducts = optProducts.filter(p => 
@@ -484,7 +627,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             {getShopNamePreview() || 'AdminPanel'}
           </h1>
         </div>
-        <button onClick={() => setActiveTab('settings')} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-gray-700 active:scale-95 transition-transform">
+        <button onClick={() => handleTabClick('settings')} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-gray-700 active:scale-95 transition-transform">
           <Settings size={20} />
         </button>
       </div>
@@ -493,9 +636,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         <div className="px-6 md:px-8 pb-6 md:pb-8 pt-20 md:pt-8 h-full flex flex-col overflow-hidden">
           <h1 className="font-bold text-xl mb-8 hidden md:block font-sans">{getShopNamePreview() || 'AdminPanel'}</h1>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            <button onClick={() => {setActiveTab('menu'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
-            <button onClick={() => {setActiveTab('categories'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
-            <button onClick={() => {setActiveTab('settings'); setIsMobileMenuOpen(false)}} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
+            <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
+            <button onClick={() => handleTabClick('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
+            <button onClick={() => handleTabClick('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
           </nav>
           <div className="pt-6 border-t border-gray-50 mt-auto shrink-0">
             <button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="w-full flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition active:scale-95"><LogOut size={18}/> Log Out</button>
@@ -507,24 +650,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       <main className="flex-1 p-4 pt-24 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
-        {activeTab !== 'settings' && (
-          <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
-             <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
-             <div className="flex gap-2 w-full sm:w-auto">
-               <a 
-                 href={`/${shopSlug}`} 
-                 target="_blank" 
-                 rel="noopener noreferrer"
-                 className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all shadow-sm active:scale-95 items-center"
-               >
-                 <ExternalLink size={14} /> View Live Menu
-               </a>
-               <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-transparent border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95 items-center">
-                 <QrCode size={14} /> Get QR
-               </button>
-             </div>
-          </header>
-        )}
+        <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
+           <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
+           <div className="flex gap-2 w-full sm:w-auto">
+             <a 
+               href={`/${shopSlug}`} 
+               target="_blank" 
+               rel="noopener noreferrer"
+               className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all shadow-sm active:scale-95 items-center"
+             >
+               <ExternalLink size={14} /> View Live Menu
+             </a>
+             <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-transparent border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95 items-center">
+               <QrCode size={14} /> Get QR
+             </button>
+           </div>
+        </header>
 
         {!isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
@@ -538,7 +679,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-               <button onClick={() => { setActiveTab('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
+               <button onClick={() => { handleTabClick('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasCategory ? 'text-green-700' : 'text-gray-700'}`}>1. Create Category</span>
                    {hasCategory ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -546,7 +687,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <span className="text-xs text-gray-500">Organize your menu structure.</span>
                </button>
 
-               <button onClick={() => { setActiveTab('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
+               <button onClick={() => { handleTabClick('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasProduct ? 'text-green-700' : 'text-gray-700'}`}>2. Add Item</span>
                    {hasProduct ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -554,7 +695,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  <span className="text-xs text-gray-500">Add products to your menu.</span>
                </button>
 
-               <button onClick={() => { setActiveTab('settings'); setOpenSection('identity'); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasSettings ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
+               <button onClick={() => { handleTabClick('settings'); handleSectionClick('identity'); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] ${hasSettings ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}>
                  <div className="flex justify-between items-center w-full">
                    <span className={`text-sm font-bold ${hasSettings ? 'text-green-700' : 'text-gray-700'}`}>3. Update Settings</span>
                    {hasSettings ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}
@@ -603,58 +744,61 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      <button onClick={() => setIsFormOpen(true)} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-95 transition flex items-center justify-center gap-2 text-sm w-full sm:w-auto">
                        <Plus size={16} strokeWidth={3}/> Add Product
                      </button>
-                     <button onClick={() => setActiveTab('categories')} className="bg-white border border-gray-200 text-gray-700 px-6 py-3.5 rounded-xl font-bold hover:bg-gray-50 active:scale-95 transition text-sm w-full sm:w-auto">
+                     <button onClick={() => handleTabClick('categories')} className="bg-white border border-gray-200 text-gray-700 px-6 py-3.5 rounded-xl font-bold hover:bg-gray-50 active:scale-95 transition text-sm w-full sm:w-auto">
                        Go to Categories
                      </button>
                    </div>
                 </div>
              ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                  {filteredProducts.map(item => (
-                    <div key={item.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 group active:scale-[0.98] transition-transform cursor-default">
-                      <div className="relative w-full h-40 rounded-2xl overflow-hidden bg-gray-100">
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"/>
-                        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
-                           {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
-                           {item.discount && item.discount > 0 ? <span className="bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{item.discount}%</span> : null}
-                        </div>
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                  {filteredProducts.map(item => {
+                    const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
+                    const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                    const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                    return (
+                    <div key={item.id} className="bg-white p-3 sm:p-4 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group">
+                      <div className="absolute top-5 right-5 flex flex-col gap-1.5 items-end z-10">
+                        {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
+                        {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{effectiveDiscount}%</span>}
                       </div>
-                      <div>
-                        <h4 className="font-bold text-gray-900 text-base leading-tight truncate">{item.name}</h4>
-                        <div className="flex justify-between items-center mt-1">
-                           <span className="text-[10px] text-gray-400 truncate uppercase tracking-wider">{item.category?.name}</span>
-                           <span className="text-[10px] text-gray-400 shrink-0 font-medium">{item.time}</span>
-                        </div>
+                      <div className="relative w-full aspect-square mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
+                        <img src={item.image} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
                       </div>
-                      <div className="flex justify-between items-center mt-auto pt-3 border-t border-gray-50">
-                        <div className="flex flex-col">
-                           {item.discount && item.discount > 0 ? (
-                              <div className="flex items-baseline gap-1.5 flex-wrap">
-                                <span className="font-black text-xl text-red-500 leading-none">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
-                                <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
+                      <div className="flex flex-col flex-1 space-y-1">
+                        <h3 className="font-bold text-gray-900 text-lg sm:text-xl leading-tight line-clamp-2">{item.name}</h3>
+                        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-2">
+                           <span className="truncate uppercase tracking-wider">{item.category?.name}</span> • <span>{item.time}</span>
+                        </div>
+                        <div className="mt-auto pt-3 flex items-center justify-between">
+                          <div>
+                            {effectiveDiscount > 0 ? (
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-2 flex-wrap">
+                                <span className="font-extrabold text-lg sm:text-xl text-red-500">${discountedPrice.toFixed(2)}</span>
+                                <span className="font-medium text-xs sm:text-sm text-gray-400 line-through">${item.price.toFixed(2)}</span>
                               </div>
                             ) : (
-                              <span className="font-black text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
+                              <span className="font-extrabold text-lg sm:text-xl text-gray-900">${item.price.toFixed(2)}</span>
                             )}
-                        </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
-                          <form action={async (fd) => { 
-                              setDeletingId(item.id);
-                              startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                              await deleteProduct(fd); 
-                              setDeletingId(null);
-                              showToast("Product deleted"); 
-                          }}>
-                            <input type="hidden" name="id" value={item.id} />
-                            <button disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95 disabled:opacity-50">
-                              {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                            </button>
-                          </form>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0 z-10 relative">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
+                            <form action={async (fd) => { 
+                                setDeletingId(item.id);
+                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
+                                await deleteProduct(fd); 
+                                setDeletingId(null);
+                                showToast("Product deleted"); 
+                            }}>
+                              <input type="hidden" name="id" value={item.id} />
+                              <button onClick={(e) => e.stopPropagation()} disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95 disabled:opacity-50">
+                                {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                              </button>
+                            </form>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                   {filteredProducts.length === 0 && searchQuery !== '' && (
                     <div className="col-span-full py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
                   )}
@@ -665,21 +809,25 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
                       <tbody className="divide-y divide-gray-50">
-                        {filteredProducts.map((item) => (
+                        {filteredProducts.map((item) => {
+                          const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
+                          const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                          const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                          return (
                           <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
                             <td className="p-4 flex items-center gap-3">
                               <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
                               <span className="font-bold text-gray-900 flex items-center gap-2">
                                 {item.name}
                                 {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
-                                {item.discount && item.discount > 0 ? <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{item.discount}%</span> : null}
+                                {effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}
                               </span>
                             </td>
                             <td className="p-4 text-xs text-gray-400 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1 rounded-full">{item.category?.name}</span></td>
                             <td className="p-4 font-black text-xl text-gray-900">
-                               {item.discount && item.discount > 0 ? (
+                               {effectiveDiscount > 0 ? (
                                  <div className="flex flex-col">
-                                   <span className="text-red-500">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                   <span className="text-red-500">${discountedPrice.toFixed(2)}</span>
                                    <span className="text-xs text-gray-400 line-through font-normal">${item.price.toFixed(2)}</span>
                                  </div>
                               ) : (
@@ -703,7 +851,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               </form>
                             </td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                     {filteredProducts.length === 0 && searchQuery !== '' && (
@@ -712,7 +860,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   </div>
                   
                   <div className="md:hidden space-y-3">
-                     {filteredProducts.map((item) => (
+                     {filteredProducts.map((item) => {
+                       const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
+                       const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                       const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                       return(
                         <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-[0.98] transition-transform cursor-default">
                            <div className="flex items-center gap-4">
                               <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
@@ -723,9 +875,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                 </h4>
                                 <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{item.category?.name} • <span className="font-medium">{item.time}</span></p>
                                 <div className="flex flex-col">
-                                   {item.discount && item.discount > 0 ? (
+                                   {effectiveDiscount > 0 ? (
                                       <div className="flex items-baseline gap-1.5 flex-wrap">
-                                        <span className="font-black text-lg text-red-500 leading-none">${(item.price * (1 - item.discount / 100)).toFixed(2)}</span>
+                                        <span className="font-black text-lg text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
                                         <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
                                       </div>
                                     ) : (
@@ -750,7 +902,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             </form>
                           </div>
                         </div>
-                     ))}
+                     )})}
                      {filteredProducts.length === 0 && searchQuery !== '' && (
                         <div className="bg-white p-8 rounded-3xl text-center text-gray-400 font-medium shadow-sm border border-gray-100">No products found matching "{searchQuery}"</div>
                      )}
@@ -775,7 +927,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
            <div className="animate-in fade-in duration-300">
              <div className="flex justify-between items-center gap-4 mb-6">
                  <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
-                <button onClick={() => setIsCatFormOpen(true)} className="ml-auto shrink-0 bg-gray-900 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-sm">
+                <button onClick={() => setIsCatFormOpen(true)} className="hidden md:flex ml-auto shrink-0 bg-gray-900 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm">
                   <Plus size={18} strokeWidth={3}/> Add New
                 </button>
              </div>
@@ -814,19 +966,23 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Primary Action for Categories (FAB) */}
+            <button 
+              onClick={() => setIsCatFormOpen(true)}
+              className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
+            >
+              <Plus size={24} strokeWidth={3} />
+            </button>
            </div>
         )}
 
         {/* --- SETTINGS TAB --- */}
         {activeTab === 'settings' && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300 pb-12">
-            <header className="hidden sm:flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">Settings</h2>
-            </header>
-
             {/* Shop Details Section */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => toggleSection('identity')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+              <button onClick={() => handleSectionClick('identity')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center">
                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
                      <Store size={20}/>
@@ -841,42 +997,57 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               
               <div className={openSection === 'identity' ? 'block' : 'hidden'}>
                 <form 
-                  action={async (fd) => { 
-                    setIsSaving(true); 
-                    // Combine the separated hours back into the format the backend expects
-                    const formattedHours = `${openTime} - ${closeTime}`;
-                    fd.set('openingHours', formattedHours);
-                    await updateShopIdentity(fd); 
-                    setIsSaving(false); 
-                    showToast("Basic information saved!"); 
-                  }} 
+                  onSubmit={onIdentitySubmit} 
                   className="p-6 border-t border-gray-100 space-y-6"
                 >
                   
                   {/* Name Sub-section */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name</label>
-                      <input name="name" value={previewNameEn} onChange={e => setPreviewNameEn(e.target.value)} required placeholder="e.g. Banlung City" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
-                      <div className="flex items-start gap-2 mt-2 px-1">
-                        <Info size={14} className="text-gray-400 mt-0.5 shrink-0" />
-                        <p className="text-xs text-gray-500">This will be used for your unique URL link: <span className="font-semibold text-gray-700">scandine.xyz/{previewNameEn ? previewNameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'your-shop'}</span></p>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name (English)</label>
+                      <input name="name" value={previewNameEn} onChange={e => { setPreviewNameEn(e.target.value); markDirty('identity'); }} placeholder="e.g. Banlung City" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name (Local)</label>
+                      <input name="name_kh" value={previewNameKh} onChange={e => { setPreviewNameKh(e.target.value); markDirty('identity'); }} placeholder="e.g. បានលុង ស៊ីធី" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-2">How should we display your name?</label>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        {[
+                          { id: 'EN', label: 'English' },
+                          { id: 'KH', label: 'Local (Khmer)' },
+                          { id: 'BOTH', label: 'Both' }
+                        ].map((option) => (
+                          <label 
+                            key={option.id} 
+                            className={`relative flex-1 flex items-center justify-center py-3 px-2 rounded-xl border-2 cursor-pointer transition-all ${
+                              previewDisplay === option.id 
+                                ? 'border-gray-900 bg-gray-900/5 shadow-sm' 
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            <input 
+                              type="radio" 
+                              name="nameDisplay" 
+                              value={option.id} 
+                              checked={previewDisplay === option.id}
+                              onChange={(e) => { setPreviewDisplay(e.target.value); markDirty('identity'); }}
+                              className="sr-only" 
+                            />
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${previewDisplay === option.id ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>
+                                {previewDisplay === option.id && <Check size={10} strokeWidth={4} className="text-white" />}
+                              </div>
+                              <span className={`text-xs sm:text-sm font-semibold text-center ${previewDisplay === option.id ? 'text-gray-900' : 'text-gray-600'}`}>
+                                {option.label}
+                              </span>
+                            </div>
+                          </label>
+                        ))}
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Name <span className="text-gray-400 font-normal">(Optional)</span></label>
-                      <input name="name_kh" value={previewNameKh} onChange={e => setPreviewNameKh(e.target.value)} placeholder="e.g. បានលុង ស៊ីធី" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
-                      <p className="text-xs text-gray-500 mt-1.5 ml-1">If your shop has a name in the local language, enter it here.</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">How should we display your name?</label>
-                      <select name="nameDisplay" value={previewDisplay} onChange={e => setPreviewDisplay(e.target.value)} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 cursor-pointer shadow-sm">
-                        <option value="EN">Show Main Name Only</option>
-                        <option value="KH">Show Local Name Only</option>
-                        <option value="BOTH">Show Both Names</option>
-                      </select>
                     </div>
                   </div>
 
@@ -886,35 +1057,41 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Address</label>
-                      <input name="address" defaultValue={settings.address || ''} placeholder="e.g. Street 123, Phnom Penh" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                      <input name="address" value={address} onChange={e => { setAddress(e.target.value); markDirty('identity'); }} placeholder="e.g. Street 123, Phnom Penh" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
                     </div>
                     
                     <div>
                       <label className="block text-sm font-semibold text-gray-800 mb-1.5">Phone Number</label>
-                      <input name="phone" defaultValue={settings.phone || ''} placeholder="e.g. 012 345 678" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                      <input name="phone" value={phone} onChange={e => { setPhone(e.target.value); markDirty('identity'); }} placeholder="e.g. 012 345 678" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
                     </div>
 
                     <div className="pt-2">
-                      <label className="block text-sm font-semibold text-gray-800 mb-2">Operating Hours</label>
-                      <div className="flex items-center gap-3">
-                        <div className="relative flex-1">
-                          <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                          <input 
-                            type="time" 
-                            value={openTime}
-                            onChange={(e) => setOpenTime(e.target.value)}
-                            className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
-                          />
+                      <label className="block text-sm font-semibold text-gray-800 mb-3">Operating Hours</label>
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                        <div className="relative w-full sm:flex-1">
+                          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Opening Time</label>
+                          <div className="relative">
+                            <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            <input 
+                              type="time" 
+                              value={openTime}
+                              onChange={(e) => { setOpenTime(e.target.value); markDirty('identity'); }}
+                              className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
+                            />
+                          </div>
                         </div>
-                        <span className="text-gray-400 font-medium text-sm">to</span>
-                        <div className="relative flex-1">
-                           <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                          <input 
-                            type="time" 
-                            value={closeTime}
-                            onChange={(e) => setCloseTime(e.target.value)}
-                            className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
-                          />
+                        <span className="hidden sm:block text-gray-400 font-medium text-sm text-center mb-3.5">to</span>
+                        <div className="relative w-full sm:flex-1">
+                          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Closing Time</label>
+                          <div className="relative">
+                            <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            <input 
+                              type="time" 
+                              value={closeTime}
+                              onChange={(e) => { setCloseTime(e.target.value); markDirty('identity'); }}
+                              className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
+                            />
+                          </div>
                         </div>
                       </div>
                       <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
@@ -922,9 +1099,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   </div>
 
                   <div className="flex justify-end pt-4 border-t border-gray-100">
-                     <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                     <button type="submit" disabled={isSaving || !dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
                        {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                       {isSaving ? 'Saving...' : 'Save Changes'}
+                       {dirtySections['identity'] ? (isSaving ? 'Saving...' : 'Save Changes') : 'Saved'}
                      </button>
                   </div>
                 </form>
@@ -933,7 +1110,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
             {/* Branding Section */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => toggleSection('branding')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+              <button onClick={() => handleSectionClick('branding')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center">
                    <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
                      <Palette size={20}/>
@@ -947,7 +1124,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               </button>
               
               <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form action={async (formData) => { setIsSaving(true); if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); setIsSaving(false); showToast("Branding updated!"); }} className="p-6 border-t border-gray-100 space-y-6">
+                <form onSubmit={onBrandingSubmit} className="p-6 border-t border-gray-100 space-y-6">
                    
                    <div className="space-y-4">
                       <div className="flex justify-between items-center">
@@ -958,11 +1135,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       </div>
 
                       <div className="w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm group">
-                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
                            <ChevronLeft size={18}/>
                          </button>
                          
-                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
+                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
                            <ChevronRight size={18}/>
                          </button>
 
@@ -1028,7 +1205,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-semibold bg-white border border-gray-300 px-6 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700 active:scale-95 transition-all">
                                <ImageIcon size={16}/> {logoPreview ? 'Change Logo Image' : 'Upload Logo Image'}
                             </button>
-                            {isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-semibold text-red-600 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
+                            {isDirtyLogo && <button type="button" onClick={() => { cancelLogoChange(); clearDirty('branding'); }} className="text-sm font-semibold text-red-600 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
                          </div>
                       </div>
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
@@ -1037,15 +1214,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    <div>
                       <label className="block text-sm font-semibold text-gray-800 mb-2">Theme Color</label>
                       <div className="flex items-center gap-4">
-                        <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => setThemeColorPreview(e.target.value)} className="h-12 w-16 rounded-xl bg-white p-1 cursor-pointer border border-gray-300 shadow-sm"/>
+                        <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className="h-12 w-16 rounded-xl bg-white p-1 cursor-pointer border border-gray-300 shadow-sm"/>
                         <span className="text-sm font-mono text-gray-500 uppercase">{themeColorPreview}</span>
                       </div>
                    </div>
 
                    <div className="flex justify-end pt-4">
-                       <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                       <button type="submit" disabled={isSaving || !dirtySections['branding']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
                          {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                         {isSaving ? 'Saving...' : 'Save Design'}
+                         {dirtySections['branding'] ? (isSaving ? 'Saving...' : 'Save Design') : 'Saved'}
                        </button>
                    </div>
                 </form>
@@ -1054,7 +1231,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
             {/* Promotional Banners */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => toggleSection('banners')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+              <button onClick={() => handleSectionClick('banners')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center">
                    <div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-xl">
                      <ImageIcon size={20}/>
@@ -1111,7 +1288,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
             {/* Social Links */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => toggleSection('socials')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+              <button onClick={() => handleSectionClick('socials')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center">
                    <div className="p-2.5 bg-pink-50 text-pink-600 rounded-xl">
                      <Share2 size={20}/>
@@ -1125,8 +1302,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               </button>
 
               <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                <form action={async (fd) => { setIsSaving(true); await updateShopSocials(fd); setIsSaving(false); showToast("Socials saved!"); }} className="p-6 border-t border-gray-100 space-y-4">
-                  <input type="hidden" name="socials" value={JSON.stringify(socialLinks)} />
+                <form onSubmit={onSocialsSubmit} className="p-6 border-t border-gray-100 space-y-4">
                   {socialLinks.map((link) => (
                     <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 animate-in slide-in-from-left-2 shadow-sm">
                        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-300 shadow-sm">
@@ -1151,9 +1327,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   </button>
 
                   <div className="flex justify-end pt-4">
-                    <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                    <button type="submit" disabled={isSaving || !dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
                       {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                      {isSaving ? 'Saving...' : 'Save Social Links'}
+                      {dirtySections['socials'] ? (isSaving ? 'Saving...' : 'Save Social Links') : 'Saved'}
                     </button>
                   </div>
                 </form>
@@ -1163,6 +1339,50 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           </div>
         )}
       </main>
+
+      {/* --- UNSAVED CHANGES DIALOG --- */}
+      {pendingNav && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-5">
+               <AlertTriangle size={24} className="text-orange-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Unsaved Changes</h3>
+            <p className="text-gray-500 text-sm mb-8 leading-relaxed">You have unsaved changes in this section. Do you want to save them before leaving?</p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => {
+                  discardChanges(pendingNav.source);
+                  clearDirty(pendingNav.source);
+                  executeNav(pendingNav.type, pendingNav.payload);
+                  setPendingNav(null);
+                }}
+                className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-sm"
+              >
+                No, Discard
+              </button>
+              <button 
+                onClick={async () => {
+                  setIsSaving(true);
+                  let success = false;
+                  if (pendingNav.source === 'identity') success = await saveIdentityForm();
+                  else if (pendingNav.source === 'branding') success = await saveBrandingForm();
+                  else if (pendingNav.source === 'socials') success = await saveSocialsForm();
+                  setIsSaving(false);
+
+                  if (success) {
+                    executeNav(pendingNav.type, pendingNav.payload);
+                    setPendingNav(null);
+                  }
+                }}
+                className="flex-1 py-3.5 px-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center text-sm"
+              >
+                {isSaving ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- QR CODE MODAL --- */}
       {isQrModalOpen && (
@@ -1251,15 +1471,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all text-[15px] flex items-center justify-center gap-2"
                   >
                     <QrCode size={18} /> Print / Save as PDF
-                  </button>
-                  <button 
-                    onClick={handleDownloadPDF} 
-                    className="w-full py-3.5 bg-white border-2 border-gray-200 text-gray-800 rounded-2xl font-bold hover:border-gray-900 hover:text-gray-900 active:scale-[0.98] transition-all text-[14px] flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg> 
-                    Download PDF
                   </button>
                </div>
 
@@ -1439,7 +1650,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button type="submit" className="w-full bg-[#0F172A] text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-4 text-sm">
+                  <button type="submit" className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-4 text-sm">
                     {editingProduct ? 'Update Product' : 'Save Product'}
                   </button>
                </form>
@@ -1509,7 +1720,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button type="submit" className="w-full bg-[#0F172A] text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-6 text-sm">
+                  <button type="submit" className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-6 text-sm">
                     {editingCategory ? 'Update' : 'Create'}
                   </button>
                </form>

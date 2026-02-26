@@ -75,7 +75,7 @@ export async function getBanners() {
   if (!shopId) return [];
   const prismaAny = prisma as any;
   return await prismaAny.banner.findMany({ 
-    where: { shopId },
+    where: { shopId, deletedAt: null },
     orderBy: { sortOrder: 'asc' } 
   });
 }
@@ -152,6 +152,30 @@ export async function deleteBanner(formData: FormData) {
       await deleteFromSupabase(banner.image);
       revalidatePath('/', 'layout');
     }
+  } catch (e) {}
+}
+
+export async function softDeleteBanner(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    const prismaAny = prisma as any;
+    await prismaAny.banner.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+    revalidatePath('/', 'layout');
+  } catch (e) {}
+}
+
+export async function undoDeleteBanner(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    const prismaAny = prisma as any;
+    await prismaAny.banner.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+    revalidatePath('/', 'layout');
   } catch (e) {}
 }
 

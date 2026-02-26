@@ -109,6 +109,7 @@ model Banner {
   id        String   @id @default(cuid())
   image     String
   sortOrder Int      @default(0)
+  deletedAt DateTime?
   
   shopId    String
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
