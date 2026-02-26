@@ -15,7 +15,8 @@ import {
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight
+  ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
+  Info, Loader2, Clock
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -93,6 +94,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [previewNameEn, setPreviewNameEn] = useState(settings.name || '');
   const [previewNameKh, setPreviewNameKh] = useState(settings.name_kh || '');
   const [previewDisplay, setPreviewDisplay] = useState(settings.nameDisplay || 'EN');
+
+  // Parse existing opening hours or set defaults
+  const getInitialHours = () => {
+    if (!settings.openingHours) return { open: '08:00', close: '22:00' };
+    const parts = settings.openingHours.split(' - ');
+    if (parts.length === 2) {
+      return { open: parts[0], close: parts[1] };
+    }
+    return { open: '08:00', close: '22:00' };
+  };
+
+  const initialHours = getInitialHours();
+  const [openTime, setOpenTime] = useState(initialHours.open);
+  const [closeTime, setCloseTime] = useState(initialHours.close);
 
   const [prepTime, setPrepTime] = useState('15');
   const [isHotSale, setIsHotSale] = useState(false);
@@ -743,6 +758,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 </>
              )}
 
+             {/* Mobile Primary Action (FAB) */}
              {optProducts.length > 0 && (
                <button 
                  onClick={() => setIsFormOpen(true)}
@@ -808,56 +824,140 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               <h2 className="text-2xl font-bold">Settings</h2>
             </header>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => toggleSection('identity')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Store size={20}/></div><div className="text-left font-bold text-gray-800">Shop Identity</div></div>{openSection === 'identity' ? <ChevronUp/> : <ChevronDown/>}
+            {/* Shop Details Section */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+              <button onClick={() => toggleSection('identity')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center">
+                   <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                     <Store size={20}/>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-gray-900 text-base">Basic Information</h3>
+                     <p className="text-xs text-gray-500 mt-0.5">Name, display preferences, and contact info</p>
+                   </div>
+                 </div>
+                 {openSection === 'identity' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
               </button>
+              
               <div className={openSection === 'identity' ? 'block' : 'hidden'}>
-                <form action={async (fd) => { setIsSaving(true); await updateShopIdentity(fd); setIsSaving(false); showToast("Identity saved successfully!"); }} className="p-5 border-t border-gray-50 space-y-4">
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name (English)</label>
-                      <input name="name" value={previewNameEn} onChange={e => setPreviewNameEn(e.target.value)} required placeholder="e.g. Banlung City" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
-                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">This will be used for your unique URL link.</p>
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shop Name (Khmer) - Optional</label>
-                      <input name="name_kh" value={previewNameKh} onChange={e => setPreviewNameKh(e.target.value)} placeholder="e.g. បានលុង ស៊ីធី" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Display Preference</label>
-                      <select name="nameDisplay" value={previewDisplay} onChange={e => setPreviewDisplay(e.target.value)} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans">
-                        <option value="EN">English Only</option>
-                        <option value="KH">Khmer Only</option>
-                        <option value="BOTH">Show Both</option>
+                <form 
+                  action={async (fd) => { 
+                    setIsSaving(true); 
+                    // Combine the separated hours back into the format the backend expects
+                    const formattedHours = `${openTime} - ${closeTime}`;
+                    fd.set('openingHours', formattedHours);
+                    await updateShopIdentity(fd); 
+                    setIsSaving(false); 
+                    showToast("Basic information saved!"); 
+                  }} 
+                  className="p-6 border-t border-gray-100 space-y-6"
+                >
+                  
+                  {/* Name Sub-section */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name</label>
+                      <input name="name" value={previewNameEn} onChange={e => setPreviewNameEn(e.target.value)} required placeholder="e.g. Banlung City" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                      <div className="flex items-start gap-2 mt-2 px-1">
+                        <Info size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                        <p className="text-xs text-gray-500">This will be used for your unique URL link: <span className="font-semibold text-gray-700">scandine.xyz/{previewNameEn ? previewNameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'your-shop'}</span></p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Name <span className="text-gray-400 font-normal">(Optional)</span></label>
+                      <input name="name_kh" value={previewNameKh} onChange={e => setPreviewNameKh(e.target.value)} placeholder="e.g. បានលុង ស៊ីធី" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                      <p className="text-xs text-gray-500 mt-1.5 ml-1">If your shop has a name in the local language, enter it here.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">How should we display your name?</label>
+                      <select name="nameDisplay" value={previewDisplay} onChange={e => setPreviewDisplay(e.target.value)} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 cursor-pointer shadow-sm">
+                        <option value="EN">Show Main Name Only</option>
+                        <option value="KH">Show Local Name Only</option>
+                        <option value="BOTH">Show Both Names</option>
                       </select>
-                   </div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Address</label><input name="address" defaultValue={settings.address || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone</label><input name="phone" defaultValue={settings.phone || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/></div>
-                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Opening Hours</label>
-                     <input name="openingHours" defaultValue={settings.openingHours || ''} placeholder="e.g. 8:00 AM - 10:00 PM" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
-                   </div>
-                   <div className="flex justify-end pt-2"><button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">{isSaving ? 'Saving...' : <><Save size={16}/> Save Identity</>}</button></div>
+                    </div>
+                  </div>
+
+                  <hr className="border-gray-100" />
+
+                  {/* Details Sub-section */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Address</label>
+                      <input name="address" defaultValue={settings.address || ''} placeholder="e.g. Street 123, Phnom Penh" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Phone Number</label>
+                      <input name="phone" defaultValue={settings.phone || ''} placeholder="e.g. 012 345 678" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="block text-sm font-semibold text-gray-800 mb-2">Operating Hours</label>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                          <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <input 
+                            type="time" 
+                            value={openTime}
+                            onChange={(e) => setOpenTime(e.target.value)}
+                            className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-gray-400 font-medium text-sm">to</span>
+                        <div className="relative flex-1">
+                           <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <input 
+                            type="time" 
+                            value={closeTime}
+                            onChange={(e) => setCloseTime(e.target.value)}
+                            className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 shadow-sm cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-gray-100">
+                     <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                       {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
+                       {isSaving ? 'Saving...' : 'Save Changes'}
+                     </button>
+                  </div>
                 </form>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => toggleSection('branding')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Palette size={20}/></div><div className="text-left font-bold text-gray-800">Branding & Design</div></div>{openSection === 'branding' ? <ChevronUp/> : <ChevronDown/>}
+            {/* Branding Section */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+              <button onClick={() => toggleSection('branding')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center">
+                   <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+                     <Palette size={20}/>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-gray-900 text-base">Branding & Design</h3>
+                     <p className="text-xs text-gray-500 mt-0.5">Customize how your menu looks</p>
+                   </div>
+                 </div>
+                 {openSection === 'branding' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
               </button>
+              
               <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form action={async (formData) => { setIsSaving(true); if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); setIsSaving(false); showToast("Branding updated!"); }} className="p-5 border-t border-gray-50 space-y-6">
+                <form action={async (formData) => { setIsSaving(true); if (logoFileBlob) formData.set('logo', logoFileBlob, 'logo.webp'); await updateShopBranding(formData); setIsDirtyLogo(false); setLogoFileBlob(null); setIsSaving(false); showToast("Branding updated!"); }} className="p-6 border-t border-gray-100 space-y-6">
                    
-                   <div className="space-y-3">
+                   <div className="space-y-4">
                       <div className="flex justify-between items-center">
-                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Header Layout Preview</label>
+                         <label className="block text-sm font-semibold text-gray-800">Menu Header Style</label>
                          <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md uppercase tracking-wider">
                            {headerDesign.replace('design', 'Design ')}
                          </span>
                       </div>
 
-                      <div className="w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm mb-4 group">
+                      <div className="w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm group">
                          <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/90 backdrop-blur text-gray-800 rounded-full shadow-md hover:bg-white transition-all opacity-100 active:scale-95">
                            <ChevronLeft size={18}/>
                          </button>
@@ -925,34 +1025,50 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                       <div className="flex justify-center pt-2">
                          <div className="flex items-center gap-3 flex-wrap">
-                            <button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-bold bg-white border border-gray-200 px-6 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700 active:scale-95 transition-all">
-                               <ImageIcon size={16}/> {logoPreview ? 'Change Logo' : 'Upload Logo'}
+                            <button type="button" onClick={() => logoInputRef.current?.click()} className="text-sm font-semibold bg-white border border-gray-300 px-6 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700 active:scale-95 transition-all">
+                               <ImageIcon size={16}/> {logoPreview ? 'Change Logo Image' : 'Upload Logo Image'}
                             </button>
-                            {isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-bold text-red-500 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
+                            {isDirtyLogo && <button type="button" onClick={cancelLogoChange} className="text-sm font-semibold text-red-600 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
                          </div>
                       </div>
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
                    </div>
 
                    <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Theme Color</label>
-                      <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => setThemeColorPreview(e.target.value)} className="h-14 w-full rounded-2xl bg-white p-1 cursor-pointer border border-gray-200 shadow-sm"/>
+                      <label className="block text-sm font-semibold text-gray-800 mb-2">Theme Color</label>
+                      <div className="flex items-center gap-4">
+                        <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => setThemeColorPreview(e.target.value)} className="h-12 w-16 rounded-xl bg-white p-1 cursor-pointer border border-gray-300 shadow-sm"/>
+                        <span className="text-sm font-mono text-gray-500 uppercase">{themeColorPreview}</span>
+                      </div>
                    </div>
-                   <div className="flex justify-end pt-2">
-                       <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">
-                         {isSaving ? 'Saving...' : <><Save size={16}/> Save Branding</>}
+
+                   <div className="flex justify-end pt-4">
+                       <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                         {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
+                         {isSaving ? 'Saving...' : 'Save Design'}
                        </button>
                    </div>
                 </form>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => toggleSection('banners')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2 bg-yellow-50 text-yellow-600 rounded-xl"><ImageIcon size={20}/></div><div className="text-left font-bold text-gray-800">Promotional Banners</div></div>{openSection === 'banners' ? <ChevronUp/> : <ChevronDown/>}
+            {/* Promotional Banners */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+              <button onClick={() => toggleSection('banners')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center">
+                   <div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-xl">
+                     <ImageIcon size={20}/>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-gray-900 text-base">Promotional Banners</h3>
+                     <p className="text-xs text-gray-500 mt-0.5">Add sliding banners to your menu</p>
+                   </div>
+                 </div>
+                 {openSection === 'banners' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
               </button>
+              
               <div className={openSection === 'banners' ? 'block' : 'hidden'}>
-                <div className="p-5 border-t border-gray-50 space-y-4">
+                <div className="p-6 border-t border-gray-100 space-y-4">
                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                      {optBanners.map((b, index) => (
                        <div 
@@ -961,13 +1077,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          onDragStart={(e) => handleDragStart(e, index)}
                          onDragOver={(e) => handleDragOver(e, index)}
                          onDrop={(e) => handleDrop(e, index)}
-                         className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-100'} shadow-sm group bg-white flex items-center justify-center cursor-move`}
+                         className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-200'} shadow-sm group bg-gray-50 flex items-center justify-center cursor-move`}
                        >
                          <img src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                          
                          <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button>
-                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-md hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button>
+                            <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button>
                          </div>
 
                          <form action={async (fd) => {
@@ -985,41 +1101,65 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        </div>
                      ))}
                    </div>
-                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-gray-900 hover:text-gray-900 transition-all flex items-center justify-center gap-2 active:scale-[0.99]">
-                     <Plus size={16}/> Add New Banner
+                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-600 font-semibold text-sm hover:border-gray-400 hover:bg-gray-100 transition-all flex items-center justify-center gap-2 active:scale-[0.99]">
+                     <Plus size={16}/> Upload New Banner
                    </button>
                    <input type="file" accept="image/*" ref={bannerInputRef} onChange={(e) => onFileSelect(e, 'banner')} className="hidden" />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => toggleSection('socials')} className="w-full flex justify-between p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2 bg-pink-50 text-pink-600 rounded-xl"><Share2 size={20}/></div><div className="text-left font-bold text-gray-800">Social Media</div></div>{openSection === 'socials' ? <ChevronUp/> : <ChevronDown/>}
+            {/* Social Links */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+              <button onClick={() => toggleSection('socials')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center">
+                   <div className="p-2.5 bg-pink-50 text-pink-600 rounded-xl">
+                     <Share2 size={20}/>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-gray-900 text-base">Social Media Links</h3>
+                     <p className="text-xs text-gray-500 mt-0.5">Connect your social accounts</p>
+                   </div>
+                 </div>
+                 {openSection === 'socials' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
               </button>
+
               <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                <form action={async (fd) => { setIsSaving(true); await updateShopSocials(fd); setIsSaving(false); showToast("Socials saved!"); }} className="p-5 border-t border-gray-50 space-y-4">
+                <form action={async (fd) => { setIsSaving(true); await updateShopSocials(fd); setIsSaving(false); showToast("Socials saved!"); }} className="p-6 border-t border-gray-100 space-y-4">
                   <input type="hidden" name="socials" value={JSON.stringify(socialLinks)} />
                   {socialLinks.map((link) => (
-                    <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-3 bg-gray-50/50 rounded-2xl border border-gray-100 animate-in slide-in-from-left-2">
-                       <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-gray-200 shadow-sm">
+                    <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 animate-in slide-in-from-left-2 shadow-sm">
+                       <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-300 shadow-sm">
                           <span className="text-gray-500">{getPlatformIcon(link.platform)}</span>
-                          <select value={link.platform} onChange={(e) => updateSocialLink(link.id, 'platform', e.target.value)} className="bg-transparent text-sm font-bold outline-none cursor-pointer w-24">
+                          <select value={link.platform} onChange={(e) => updateSocialLink(link.id, 'platform', e.target.value)} className="bg-transparent text-sm font-semibold outline-none cursor-pointer w-24">
                             <option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option>
                           </select>
                        </div>
-                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 p-3 bg-white rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900 font-sans"/>
-                       <div className="flex items-center gap-2 justify-end">
-                          <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div></label>
-                          <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
+                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                       <div className="flex items-center gap-3 justify-end sm:pl-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/>
+                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div>
+                          </label>
+                          <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
                        </div>
                     </div>
                   ))}
-                  <button type="button" onClick={addSocialLink} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold text-sm hover:border-gray-900 hover:text-gray-900 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"><Plus size={16}/> Add New Link</button>
-                  <div className="flex justify-end pt-4"><button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex gap-2 hover:bg-gray-800 active:scale-95 transition disabled:opacity-50">{isSaving ? 'Saving...' : <><Save size={16}/> Save Socials</>}</button></div>
+                  
+                  <button type="button" onClick={addSocialLink} className="w-full py-4 bg-white border border-dashed border-gray-300 rounded-2xl text-gray-700 font-semibold text-sm hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99] shadow-sm">
+                    <Plus size={16}/> Add New Link
+                  </button>
+
+                  <div className="flex justify-end pt-4">
+                    <button disabled={isSaving} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                      {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
+                      {isSaving ? 'Saving...' : 'Save Social Links'}
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
+
           </div>
         )}
       </main>
@@ -1243,24 +1383,31 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required />
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required /></div>
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-gray-500">Discount (%)</label>
-                      <input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" />
-                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">Displayed as a sale badge on the customer menu</p>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Price ($)</label>
+                      <input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required />
                     </div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-gray-500">Category</label><select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                    <div className="space-y-1">
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
+                      <input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Category</label>
+                      <select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 cursor-pointer shadow-sm" required>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500">Preparation Time</label>
+                    <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Preparation Time</label>
                     <div className="relative flex items-center">
                       <input 
                         type="number" 
                         value={prepTime}
                         onChange={(e) => setPrepTime(e.target.value)}
                         placeholder="15" 
-                        className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 pr-12 font-sans" 
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm pr-12" 
                       />
                       <span className="absolute right-4 text-gray-400 font-medium text-sm pointer-events-none">min</span>
                       <input type="hidden" name="time" value={prepTime ? `${prepTime}min` : ''} />
@@ -1280,7 +1427,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           onChange={(e) => setIsHotSale(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-orange-500 peer-checked:border-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
                       </label>
                     </div>
                     {isHotSale && (
@@ -1292,7 +1439,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold mt-4 shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all">
+                  <button type="submit" className="w-full bg-[#0F172A] text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-4 text-sm">
                     {editingProduct ? 'Update Product' : 'Save Product'}
                   </button>
                </form>
@@ -1351,19 +1498,18 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-gray-500">Discount (%)</label>
-                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans" />
-                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">Displayed as a sale badge on the customer menu</p>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
+                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
                     </div>
                     {editingCategory && (
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-gray-500">Sort Order</label>
-                        <input name="sortOrder" type="number" placeholder="Sort Order" defaultValue={editingCategory.sortOrder} className="w-full p-3.5 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 font-sans" required />
+                        <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Sort Order</label>
+                        <input name="sortOrder" type="number" placeholder="Order" defaultValue={editingCategory.sortOrder} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required />
                       </div>
                     )}
                   </div>
 
-                  <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all mt-6">
+                  <button type="submit" className="w-full bg-[#0F172A] text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-6 text-sm">
                     {editingCategory ? 'Update' : 'Create'}
                   </button>
                </form>
