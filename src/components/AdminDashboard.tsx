@@ -660,7 +660,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         <div className="px-6 md:px-8 pb-6 md:pb-8 pt-20 md:pt-8 h-full flex flex-col overflow-hidden">
           <div className="mb-6 hidden md:block">
             <h1 className="font-bold text-xl font-sans line-clamp-1">{getShopNamePreview() || 'AdminPanel'}</h1>
-            <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${shopPlan === 'FREE' ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{shopPlan} PLAN</span>
+            <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${shopPlan === 'STARTER' ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{shopPlan} PLAN</span>
           </div>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>

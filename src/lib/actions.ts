@@ -271,7 +271,7 @@ export async function createProduct(formData: FormData) {
   const imageFile = formData.get('image') as File
   
   let imagePath = await uploadToSupabase(imageFile, 'products');
-  if (!imagePath) imagePath = '[https://images.unsplash.com/photo-1546069901-ba9599a7e63c](https://images.unsplash.com/photo-1546069901-ba9599a7e63c)';
+  if (!imagePath) imagePath = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
 
   await prisma.product.create({
     data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
@@ -459,7 +459,10 @@ export async function updateShopPlan(formData: FormData) {
   const id = formData.get('id') as string;
   const plan = formData.get('plan') as string;
   try {
-    await prisma.shop.update({ where: { id }, data: { plan } });
+    await prisma.shop.update({ 
+      where: { id }, 
+      data: { plan } 
+    });
     revalidatePath('/superadmin');
   } catch (error) {
     console.error("Failed to update shop plan:", error);
@@ -542,6 +545,288 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
     revalidatePath(`/superadmin/shop/${shopId}`);
   } catch (error) {
     console.error("Super Admin Delete Failed:", error);
+  }
+}
+
+export async function importMenuData(formData: FormData) {
+  const shopId = formData.get('shopId') as string;
+  const importMode = formData.get('importMode') as string || 'skip';
+  const file = formData.get('excelFile') as File | null;
+
+  if (!shopId) {
+    return { success: false, error: "Shop ID is required for import." };
+  }
+  
+  if (!file || file.size === 0 || file.name === 'undefined') {
+    return { success: false, error: "Please provide a valid CSV file." };
+  }
+
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    return { success: false, error: "For safety, only .csv files are supported in this version." };
+  }
+
+  try {
+    const text = await file.text();
+    
+    // Stash the parsed text safely in Supabase for the confirm step
+    try {
+      await supabase.storage.from('uploads').upload(`imports/${shopId}.txt`, Buffer.from(text), {
+        contentType: 'text/plain',
+        upsert: true
+      });
+    } catch (e) {
+      console.warn("Temp file upload to Supabase failed.", e);
+    }
+
+    const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
+
+    if (rows.length < 2) {
+      return { success: false, error: "The file appears to be empty or missing data rows." };
+    }
+
+    const parseCSVRow = (row: string) => {
+      const result = [];
+      let insideQuotes = false;
+      let currentVal = '';
+      for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+        if (char === '"' && row[i+1] === '"') {
+           currentVal += '"';
+           i++;
+        } else if (char === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+          result.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      result.push(currentVal.trim());
+      return result;
+    };
+
+    const headers = parseCSVRow(rows[0]).map(h => h.toLowerCase());
+    
+    // Validate template columns exist
+    if (!headers[0].includes('category') || !headers[1].includes('product')) {
+       return { success: false, error: "Invalid template format. Please download and use the provided CSV template." };
+    }
+
+    let validCount = 0;
+    let invalidCount = 0;
+    const missingFields: string[] = [];
+    const duplicates: string[] = [];
+    const seenProducts = new Set<string>();
+
+    // Check existing DB products to warn about duplicates
+    const existingProducts = await prisma.product.findMany({
+      where: { shopId },
+      include: { category: true }
+    });
+    existingProducts.forEach(p => {
+      seenProducts.add(`${p.category.name}-${p.name}`.toLowerCase());
+    });
+
+    for (let i = 1; i < rows.length; i++) {
+      const cols = parseCSVRow(rows[i]);
+      if (cols.length < 2 || (!cols[0] && !cols[1])) continue; // Skip empty rows
+
+      const categoryName = cols[0]?.trim();
+      const productName = cols[1]?.trim();
+      const priceStr = cols[4]?.trim();
+
+      let isValid = true;
+      const missing = [];
+
+      if (!categoryName) missing.push("Category Name");
+      if (!productName) missing.push("Product Name");
+      if (!priceStr || isNaN(parseFloat(priceStr))) missing.push("Price");
+
+      if (missing.length > 0) {
+        isValid = false;
+        if (missingFields.length < 5) {
+           missingFields.push(`Row ${i + 1}: Missing ${missing.join(', ')}`);
+        }
+      }
+
+      if (isValid) {
+        validCount++;
+        const prodKey = `${categoryName}-${productName}`.toLowerCase();
+        
+        if (seenProducts.has(prodKey)) {
+          if (importMode === 'skip') {
+            if (duplicates.length < 5) duplicates.push(`Will skip: ${productName} in ${categoryName}`);
+          } else {
+            if (duplicates.length < 5) duplicates.push(`Will duplicate: ${productName} in ${categoryName}`);
+          }
+        }
+        seenProducts.add(prodKey);
+      } else {
+        invalidCount++;
+      }
+    }
+
+    if (missingFields.length >= 5) missingFields.push("...and more missing fields");
+    if (duplicates.length >= 5) duplicates.push("...and more duplicate warnings");
+
+    return { 
+      success: true, 
+      previewSummary: {
+        total: validCount + invalidCount,
+        valid: validCount,
+        invalid: invalidCount,
+        missing: missingFields,
+        duplicates: duplicates,
+        importMode
+      }
+    };
+  } catch (error: any) {
+    console.error("Import parse error:", error);
+    return { success: false, error: "Failed to parse the file. Please ensure it is a valid CSV." };
+  }
+}
+
+export async function executeMenuImport(formData: FormData) {
+  const shopId = formData.get('shopId') as string;
+  const importMode = formData.get('importMode') as string || 'skip';
+  
+  if (!shopId) return { success: false, error: "Shop ID is required." };
+
+  try {
+    const { data, error } = await supabase.storage.from('uploads').download(`imports/${shopId}.txt`);
+    if (error || !data) {
+      return { success: false, error: "Import session expired or file missing. Please upload the CSV again." };
+    }
+
+    const text = await data.text();
+    const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
+    if (rows.length < 2) return { success: false, error: "No data rows found." };
+
+    const parseCSVRow = (row: string) => {
+      const result = [];
+      let insideQuotes = false;
+      let currentVal = '';
+      for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+        if (char === '"' && row[i+1] === '"') {
+           currentVal += '"';
+           i++;
+        } else if (char === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+          result.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      result.push(currentVal.trim());
+      return result;
+    };
+
+    const parsedItems = [];
+    for (let i = 1; i < rows.length; i++) {
+      const cols = parseCSVRow(rows[i]);
+      if (cols.length < 2 || (!cols[0] && !cols[1])) continue;
+
+      parsedItems.push({
+        _row: i,
+        categoryName: cols[0]?.trim() || 'Uncategorized',
+        productName: cols[1]?.trim() || 'Unnamed Product',
+        nameKh: cols[2]?.trim() || null,
+        nameZh: cols[3]?.trim() || null,
+        price: parseFloat(cols[4]) || 0,
+        discount: parseFloat(cols[5]) || 0,
+        preparationTime: cols[6]?.trim() || '15min',
+        imageUrl: cols[7]?.trim() || null,
+        isPopular: (cols[8] || '').toLowerCase() === 'true',
+        description: cols[9]?.trim() || null
+      });
+    }
+
+    // DB Inserts
+    const existingCategories = await prisma.category.findMany({ where: { shopId } });
+    const categoryMap = new Map(existingCategories.map(c => [c.name.toLowerCase(), c.id]));
+    let maxCatSortOrder = existingCategories.reduce((max, c) => Math.max(max, c.sortOrder), 0);
+
+    const existingProducts = await prisma.product.findMany({ where: { shopId }, include: { category: true } });
+    const existingProductKeys = new Set(existingProducts.map(p => `${p.category?.name || 'Uncategorized'}-${p.name}`.toLowerCase()));
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const skipDetails: string[] = [];
+    const failDetails: string[] = [];
+
+    for (const item of parsedItems) {
+       // Validate minimum requirements for safe insertion
+       if (!item.categoryName || !item.productName || isNaN(item.price)) {
+          failedCount++;
+          if (failDetails.length < 5) failDetails.push(`Row ${item._row + 1}: Missing fields for ${item.productName || 'unknown product'}`);
+          continue;
+       }
+
+       const catKey = item.categoryName.toLowerCase();
+       let categoryId = categoryMap.get(catKey);
+       
+       if (!categoryId) {
+          maxCatSortOrder++;
+          const newCat = await prisma.category.create({
+             data: {
+                name: item.categoryName,
+                sortOrder: maxCatSortOrder,
+                discount: 0,
+                shopId
+             }
+          });
+          categoryId = newCat.id;
+          categoryMap.set(catKey, categoryId);
+       }
+
+       const prodKey = `${item.categoryName}-${item.productName}`.toLowerCase();
+       
+       if (importMode === 'skip' && existingProductKeys.has(prodKey)) {
+          skippedCount++;
+          if (skipDetails.length < 5) skipDetails.push(`Duplicate skipped: ${item.productName} in ${item.categoryName}`);
+       } else {
+          await prisma.product.create({
+             data: {
+                name: item.productName,
+                name_kh: item.nameKh,
+                name_zh: item.nameZh,
+                price: item.price,
+                discount: item.discount,
+                categoryId: categoryId,
+                time: item.preparationTime || '15min',
+                image: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+                rating: 5.0,
+                description: item.description || '',
+                isPopular: item.isPopular,
+                shopId: shopId
+             }
+          });
+          existingProductKeys.add(prodKey); // Ensure within-file duplicates are skipped if mode is skip
+          importedCount++;
+       }
+    }
+
+    // Clean up temporary file
+    await supabase.storage.from('uploads').remove([`imports/${shopId}.txt`]);
+
+    return { 
+       success: true,
+       summary: {
+          imported: importedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+          skipReasons: skipDetails,
+          failReasons: failDetails
+       }
+    };
+  } catch (error: any) {
+    console.error("Execute import error:", error);
+    return { success: false, error: "Failed to process import into database." };
   }
 }
 
