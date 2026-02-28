@@ -21,7 +21,8 @@ export default async function AdminPage() {
   const shopId = shop.id;
 
   // SECURITY GUARD: Prevent access to locked or soft-deleted shops
-  if (shop.status === 'LOCKED' || shop.deletedAt) {
+  // FIX: Cast shop to any to avoid TS error on deletedAt if local types are outdated
+  if (shop.status === 'LOCKED' || (shop as any).deletedAt) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4 font-sans text-center">
          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 max-w-md w-full">
@@ -47,44 +48,59 @@ export default async function AdminPage() {
     orderBy: { sortOrder: 'asc' }
   });
 
-  const products = await prisma.product.findMany({
+  const rawProducts = await prisma.product.findMany({
     where: { shopId },
     include: { category: true },
     orderBy: { createdAt: 'desc' }
   });
+
+  // FIX: Map raw products to ensure 'time' is a strictly typed string
+  const formattedProducts = rawProducts.map(p => ({
+    id: p.id,
+    name: p.name,
+    name_kh: p.name_kh,
+    name_zh: p.name_zh,
+    price: p.price,
+    image: p.image,
+    category: {
+        name: p.category.name,
+        discount: p.category.discount
+    },
+    time: p.time || '15min', // Safe fallback prevents TS mismatch
+    isPopular: p.isPopular,
+    discount: p.discount
+  }));
 
   const banners = await prisma.banner.findMany({
     where: { shopId, deletedAt: null },
     orderBy: { sortOrder: 'asc' }
   });
 
-  let settings = await prisma.shopSettings.findUnique({
+  const dbSettings = await prisma.shopSettings.findUnique({
     where: { shopId }
   });
 
   // Provide fallback to avoid undefined crashes if settings table is completely empty
-  if (!settings) {
-    settings = {
-      id: "default", 
-      name: shop.name || "My Shop", 
-      name_kh: "",
-      nameDisplay: "EN",
-      address: "", 
-      phone: "", 
-      openingHours: "",
-      themeColor: "#000000",
-      headerDesign: "design1",
-      logo: "", 
-      socials: "[]",
-      shopId: shopId
-    } as any;
-  }
+  const settings = dbSettings || {
+    id: "default", 
+    name: shop.name || "My Shop", 
+    name_kh: "",
+    nameDisplay: "EN",
+    address: "", 
+    phone: "", 
+    openingHours: "",
+    themeColor: "#000000",
+    headerDesign: "design1",
+    logo: "", 
+    socials: "[]",
+    shopId: shopId
+  };
 
   return (
     <AdminDashboard 
       categories={categories}
-      products={products}
-      settings={settings}
+      products={formattedProducts}
+      settings={settings as any} // Cast as any to satisfy strict interface matching locally
       shopSlug={shop.id} // FIXED: Used shopId as the URL slug for live view and QR codes
       banners={banners}
       shopPlan={currentPlan}
