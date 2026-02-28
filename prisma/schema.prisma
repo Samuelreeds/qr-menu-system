@@ -8,9 +8,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // --- USER MODEL ---
@@ -22,6 +21,7 @@ model User {
   lockoutUntil     DateTime?
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
+  isSuperAdmin     Boolean   @default(false)
   shopUsers        ShopUser[]
 }
 
@@ -34,7 +34,14 @@ model Shop {
   status      String    @default("ACTIVE") 
   trialEndsAt DateTime?
   paidUntil   DateTime?
+  
+  // LIMIT OVERRIDES
+  overrideMaxProducts   Int?
+  overrideMaxCategories Int?
+  overrideMaxBanners    Int?
+
   createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
 
   shopUsers   ShopUser[]
   categories  Category[]
@@ -110,7 +117,6 @@ model Banner {
   image     String
   sortOrder Int      @default(0)
   deletedAt DateTime?
-  
   shopId    String
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   
@@ -138,4 +144,42 @@ model ShopSettings {
 
   shopId        String  @unique 
   shop          Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// --- PLAN MODEL ---
+model Plan {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  priceMonthly      Float    @default(0)
+  priceYearly       Float    @default(0)
+  status            String   @default("ACTIVE")
+  order             Int      @default(0)
+  allowTrial        Boolean  @default(false)
+  trialDays         Int      @default(14)
+  isRecommended     Boolean  @default(false)
+
+  // LIMITS
+  maxProducts       Int      @default(0)
+  maxCategories     Int      @default(0)
+  maxBanners        Int      @default(0)
+  maxQrThemes       Int      @default(0)
+  aiUploadLimit     Int      @default(0)
+
+  // FEATURE TOGGLES
+  featPreparationTime   Boolean @default(false)
+  featCampaign          Boolean @default(false)
+  featCoverBanner       Boolean @default(false)
+  featSmartCategories   Boolean @default(false)
+  featUploadImageMenu   Boolean @default(false)
+  featAlertBarista      Boolean @default(false)
+  featPos               Boolean @default(false)
+  featOrderFromTable    Boolean @default(false)
+  featMultipleLanguage  Boolean @default(false)
+  featCustomDomain      Boolean @default(false)
+  featDedicatedSupport  Boolean @default(false)
+  featAiUpload          Boolean @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

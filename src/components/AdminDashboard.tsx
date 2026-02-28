@@ -16,7 +16,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, AlertTriangle, Star
+  Info, Loader2, Clock, AlertTriangle, Star, Lock
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -61,6 +61,8 @@ interface AdminDashboardProps {
   settings: ShopSettings; 
   shopSlug: string; 
   banners?: Banner[];
+  shopPlan?: string;
+  planLimits?: any;
 }
 
 type OptimisticAction<T> = 
@@ -73,7 +75,7 @@ type OptimisticBannerAction =
   | { type: 'delete'; payload: string }
   | { type: 'set'; payload: Banner[] };
 
-export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [] }: AdminDashboardProps) {
+export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [], shopPlan, planLimits }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
@@ -91,16 +93,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
 
-  const [previewNameEn, setPreviewNameEn] = useState(settings.name || '');
-  const [previewNameKh, setPreviewNameKh] = useState(settings.name_kh || '');
-  const [previewDisplay, setPreviewDisplay] = useState(settings.nameDisplay || 'EN');
+  const [previewNameEn, setPreviewNameEn] = useState(settings?.name || '');
+  const [previewNameKh, setPreviewNameKh] = useState(settings?.name_kh || '');
+  const [previewDisplay, setPreviewDisplay] = useState(settings?.nameDisplay || 'EN');
   
-  const [address, setAddress] = useState(settings.address || '');
-  const [phone, setPhone] = useState(settings.phone || '');
+  const [address, setAddress] = useState(settings?.address || '');
+  const [phone, setPhone] = useState(settings?.phone || '');
 
-  // Parse existing opening hours or set defaults
+  // Parse existing opening hours safely or set defaults
   const getInitialHours = () => {
-    if (!settings.openingHours) return { open: '08:00', close: '22:00' };
+    if (!settings?.openingHours) return { open: '08:00', close: '22:00' };
     const parts = settings.openingHours.split(' - ');
     if (parts.length === 2) {
       return { open: parts[0], close: parts[1] };
@@ -126,8 +128,19 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
 
-  const [headerDesign, setHeaderDesign] = useState(settings.headerDesign || 'design1');
-  const [themeColorPreview, setThemeColorPreview] = useState(settings.themeColor || '#000000');
+  // Safely assign properties with fallback limits based on the current plan state
+  const safeLimits = planLimits || {
+    maxProducts: 0,
+    maxCategories: 0,
+    maxBanners: 0,
+    premiumThemes: false,
+    customSocials: false,
+  };
+  const canUsePremiumThemes = safeLimits.premiumThemes;
+  const canUseCustomSocials = safeLimits.customSocials;
+
+  const [headerDesign, setHeaderDesign] = useState(settings?.headerDesign || 'design1');
+  const [themeColorPreview, setThemeColorPreview] = useState(settings?.themeColor || '#000000');
 
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({});
   const [pendingNav, setPendingNav] = useState<{ type: 'tab' | 'section', payload: any, source: string } | null>(null);
@@ -179,7 +192,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [logoPreview, setLogoPreview] = useState(settings.logo || '');
+  const [logoPreview, setLogoPreview] = useState(settings?.logo || '');
   const [isDirtyLogo, setIsDirtyLogo] = useState(false);
   const [logoFileBlob, setLogoFileBlob] = useState<Blob | null>(null);
 
@@ -190,12 +203,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [productFileBlob, setProductFileBlob] = useState<Blob | null>(null);
 
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => {
-    try { return settings.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
+    try { return settings?.socials ? JSON.parse(settings.socials) : []; } catch { return []; }
   });
 
   const hasCategory = optCategories.length > 0;
   const hasProduct = optProducts.length > 0;
-  const hasSettings = !!settings.address || !!settings.logo || !!settings.phone;
+  const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
   useEffect(() => {
@@ -205,7 +218,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     return () => window.removeEventListener('afterprint', afterPrint);
   }, []);
 
-  useEffect(() => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); }, [settings.logo]);
+  useEffect(() => { setLogoPreview(settings?.logo || ''); setIsDirtyLogo(false); }, [settings?.logo]);
 
   useEffect(() => {
     if (editingProduct) {
@@ -255,14 +268,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
-  // Directly reflect the name display logic chosen
   const getShopNamePreview = () => {
     if (previewDisplay === 'KH' && previewNameKh) return previewNameKh;
     if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`;
     return previewNameEn || 'Shop Name';
   };
 
-  // --- NAVIGATION & UNSAVED CHANGES LOGIC ---
   const executeNav = (type: 'tab' | 'section', payload: any) => {
     if (type === 'tab') {
       setActiveTab(payload);
@@ -295,22 +306,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const discardChanges = (source: string) => {
     if (source === 'identity') {
-      setPreviewNameEn(settings.name || '');
-      setPreviewNameKh(settings.name_kh || '');
-      setPreviewDisplay(settings.nameDisplay || 'EN');
-      setAddress(settings.address || '');
-      setPhone(settings.phone || '');
+      setPreviewNameEn(settings?.name || '');
+      setPreviewNameKh(settings?.name_kh || '');
+      setPreviewDisplay(settings?.nameDisplay || 'EN');
+      setAddress(settings?.address || '');
+      setPhone(settings?.phone || '');
       const initH = getInitialHours();
       setOpenTime(initH.open);
       setCloseTime(initH.close);
     } else if (source === 'branding') {
-      setHeaderDesign(settings.headerDesign || 'design1');
-      setThemeColorPreview(settings.themeColor || '#000000');
-      setLogoPreview(settings.logo || '');
+      setHeaderDesign(settings?.headerDesign || 'design1');
+      setThemeColorPreview(settings?.themeColor || '#000000');
+      setLogoPreview(settings?.logo || '');
       setIsDirtyLogo(false);
       setLogoFileBlob(null);
     } else if (source === 'socials') {
-      try { setSocialLinks(settings.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); }
+      try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); }
     }
   };
 
@@ -364,7 +375,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     const fd = new FormData();
     fd.set('socials', JSON.stringify(socialLinks));
     try {
-      await updateShopSocials(fd); 
+      const res = await updateShopSocials(fd); 
+      if (res?.error) {
+        showToast(res.error);
+        return false;
+      }
       showToast("Social Media Links saved!"); 
       clearDirty('socials');
       return true;
@@ -492,14 +507,23 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             });
           });
           
-          addBanner(fd).then(() => showToast("Banner added!"));
+          const res = await addBanner(fd);
+          if (res?.error) {
+            showToast(res.error);
+            // Revert optimistic update
+            startTransition(() => {
+              dispatchOptBanners({ type: 'delete', payload: tempId });
+            });
+          } else {
+            showToast("Banner added!");
+          }
         }
         setCropImageSrc(null); setCropTarget(null);
       }
     } catch (e) { console.error(e); }
   };
 
-  const cancelLogoChange = () => { setLogoPreview(settings.logo || ''); setIsDirtyLogo(false); setLogoFileBlob(null); };
+  const cancelLogoChange = () => { setLogoPreview(settings?.logo || ''); setIsDirtyLogo(false); setLogoFileBlob(null); };
 
   const addSocialLink = () => { setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]); markDirty('socials'); };
   const removeSocialLink = (id: string) => { setSocialLinks(socialLinks.filter(l => l.id !== id)); markDirty('socials'); };
@@ -634,7 +658,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-100 transition-transform duration-300 md:translate-x-0 md:static flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-6 md:px-8 pb-6 md:pb-8 pt-20 md:pt-8 h-full flex flex-col overflow-hidden">
-          <h1 className="font-bold text-xl mb-8 hidden md:block font-sans">{getShopNamePreview() || 'AdminPanel'}</h1>
+          <div className="mb-6 hidden md:block">
+            <h1 className="font-bold text-xl font-sans line-clamp-1">{getShopNamePreview() || 'AdminPanel'}</h1>
+            <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${shopPlan === 'FREE' ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{shopPlan} PLAN</span>
+          </div>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
             <button onClick={() => handleTabClick('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
@@ -723,8 +750,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
                     <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
                   </div>
-                  <button onClick={() => setIsFormOpen(true)} className="hidden md:flex shrink-0 bg-gray-900 text-white px-4 sm:px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm">
-                    <Plus size={18} strokeWidth={3}/> Add New
+                  <button 
+                    onClick={() => setIsFormOpen(true)} 
+                    disabled={optProducts.length >= safeLimits.maxProducts}
+                    className={`hidden md:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-4 sm:px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}
+                  >
+                    <Plus size={18} strokeWidth={3}/> {optProducts.length >= safeLimits.maxProducts ? 'Limit Reached' : 'Add New'}
                   </button>
                 </div>
              </div>
@@ -785,7 +816,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <form action={async (fd) => { 
                                 setDeletingId(item.id);
                                 startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                await deleteProduct(fd); 
+                                const res = await deleteProduct(fd); 
                                 setDeletingId(null);
                                 showToast("Product deleted"); 
                             }}>
@@ -914,7 +945,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
              {optProducts.length > 0 && (
                <button 
                  onClick={() => setIsFormOpen(true)}
-                 className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
+                 disabled={optProducts.length >= safeLimits.maxProducts}
+                 className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"
                >
                  <Plus size={24} strokeWidth={3} />
                </button>
@@ -927,8 +959,12 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
            <div className="animate-in fade-in duration-300">
              <div className="flex justify-between items-center gap-4 mb-6">
                  <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
-                <button onClick={() => setIsCatFormOpen(true)} className="hidden md:flex ml-auto shrink-0 bg-gray-900 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-gray-800 active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm">
-                  <Plus size={18} strokeWidth={3}/> Add New
+                <button 
+                  onClick={() => setIsCatFormOpen(true)} 
+                  disabled={optCategories.length >= safeLimits.maxCategories}
+                  className={`hidden md:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}
+                >
+                  <Plus size={18} strokeWidth={3}/> {optCategories.length >= safeLimits.maxCategories ? 'Limit Reached' : 'Add New'}
                 </button>
              </div>
              
@@ -970,7 +1006,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             {/* Mobile Primary Action for Categories (FAB) */}
             <button 
               onClick={() => setIsCatFormOpen(true)}
-              className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"
+              disabled={optCategories.length >= safeLimits.maxCategories}
+              className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"
             >
               <Plus size={24} strokeWidth={3} />
             </button>
@@ -1134,24 +1171,26 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          </span>
                       </div>
 
-                      <div className="w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm group">
-                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
+                      <div className={`w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm group ${!canUsePremiumThemes ? 'opacity-60 grayscale' : ''}`}>
+                         <button type="button" disabled={!canUsePremiumThemes} onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95 disabled:hidden">
                            <ChevronLeft size={18}/>
                          </button>
                          
-                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
+                         <button type="button" disabled={!canUsePremiumThemes} onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95 disabled:hidden">
                            <ChevronRight size={18}/>
                          </button>
 
+                         {canUsePremiumThemes && (
                          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-pulse">
                            <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm border border-white/10">
                              Tap to change layout
                            </span>
                          </div>
+                         )}
 
                          <header 
-                           onClick={handleNextDesign}
-                           className="relative overflow-hidden pb-8 pt-4 transition-colors duration-300 min-h-[140px] cursor-pointer" 
+                           onClick={canUsePremiumThemes ? handleNextDesign : undefined}
+                           className={`relative overflow-hidden pb-8 pt-4 transition-colors duration-300 min-h-[140px] ${canUsePremiumThemes ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                            style={{ background: themeColorPreview }}
                          >
                             <div className="absolute inset-0 bg-black/10 z-0 pointer-events-none" />
@@ -1211,10 +1250,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
                    </div>
 
-                   <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-2">Theme Color</label>
+                   <div className={`space-y-2 ${!canUsePremiumThemes ? 'opacity-50' : ''}`}>
+                      <div className="flex justify-between items-center">
+                        <label className="block text-sm font-semibold text-gray-800">Theme Color</label>
+                        {!canUsePremiumThemes && <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100"><Lock size={10}/> PRO</span>}
+                      </div>
                       <div className="flex items-center gap-4">
-                        <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className="h-12 w-16 rounded-xl bg-white p-1 cursor-pointer border border-gray-300 shadow-sm"/>
+                        <input name="themeColor" type="color" disabled={!canUsePremiumThemes} value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className={`h-12 w-16 rounded-xl bg-white p-1 border border-gray-300 shadow-sm ${canUsePremiumThemes ? 'cursor-pointer' : 'cursor-not-allowed'}`}/>
                         <span className="text-sm font-mono text-gray-500 uppercase">{themeColorPreview}</span>
                       </div>
                    </div>
@@ -1278,7 +1320,23 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        </div>
                      ))}
                    </div>
-                   <button type="button" onClick={() => bannerInputRef.current?.click()} className="w-full py-4 bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-600 font-semibold text-sm hover:border-gray-400 hover:bg-gray-100 transition-all flex items-center justify-center gap-2 active:scale-[0.99]">
+                   
+                   {optBanners.length >= safeLimits.maxBanners && (
+                     <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 my-2">
+                       <Info className="text-blue-500 shrink-0" size={20}/>
+                       <div className="text-xs text-blue-700 leading-relaxed">
+                         <p className="font-black mb-1 uppercase tracking-tight">Banner Limit Reached</p>
+                         <p>Your current plan allows for {safeLimits.maxBanners} active banner. Upgrade to add more promotions.</p>
+                       </div>
+                     </div>
+                   )}
+
+                   <button 
+                     type="button" 
+                     onClick={() => bannerInputRef.current?.click()} 
+                     disabled={optBanners.length >= safeLimits.maxBanners}
+                     className="w-full py-4 bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-600 font-semibold text-sm hover:border-gray-400 hover:bg-gray-100 transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
                      <Plus size={16}/> Upload New Banner
                    </button>
                    <input type="file" accept="image/*" ref={bannerInputRef} onChange={(e) => onFileSelect(e, 'banner')} className="hidden" />
@@ -1293,46 +1351,54 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    <div className="p-2.5 bg-pink-50 text-pink-600 rounded-xl">
                      <Share2 size={20}/>
                    </div>
-                   <div className="text-left">
+                   <div className="text-left flex items-center gap-2">
                      <h3 className="font-bold text-gray-900 text-base">Social Media Links</h3>
-                     <p className="text-xs text-gray-500 mt-0.5">Connect your social accounts</p>
+                     {!canUseCustomSocials && <Lock size={12} className="text-gray-300"/>}
                    </div>
                  </div>
                  {openSection === 'socials' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
               </button>
 
               <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                <form onSubmit={onSocialsSubmit} className="p-6 border-t border-gray-100 space-y-4">
-                  {socialLinks.map((link) => (
-                    <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 animate-in slide-in-from-left-2 shadow-sm">
-                       <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-300 shadow-sm">
-                          <span className="text-gray-500">{getPlatformIcon(link.platform)}</span>
-                          <select value={link.platform} onChange={(e) => updateSocialLink(link.id, 'platform', e.target.value)} className="bg-transparent text-sm font-semibold outline-none cursor-pointer w-24">
-                            <option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option>
-                          </select>
-                       </div>
-                       <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
-                       <div className="flex items-center gap-3 justify-end sm:pl-2">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/>
-                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div>
-                          </label>
-                          <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
-                       </div>
-                    </div>
-                  ))}
-                  
-                  <button type="button" onClick={addSocialLink} className="w-full py-4 bg-white border border-dashed border-gray-300 rounded-2xl text-gray-700 font-semibold text-sm hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99] shadow-sm">
-                    <Plus size={16}/> Add New Link
-                  </button>
-
-                  <div className="flex justify-end pt-4">
-                    <button type="submit" disabled={isSaving || !dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
-                      {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                      {dirtySections['socials'] ? (isSaving ? 'Saving...' : 'Save Social Links') : 'Saved'}
-                    </button>
+                {!canUseCustomSocials ? (
+                  <div className="bg-gray-50 border-t border-dashed border-gray-200 p-8 text-center">
+                    <Share2 className="mx-auto text-gray-300 mb-3" size={32}/>
+                    <p className="text-sm font-bold text-gray-600">Social Links Locked</p>
+                    <p className="text-[11px] text-gray-400 mt-1 leading-relaxed max-w-xs mx-auto">Connect Facebook, Instagram, and Telegram to your menu with a PRO plan.</p>
                   </div>
-                </form>
+                ) : (
+                  <form onSubmit={onSocialsSubmit} className="p-6 border-t border-gray-100 space-y-4">
+                    {socialLinks.map((link) => (
+                      <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 animate-in slide-in-from-left-2 shadow-sm">
+                         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-300 shadow-sm">
+                            <span className="text-gray-500">{getPlatformIcon(link.platform)}</span>
+                            <select value={link.platform} onChange={(e) => updateSocialLink(link.id, 'platform', e.target.value)} className="bg-transparent text-sm font-semibold outline-none cursor-pointer w-24">
+                              <option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option>
+                            </select>
+                         </div>
+                         <input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/>
+                         <div className="flex items-center gap-3 justify-end sm:pl-2">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/>
+                              <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div>
+                            </label>
+                            <button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
+                         </div>
+                      </div>
+                    ))}
+                    
+                    <button type="button" onClick={addSocialLink} className="w-full py-4 bg-white border border-dashed border-gray-300 rounded-2xl text-gray-700 font-semibold text-sm hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99] shadow-sm">
+                      <Plus size={16}/> Add New Link
+                    </button>
+
+                    <div className="flex justify-end pt-4">
+                      <button type="submit" disabled={isSaving || !dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                        {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
+                        {dirtySections['socials'] ? (isSaving ? 'Saving...' : 'Save Social Links') : 'Saved'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
 

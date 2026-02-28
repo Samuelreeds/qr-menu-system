@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import SuperAdminClient from './SuperAdminClient';
+import { PLAN_LIMITS } from '@/lib/shop-guard';
 
 // Force dynamic rendering to ensure stats are always up to date
 export const revalidate = 0; 
@@ -9,5 +10,112 @@ export default async function SuperAdminPage() {
   const invites = await prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
   const users = await prisma.user.findMany({ orderBy: { id: 'desc' } });
 
-  return <SuperAdminClient shops={shops} invites={invites} users={users} />;
+  // Transform hardcoded PLAN_LIMITS into a format suitable for the read-only UI
+  const hardcodedPlans = Object.entries(PLAN_LIMITS).map(([key, limits], index) => {
+    const featuresCount = [limits.premiumThemes, limits.customSocials].filter(Boolean).length;
+    const limitsCount = 5; 
+
+    return {
+      id: key, // Will match IDs like 'FREE', 'PRO', 'PREMIUM'
+      name: key,
+      slug: key.toLowerCase(),
+      priceMonthly: key === 'FREE' ? 0 : key === 'PRO' ? 15 : 39,
+      priceYearly: key === 'FREE' ? 0 : key === 'PRO' ? 150 : 390,
+      status: 'ACTIVE',
+      limitsCount,
+      featuresCount,
+      order: index + 1,
+      allowTrial: false,
+      trialDays: 14,
+      isRecommended: false,
+      limits: {
+        maxProducts: limits.maxProducts,
+        maxCategories: limits.maxCategories,
+        maxBanners: limits.maxBanners,
+        maxQrThemes: key === 'FREE' ? 1 : key === 'PRO' ? 3 : 10,
+        aiUploadLimit: key === 'FREE' ? 0 : key === 'PRO' ? 50 : 500,
+      },
+      featPreparationTime: false,
+      featCampaign: false,
+      featCoverBanner: false,
+      featSmartCategories: false,
+      featUploadImageMenu: false,
+      featAlertBarista: false,
+      featPos: false,
+      featOrderFromTable: false,
+      featMultipleLanguage: false,
+      featCustomDomain: false,
+      featDedicatedSupport: false,
+      featAiUpload: false,
+    };
+  });
+
+  // Fetch newly created/updated DB plans
+  let dbPlansRaw: any[] = [];
+  try {
+    if ((prisma as any).plan) {
+      dbPlansRaw = await (prisma as any).plan.findMany({ orderBy: { order: 'asc' } });
+    }
+  } catch (e) {
+    console.warn("Plan table might not be synced yet.", e);
+  }
+
+  // Build a map of the DB plans mapped to UI format
+  const dbPlanMap = new Map();
+  dbPlansRaw.forEach((p: any) => {
+    dbPlanMap.set(p.id, {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      priceMonthly: p.priceMonthly,
+      priceYearly: p.priceYearly,
+      status: p.status,
+      order: p.order,
+      allowTrial: p.allowTrial,
+      trialDays: p.trialDays,
+      isRecommended: p.isRecommended,
+      limitsCount: 5,
+      featuresCount: [
+        p.featPreparationTime, p.featCampaign, p.featCoverBanner, p.featSmartCategories, 
+        p.featUploadImageMenu, p.featAlertBarista, p.featPos, p.featOrderFromTable, 
+        p.featMultipleLanguage, p.featCustomDomain, p.featDedicatedSupport, p.featAiUpload
+      ].filter(Boolean).length,
+      limits: {
+          maxProducts: p.maxProducts,
+          maxCategories: p.maxCategories,
+          maxBanners: p.maxBanners,
+          maxQrThemes: p.maxQrThemes,
+          aiUploadLimit: p.aiUploadLimit
+      },
+      featPreparationTime: p.featPreparationTime,
+      featCampaign: p.featCampaign,
+      featCoverBanner: p.featCoverBanner,
+      featSmartCategories: p.featSmartCategories,
+      featUploadImageMenu: p.featUploadImageMenu,
+      featAlertBarista: p.featAlertBarista,
+      featPos: p.featPos,
+      featOrderFromTable: p.featOrderFromTable,
+      featMultipleLanguage: p.featMultipleLanguage,
+      featCustomDomain: p.featCustomDomain,
+      featDedicatedSupport: p.featDedicatedSupport,
+      featAiUpload: p.featAiUpload,
+    });
+  });
+
+  // Merge process: Favor DB plan over hardcoded plan if the IDs match
+  const finalPlans = [];
+  for (const hc of hardcodedPlans) {
+    if (dbPlanMap.has(hc.id)) {
+      finalPlans.push(dbPlanMap.get(hc.id));
+      dbPlanMap.delete(hc.id);
+    } else {
+      finalPlans.push(hc);
+    }
+  }
+  
+  // Add any completely new DB plans
+  finalPlans.push(...Array.from(dbPlanMap.values()));
+  finalPlans.sort((a, b) => a.order - b.order);
+
+  return <SuperAdminClient shops={shops} invites={invites} users={users} plans={finalPlans} />;
 }

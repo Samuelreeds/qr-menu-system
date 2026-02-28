@@ -7,6 +7,7 @@ import sharp from 'sharp'
 import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 import { getServerSession } from 'next-auth';
+import { canUseFeature, getLimit } from '@/lib/shop-guard';
 
 // --- SETUP ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -122,13 +123,18 @@ async function deleteFromSupabase(fullUrl: string | null) {
 
 // --- BANNER ACTIONS ---
 export async function addBanner(formData: FormData) {
-  const imageFile = formData.get('image') as File;
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
+  // ENFORCEMENT: Limit check
+  const limit = await getLimit(shopId, 'maxBanners');
+  const prismaAny = prisma as any;
+  const currentCount = await prismaAny.banner.count({ where: { shopId, deletedAt: null } });
+  if (currentCount >= limit) return { error: "Banner limit reached." };
+
+  const imageFile = formData.get('image') as File;
   const imagePath = await uploadToSupabase(imageFile, 'banners');
   if (imagePath) {
-    const prismaAny = prisma as any;
     const lastBanner = await prismaAny.banner.findFirst({
       where: { shopId },
       orderBy: { sortOrder: 'desc' }
@@ -199,12 +205,18 @@ export async function reorderBanners(banners: {id: string, sortOrder: number}[])
 
 // --- CATEGORY ACTIONS ---
 export async function createCategory(formData: FormData) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return;
+
+  // ENFORCEMENT: Limit check
+  const limit = await getLimit(shopId, 'maxCategories');
+  const currentCount = await prisma.category.count({ where: { shopId } });
+  if (currentCount >= limit) return { error: "Category limit reached." };
+
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const discount = parseFloat(formData.get('discount') as string) || 0;
-  const shopId = await getActiveShopId();
-  if (!shopId) return;
 
   const lastCategory = await prisma.category.findFirst({ 
     where: { shopId },
@@ -241,6 +253,14 @@ export async function deleteCategory(formData: FormData) {
 
 // --- PRODUCT ACTIONS ---
 export async function createProduct(formData: FormData) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return;
+
+  // ENFORCEMENT: Limit check
+  const limit = await getLimit(shopId, 'maxProducts');
+  const currentCount = await prisma.product.count({ where: { shopId } });
+  if (currentCount >= limit) return { error: "Product limit reached." };
+
   const name = formData.get('name') as string
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
@@ -249,11 +269,9 @@ export async function createProduct(formData: FormData) {
   const categoryId = formData.get('categoryId') as string
   const time = formData.get('time') as string || '15min'
   const imageFile = formData.get('image') as File
-  const shopId = await getActiveShopId();
-  if (!shopId) return;
   
   let imagePath = await uploadToSupabase(imageFile, 'products');
-  if (!imagePath) imagePath = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
+  if (!imagePath) imagePath = '[https://images.unsplash.com/photo-1546069901-ba9599a7e63c](https://images.unsplash.com/photo-1546069901-ba9599a7e63c)';
 
   await prisma.product.create({
     data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
@@ -331,15 +349,21 @@ export async function updateShopIdentity(formData: FormData) {
 }
 
 export async function updateShopBranding(formData: FormData) {
-  const themeColor = formData.get('themeColor') as string || '#000000';
-  const headerDesign = formData.get('headerDesign') as string || 'design1';
-  const logoFile = formData.get('logo') as File;
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
+  // ENFORCEMENT: Check if the user is authorized to save premium visuals
+  const canUseThemes = await canUseFeature(shopId, 'premiumThemes');
+  const logoFile = formData.get('logo') as File;
   const newLogoPath = await uploadToSupabase(logoFile, 'branding');
 
-  const dataToUpdate: any = { themeColor, headerDesign };
+  const dataToUpdate: any = {};
+  
+  if (canUseThemes) {
+    dataToUpdate.themeColor = formData.get('themeColor') as string || '#000000';
+    dataToUpdate.headerDesign = formData.get('headerDesign') as string || 'design1';
+  }
+
   if (newLogoPath) {
     const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { logo: true } });
     if (currentSettings?.logo) await deleteFromSupabase(currentSettings.logo);
@@ -349,15 +373,26 @@ export async function updateShopBranding(formData: FormData) {
   await prisma.shopSettings.upsert({
     where: { shopId },
     update: dataToUpdate,
-    create: { shopId, name: 'Scandine', themeColor, headerDesign, logo: newLogoPath || null }
+    create: { 
+      shopId, 
+      name: 'Scandine', 
+      logo: newLogoPath || null,
+      themeColor: canUseThemes ? (formData.get('themeColor') as string || '#000000') : '#000000',
+      headerDesign: canUseThemes ? (formData.get('headerDesign') as string || 'design1') : 'design1'
+    }
   });
   revalidatePath('/', 'layout');
 }
 
 export async function updateShopSocials(formData: FormData) {
-  const socials = formData.get('socials') as string;
   const shopId = await getActiveShopId();
   if (!shopId) return;
+  
+  // ENFORCEMENT: Block modification of socials if on free plan.
+  const canUseSocials = await canUseFeature(shopId, 'customSocials');
+  if (!canUseSocials) return { error: "Custom socials require an upgraded plan." };
+
+  const socials = formData.get('socials') as string;
   
   await prisma.shopSettings.upsert({
     where: { shopId },
@@ -423,7 +458,28 @@ export async function toggleShopStatus(formData: FormData) {
 export async function updateShopPlan(formData: FormData) {
   const id = formData.get('id') as string;
   const plan = formData.get('plan') as string;
-  await prisma.shop.update({ where: { id }, data: { plan } });
+  try {
+    await prisma.shop.update({ where: { id }, data: { plan } });
+    revalidatePath('/superadmin');
+  } catch (error) {
+    console.error("Failed to update shop plan:", error);
+  }
+}
+
+export async function updateShopLimits(formData: FormData) {
+  const id = formData.get('id') as string;
+  const maxProducts = formData.get('overrideMaxProducts') as string;
+  const maxCategories = formData.get('overrideMaxCategories') as string;
+  const maxBanners = formData.get('overrideMaxBanners') as string;
+
+  await prisma.shop.update({
+    where: { id },
+    data: {
+      overrideMaxProducts: maxProducts ? parseInt(maxProducts, 10) : null,
+      overrideMaxCategories: maxCategories ? parseInt(maxCategories, 10) : null,
+      overrideMaxBanners: maxBanners ? parseInt(maxBanners, 10) : null,
+    }
+  });
   revalidatePath('/superadmin');
 }
 
@@ -431,6 +487,34 @@ export async function deleteShop(formData: FormData) {
   const id = formData.get('id') as string;
   try { await prisma.shop.delete({ where: { id } }); } catch (e) {}
   revalidatePath('/superadmin');
+}
+
+export async function softDeleteShop(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    await prisma.shop.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+    revalidatePath('/superadmin');
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: "Failed to soft delete shop" };
+  }
+}
+
+export async function restoreShop(formData: FormData) {
+  const id = formData.get('id') as string;
+  try {
+    await prisma.shop.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+    revalidatePath('/superadmin');
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: "Failed to restore shop" };
+  }
 }
 
 export async function deleteUser(formData: FormData) {
@@ -458,6 +542,170 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
     revalidatePath(`/superadmin/shop/${shopId}`);
   } catch (error) {
     console.error("Super Admin Delete Failed:", error);
+  }
+}
+
+// --- PLAN MANAGEMENT ACTIONS ---
+export async function createPlan(formData: FormData) {
+  const name = formData.get('name') as string;
+  const slug = formData.get('slug') as string;
+  const status = formData.get('status') as string;
+  const order = parseInt(formData.get('order') as string) || 0;
+  const priceMonthly = parseFloat(formData.get('priceMonthly') as string) || 0;
+  const priceYearly = parseFloat(formData.get('priceYearly') as string) || 0;
+  const allowTrial = formData.get('allowTrial') === 'on';
+  const trialDays = parseInt(formData.get('trialDays') as string) || 14;
+  const isRecommended = formData.get('isRecommended') === 'on';
+
+  const maxProducts = parseInt(formData.get('maxProducts') as string) || 0;
+  const maxCategories = parseInt(formData.get('maxCategories') as string) || 0;
+  const maxBanners = parseInt(formData.get('maxBanners') as string) || 0;
+  const maxQrThemes = parseInt(formData.get('maxQrThemes') as string) || 0;
+  const aiUploadLimit = parseInt(formData.get('aiUploadLimit') as string) || 0;
+
+  const featPreparationTime = formData.get('featPreparationTime') === 'on';
+  const featCampaign = formData.get('featCampaign') === 'on';
+  const featCoverBanner = formData.get('featCoverBanner') === 'on';
+  const featSmartCategories = formData.get('featSmartCategories') === 'on';
+  const featUploadImageMenu = formData.get('featUploadImageMenu') === 'on';
+  const featAlertBarista = formData.get('featAlertBarista') === 'on';
+  const featPos = formData.get('featPos') === 'on';
+  const featOrderFromTable = formData.get('featOrderFromTable') === 'on';
+  const featMultipleLanguage = formData.get('featMultipleLanguage') === 'on';
+  const featCustomDomain = formData.get('featCustomDomain') === 'on';
+  const featDedicatedSupport = formData.get('featDedicatedSupport') === 'on';
+  const featAiUpload = formData.get('featAiUpload') === 'on';
+
+  try {
+    await (prisma as any).plan.create({
+      data: {
+        name,
+        slug: slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        status,
+        order,
+        priceMonthly,
+        priceYearly,
+        allowTrial,
+        trialDays,
+        isRecommended,
+        maxProducts,
+        maxCategories,
+        maxBanners,
+        maxQrThemes,
+        aiUploadLimit,
+        featPreparationTime,
+        featCampaign,
+        featCoverBanner,
+        featSmartCategories,
+        featUploadImageMenu,
+        featAlertBarista,
+        featPos,
+        featOrderFromTable,
+        featMultipleLanguage,
+        featCustomDomain,
+        featDedicatedSupport,
+        featAiUpload
+      }
+    });
+    revalidatePath('/superadmin');
+    return { success: true };
+  } catch (error: any) {
+    console.error("Failed to create plan:", error);
+    return { success: false, error: error.message || "Failed to create plan" };
+  }
+}
+
+export async function updatePlan(formData: FormData) {
+  const id = formData.get('id') as string;
+  const name = formData.get('name') as string;
+  const slug = formData.get('slug') as string || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const status = formData.get('status') as string;
+  const order = parseInt(formData.get('order') as string) || 0;
+  const priceMonthly = parseFloat(formData.get('priceMonthly') as string) || 0;
+  const priceYearly = parseFloat(formData.get('priceYearly') as string) || 0;
+  const allowTrial = formData.get('allowTrial') === 'on';
+  const trialDays = parseInt(formData.get('trialDays') as string) || 14;
+  const isRecommended = formData.get('isRecommended') === 'on';
+
+  const maxProducts = parseInt(formData.get('maxProducts') as string) || 0;
+  const maxCategories = parseInt(formData.get('maxCategories') as string) || 0;
+  const maxBanners = parseInt(formData.get('maxBanners') as string) || 0;
+  const maxQrThemes = parseInt(formData.get('maxQrThemes') as string) || 0;
+  const aiUploadLimit = parseInt(formData.get('aiUploadLimit') as string) || 0;
+
+  const featPreparationTime = formData.get('featPreparationTime') === 'on';
+  const featCampaign = formData.get('featCampaign') === 'on';
+  const featCoverBanner = formData.get('featCoverBanner') === 'on';
+  const featSmartCategories = formData.get('featSmartCategories') === 'on';
+  const featUploadImageMenu = formData.get('featUploadImageMenu') === 'on';
+  const featAlertBarista = formData.get('featAlertBarista') === 'on';
+  const featPos = formData.get('featPos') === 'on';
+  const featOrderFromTable = formData.get('featOrderFromTable') === 'on';
+  const featMultipleLanguage = formData.get('featMultipleLanguage') === 'on';
+  const featCustomDomain = formData.get('featCustomDomain') === 'on';
+  const featDedicatedSupport = formData.get('featDedicatedSupport') === 'on';
+  const featAiUpload = formData.get('featAiUpload') === 'on';
+
+  try {
+    const dataPayload = {
+      name, slug, status, order, priceMonthly, priceYearly, allowTrial, trialDays, isRecommended,
+      maxProducts, maxCategories, maxBanners, maxQrThemes, aiUploadLimit,
+      featPreparationTime, featCampaign, featCoverBanner, featSmartCategories, featUploadImageMenu,
+      featAlertBarista, featPos, featOrderFromTable, featMultipleLanguage, featCustomDomain,
+      featDedicatedSupport, featAiUpload
+    };
+
+    const existing = await (prisma as any).plan.findUnique({ where: { id } });
+
+    if (existing) {
+      await (prisma as any).plan.update({
+        where: { id },
+        data: dataPayload
+      });
+    } else {
+      await (prisma as any).plan.create({
+        data: {
+          id: id.length < 10 ? id : undefined, // Keep hardcoded short IDs like 'FREE', otherwise auto-generate CUID
+          ...dataPayload
+        }
+      });
+    }
+    
+    revalidatePath('/superadmin');
+    return { success: true };
+  } catch (error: any) {
+    console.error("Failed to update plan:", error);
+    return { success: false, error: error.message || "Failed to update plan. Ensure internal key is unique." };
+  }
+}
+
+export async function togglePlanStatus(formData: FormData) {
+  const id = formData.get('id') as string;
+  const currentStatus = formData.get('currentStatus') as string;
+  const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
+  try {
+    const existing = await (prisma as any).plan.findUnique({ where: { id } });
+    if (existing) {
+      await (prisma as any).plan.update({
+        where: { id },
+        data: { status: newStatus }
+      });
+    } else {
+      // Lazy-create the hardcoded plan if missing so we can store its inactive state
+      await (prisma as any).plan.create({
+        data: {
+          id: id.length < 10 ? id : undefined,
+          name: id,
+          slug: id.toLowerCase(),
+          status: newStatus
+        }
+      });
+    }
+    revalidatePath('/superadmin');
+    revalidatePath('/', 'layout');
+  } catch (error) {
+    console.error("Failed to toggle plan status:", error);
   }
 }
 

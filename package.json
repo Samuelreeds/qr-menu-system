@@ -2,8 +2,9 @@
   "name": "qr-menu",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "scripts": {
     "dev": "next dev",

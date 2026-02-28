@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import MenuClient from '@/components/MenuClient';
+import { getShopPlanState, PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
 
 export const revalidate = 0; 
 
@@ -30,9 +31,19 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     },
   });
 
-  if (!shop) {
+  // SECURITY GUARD: Prevent public access to locked or soft-deleted shops
+  if (!shop || shop.status === 'LOCKED' || shop.deletedAt) {
     notFound();
   }
+
+  // ENFORCEMENT: Fetch the effective capabilities for this shop to apply downgrade logic
+  const planState = await getShopPlanState(shop.id);
+  const currentPlan = (planState?.plan as PlanKey) || 'FREE';
+  const limits = PLAN_LIMITS[currentPlan];
+
+  const effectiveMaxBanners = planState?.overrideMaxBanners ?? limits.maxBanners;
+  const effectivePremiumThemes = limits.premiumThemes;
+  const effectiveCustomSocials = limits.customSocials;
 
   const safeSettings = shop.settings || {
     name: shop.name,
@@ -53,6 +64,8 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     socials: '[]', 
   };
 
+  // ENFORCEMENT: Strip out premium visuals if the current plan doesn't allow them.
+  // The database retains the actual values (preserving data), but we serve the defaults.
   const formattedSettings = {
     name: safeSettings.name || shop.name,
     name_kh: safeSettings.name_kh || '',
@@ -60,8 +73,8 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     address: safeSettings.address || '',
     phone: safeSettings.phone || '',
     openingHours: safeSettings.openingHours || '',
-    themeColor: safeSettings.themeColor || '#000000',
-    headerDesign: safeSettings.headerDesign || 'design1',
+    themeColor: effectivePremiumThemes ? (safeSettings.themeColor || '#000000') : '#000000',
+    headerDesign: effectivePremiumThemes ? (safeSettings.headerDesign || 'design1') : 'design1',
     logo: safeSettings.logo || '', 
     facebook: safeSettings.facebook || '',
     showFacebook: safeSettings.showFacebook || false,
@@ -69,7 +82,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: safeSettings.showInstagram || false,
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
-    socials: safeSettings.socials || '[]', 
+    socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
@@ -98,11 +111,14 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     discount: product.discount || 0,
   }));
 
-  const formattedBanners = (shop.banners || []).map((b: any) => ({
-    id: b.id,
-    image: b.image,
-    sortOrder: b.sortOrder,
-  }));
+  // ENFORCEMENT: Slice banners array if shop exceeds its allowed limit after downgrade.
+  const formattedBanners = (shop.banners || [])
+    .slice(0, effectiveMaxBanners)
+    .map((b: any) => ({
+      id: b.id,
+      image: b.image,
+      sortOrder: b.sortOrder,
+    }));
 
   return (
     <MenuClient

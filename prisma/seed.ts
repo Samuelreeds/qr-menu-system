@@ -7,10 +7,13 @@ async function main() {
   const hashedPassword = await bcrypt.hash('admin1234', 10) 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@gmail.com' },
-    update: {},
+    update: {
+      isSuperAdmin: true,
+    },
     create: {
       email: 'admin@gmail.com',
       password: hashedPassword,
+      isSuperAdmin: true,
     },
   })
 
@@ -20,6 +23,7 @@ async function main() {
     create: {
       name: 'Gourmet Shop',
       slug: 'default-shop',
+      plan: 'PRO', // Set default shop to PRO for testing purposes
       settings: {
         create: {
           name: 'Gourmet Shop',
@@ -27,6 +31,22 @@ async function main() {
           logo: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80',
         }
       }
+    }
+  })
+
+  // Ensure the admin user has access to the default shop
+  await prisma.shopUser.upsert({
+    where: {
+      userId_shopId: {
+        userId: admin.id,
+        shopId: shop.id
+      }
+    },
+    update: {},
+    create: {
+      userId: admin.id,
+      shopId: shop.id,
+      role: 'OWNER'
     }
   })
 
@@ -76,7 +96,6 @@ async function main() {
         rating: p.rating,
         time: p.time,
         image: p.image,
-        // Removed shopId to avoid conflict with nested relationship creation
         category: {
           connect: { id: categoryId }
         },
