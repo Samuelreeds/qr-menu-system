@@ -38,10 +38,11 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
 
   // ENFORCEMENT: Fetch the effective capabilities for this shop to apply downgrade logic
   const planState = await getShopPlanState(shop.id);
-  const currentPlan = (planState?.plan as PlanKey) || 'FREE';
+  const rawPlan = planState?.plan as string | undefined;
+  const currentPlan = rawPlan && rawPlan in PLAN_LIMITS ? (rawPlan as keyof typeof PLAN_LIMITS) : 'FREE';
   const limits = PLAN_LIMITS[currentPlan];
 
-  const effectiveMaxBanners = planState?.overrideMaxBanners ?? limits.maxBanners;
+  const effectiveMaxBanners = (planState as any)?.overrideMaxBanners ?? limits.maxBanners;
   const effectivePremiumThemes = limits.premiumThemes;
   const effectiveCustomSocials = limits.customSocials;
 

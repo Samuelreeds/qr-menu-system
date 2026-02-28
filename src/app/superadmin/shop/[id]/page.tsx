@@ -21,7 +21,8 @@ export default async function SuperAdminShopDetail({ params }: { params: Promise
 
   const ownerEmail = shop.shopUsers[0]?.user?.email || 'No owner email attached';
   
-  const currentPlan = (shop.plan as PlanKey) || 'FREE';
+  const rawPlan = shop.plan as string | undefined;
+  const currentPlan = rawPlan && rawPlan in PLAN_LIMITS ? (rawPlan as keyof typeof PLAN_LIMITS) : 'FREE';
   const defaults = PLAN_LIMITS[currentPlan];
 
   return (

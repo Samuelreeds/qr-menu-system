@@ -25,14 +25,13 @@ export const PLAN_LIMITS = {
   }
 } as const;
 
-export type FeatureKey = keyof typeof PLAN_LIMITS.FREE;
-export type PlanKey = keyof typeof PLAN_LIMITS;
+export type FeatureKey = string;
+export type PlanKey = string;
 
 // --- HELPERS ---
 
 /**
  * Returns the current plan and full shop record.
- * Centralizes the source of truth for a shop's subscription state.
  */
 export async function getShopPlanState(shopId: string) {
   const shop = await prisma.shop.findUnique({
@@ -53,48 +52,86 @@ export async function getShopPlanState(shopId: string) {
   
   return {
     ...shop,
-    plan: (shop.plan as PlanKey) || 'FREE'
+    plan: shop.plan || 'FREE'
   };
 }
 
 /**
- * Checks if a specific feature is enabled for the shop's plan.
+ * Resolves the ultimate limits and features for a shop.
+ * Priority: Per-Shop Overrides > Dynamic DB Plan Settings > Legacy Hardcoded Defaults
  */
-export async function canUseFeature(shopId: string, featureKey: FeatureKey): Promise<boolean> {
-  const state = await getShopPlanState(shopId);
-  if (!state) return false;
+export async function getShopLimitsAndFeatures(shopId: string) {
+  const state: any = await getShopPlanState(shopId);
+  if (!state) return null;
 
-  const limit = PLAN_LIMITS[state.plan][featureKey];
-  return typeof limit === 'boolean' ? limit : false;
+  const planKey = (state.plan as keyof typeof PLAN_LIMITS) in PLAN_LIMITS ? (state.plan as keyof typeof PLAN_LIMITS) : 'FREE';
+  const legacyLimits = PLAN_LIMITS[planKey];
+
+  let dbPlan: any = null;
+  try {
+    dbPlan = await (prisma as any).plan.findFirst({
+      where: { OR: [{ id: state.plan }, { slug: state.plan.toLowerCase() }] }
+    });
+  } catch (e) {
+    console.warn("Could not fetch DB plan:", e);
+  }
+
+  // 1. Resolve Limits
+  const maxProducts = state.overrideMaxProducts ?? dbPlan?.maxProducts ?? legacyLimits.maxProducts;
+  const maxCategories = state.overrideMaxCategories ?? dbPlan?.maxCategories ?? legacyLimits.maxCategories;
+  const maxBanners = state.overrideMaxBanners ?? dbPlan?.maxBanners ?? legacyLimits.maxBanners;
+
+  // 2. Resolve Features (Map legacy to new flags if needed)
+  const premiumThemes = dbPlan ? !!dbPlan.featCoverBanner : legacyLimits.premiumThemes;
+  const customSocials = dbPlan ? !!dbPlan.featUploadImageMenu : legacyLimits.customSocials;
+
+  return {
+    maxProducts,
+    maxCategories,
+    maxBanners,
+    premiumThemes,
+    customSocials,
+    // Database Toggles
+    featPreparationTime: dbPlan ? !!dbPlan.featPreparationTime : (planKey !== 'FREE'),
+    featCampaign: dbPlan ? !!dbPlan.featCampaign : (planKey !== 'FREE'),
+    featCoverBanner: dbPlan ? !!dbPlan.featCoverBanner : (planKey !== 'FREE'),
+    featSmartCategories: dbPlan ? !!dbPlan.featSmartCategories : (planKey !== 'FREE'),
+    featUploadImageMenu: dbPlan ? !!dbPlan.featUploadImageMenu : (planKey !== 'FREE'),
+    featAlertBarista: dbPlan ? !!dbPlan.featAlertBarista : (planKey !== 'FREE'),
+    featPos: dbPlan ? !!dbPlan.featPos : (planKey !== 'FREE'),
+    featOrderFromTable: dbPlan ? !!dbPlan.featOrderFromTable : (planKey !== 'FREE'),
+    featMultipleLanguage: dbPlan ? !!dbPlan.featMultipleLanguage : (planKey !== 'FREE'),
+    featCustomDomain: dbPlan ? !!dbPlan.featCustomDomain : (planKey !== 'FREE'),
+    featDedicatedSupport: dbPlan ? !!dbPlan.featDedicatedSupport : (planKey !== 'FREE'),
+    featAiUpload: dbPlan ? !!dbPlan.featAiUpload : (planKey !== 'FREE'),
+  };
 }
 
 /**
- * Retrieves a numeric limit for a specific feature based on the shop's plan.
- * Checks per-shop overrides before falling back to plan defaults.
+ * Checks if a specific feature is enabled for the shop's plan (backed by DB).
  */
-export async function getLimit(shopId: string, limitKey: FeatureKey): Promise<number> {
-  const state = await getShopPlanState(shopId);
-  if (!state) return 0;
-
-  // 1. Check for explicit overrides on this specific shop
-  if (limitKey === 'maxProducts' && state.overrideMaxProducts !== null) return state.overrideMaxProducts;
-  if (limitKey === 'maxCategories' && state.overrideMaxCategories !== null) return state.overrideMaxCategories;
-  if (limitKey === 'maxBanners' && state.overrideMaxBanners !== null) return state.overrideMaxBanners;
-
-  // 2. Fall back to global plan limits
-  const limit = PLAN_LIMITS[state.plan][limitKey];
-  return typeof limit === 'number' ? limit : 0;
+export async function canUseFeature(shopId: string, featureKey: string): Promise<boolean> {
+  const limits = await getShopLimitsAndFeatures(shopId);
+  if (!limits) return false;
+  return !!(limits as any)[featureKey];
 }
 
 /**
- * Verification for module-level access (e.g., Analytics, Advanced Settings).
+ * Retrieves a numeric limit for a specific feature based on the shop's plan (backed by DB).
+ */
+export async function getLimit(shopId: string, limitKey: string): Promise<number> {
+  const limits = await getShopLimitsAndFeatures(shopId);
+  if (!limits) return 0;
+  return (limits as any)[limitKey] || 0;
+}
+
+/**
+ * Verification for module-level access.
  */
 export async function canAccessAdminModule(shopId: string, moduleKey: string): Promise<boolean> {
   const state = await getShopPlanState(shopId);
   if (!state) return false;
 
-  // Basic logic: FREE shops only access core modules.
-  // This can be expanded as specific module requirements are defined.
   if (state.plan === 'FREE') {
     const protectedModules = ['analytics', 'advanced-branding'];
     return !protectedModules.includes(moduleKey);

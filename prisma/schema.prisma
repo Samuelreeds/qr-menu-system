@@ -2,6 +2,7 @@
 // 1. npx prisma db push
 // 2. npx prisma generate
 // 3. Restart your Next.js development server
+// 4.   
 
 generator client {
   provider = "prisma-client-js"

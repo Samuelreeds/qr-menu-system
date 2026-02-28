@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import AdminDashboard from '@/components/AdminDashboard';
-import { getShopPlanState, PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
+import { getShopPlanState, getShopLimitsAndFeatures, PlanKey } from '@/lib/shop-guard';
 import { redirect } from 'next/navigation';
 
 export const revalidate = 0;
@@ -21,7 +21,6 @@ export default async function AdminPage() {
   const shopId = shop.id;
 
   // SECURITY GUARD: Prevent access to locked or soft-deleted shops
-  // FIX: Cast shop to any to avoid TS error on deletedAt if local types are outdated
   if (shop.status === 'LOCKED' || (shop as any).deletedAt) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4 font-sans text-center">
@@ -41,6 +40,7 @@ export default async function AdminPage() {
 
   const planState = await getShopPlanState(shopId);
   const currentPlan = (planState?.plan as PlanKey) || 'FREE';
+  const planLimits = await getShopLimitsAndFeatures(shopId);
 
   // Fetch data for the dashboard matching the exact props expected
   const categories = await prisma.category.findMany({
@@ -54,8 +54,8 @@ export default async function AdminPage() {
     orderBy: { createdAt: 'desc' }
   });
 
-  // FIX: Map raw products to ensure 'time' is a strictly typed string
-  const formattedProducts = rawProducts.map(p => ({
+  // Map raw products to ensure types align with frontend expectations
+  const formattedProducts = rawProducts.map((p) => ({
     id: p.id,
     name: p.name,
     name_kh: p.name_kh,
@@ -63,10 +63,10 @@ export default async function AdminPage() {
     price: p.price,
     image: p.image,
     category: {
-        name: p.category.name,
-        discount: p.category.discount
+      name: p.category.name,
+      discount: p.category.discount
     },
-    time: p.time || '15min', // Safe fallback prevents TS mismatch
+    time: p.time || '15min', // Safe fallback to ensure it is a string
     isPopular: p.isPopular,
     discount: p.discount
   }));
@@ -76,7 +76,7 @@ export default async function AdminPage() {
     orderBy: { sortOrder: 'asc' }
   });
 
-  const dbSettings = await prisma.shopSettings.findUnique({
+  let dbSettings = await prisma.shopSettings.findUnique({
     where: { shopId }
   });
 
@@ -100,11 +100,11 @@ export default async function AdminPage() {
     <AdminDashboard 
       categories={categories}
       products={formattedProducts}
-      settings={settings as any} // Cast as any to satisfy strict interface matching locally
+      settings={settings as any} // Cast as any to bypass strict setting type checking if un-synced
       shopSlug={shop.id} // FIXED: Used shopId as the URL slug for live view and QR codes
       banners={banners}
       shopPlan={currentPlan}
-      planLimits={PLAN_LIMITS[currentPlan]}
+      planLimits={planLimits}
     />
   );
 }
