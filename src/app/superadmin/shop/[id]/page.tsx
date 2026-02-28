@@ -1,7 +1,8 @@
+
 import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Store, Trash2, ExternalLink, Power, PowerOff, RefreshCw, Upload, Download } from 'lucide-react';
+import { ArrowLeft, Store, Trash2, ExternalLink, Power, PowerOff, RefreshCw, Upload, Download, AlertTriangle, FileText, ArrowRight, CheckCircle2, XCircle, Info } from 'lucide-react';
 import { superAdminDeleteProduct, updateShopPlan, toggleShopStatus, softDeleteShop, restoreShop, updateShopLimits, importMenuData, executeMenuImport } from '@/lib/actions';
 import { PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
 
@@ -33,7 +34,7 @@ export default async function SuperAdminShopDetail(props: {
   // CSV Template Data
   const csvTemplate = "data:text/csv;charset=utf-8," + encodeURIComponent(
     "Category Name,Product Name,Khmer Name,Chinese Name,Price,Discount,Preparation Time,Image URL,Popular,Description\n" +
-    "Hot Drinks,Latte,ឡាតេ,拿铁,3.50,0,5min,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious espresso with steamed milk"
+    "Hot Drinks,Latte,ឡាតេ,拿铁,3.50,0,5min,[https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious](https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious) espresso with steamed milk"
   );
 
   return (
@@ -134,47 +135,66 @@ export default async function SuperAdminShopDetail(props: {
           </div>
         </div>
 
-        {/* --- MENU IMPORT MODULE --- */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <Upload size={20} className="text-blue-500" />
-              <h2 className="text-lg font-bold text-gray-900">Import Menu</h2>
+        {/* --- MENU IMPORT MODULE (UPGRADED UI) --- */}
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-100 pb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                <Upload size={22} />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-gray-900">Import Menu Data</h2>
+                <p className="text-sm text-gray-500 font-medium mt-0.5">Bulk add categories and products</p>
+              </div>
             </div>
             <a 
               href={csvTemplate} 
               download="menu_import_template.csv"
-              className="inline-flex items-center gap-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition shadow-sm border border-blue-100"
+              className="inline-flex items-center justify-center gap-2 text-sm font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl transition shadow-sm border border-blue-100 shrink-0"
             >
-              <Download size={14} /> Download CSV Template
+              <Download size={16} /> Download CSV Template
             </a>
           </div>
-          <p className="text-sm text-gray-500 mb-2">
-            Import categories and products into this shop using the standard template format.
-          </p>
-          <p className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg inline-block mb-6">
-            ⚠️ This import only affects this shop
-          </p>
+
+          <div className="flex items-start gap-3 bg-amber-50/50 border border-amber-100 p-4 rounded-2xl mb-8">
+            <AlertTriangle size={20} className="text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">Targeting: {shop.name}</h4>
+              <p className="text-xs font-medium text-amber-700 mt-1 leading-relaxed">
+                This import is scoped strictly to the currently selected shop. External configurations and cross-tenant data will remain completely unaffected.
+              </p>
+            </div>
+          </div>
 
           {msg === 'import_done' && searchParams?.result && (() => {
              try {
                const summary = JSON.parse(decodeURIComponent(searchParams.result as string));
                return (
-                 <div className="mb-6 border border-green-200 rounded-xl overflow-hidden shadow-sm">
-                   <div className="bg-green-50 px-5 py-3 border-b border-green-200">
-                     <h3 className="text-sm font-bold text-green-800">Import Completed Successfully</h3>
+                 <div className="mb-8 border border-green-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                   <div className="bg-green-50 px-6 py-4 border-b border-green-200 flex items-center gap-3">
+                     <CheckCircle2 size={20} className="text-green-600" />
+                     <h3 className="text-base font-bold text-green-900">Import Completed Successfully</h3>
                    </div>
-                   <div className="p-5 space-y-4 bg-white">
-                      <div className="flex flex-wrap items-center gap-3 text-sm font-medium">
-                        <div className="px-3 py-2 bg-green-50 text-green-700 rounded-xl border border-green-100">Imported: {summary.imported}</div>
-                        <div className="px-3 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-100">Skipped: {summary.skipped}</div>
-                        <div className="px-3 py-2 bg-red-50 text-red-700 rounded-xl border border-red-100">Failed: {summary.failed}</div>
+                   <div className="p-6 space-y-6">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="p-4 bg-green-50/50 border border-green-100 rounded-2xl text-center">
+                          <p className="text-2xl font-extrabold text-green-700">{summary.imported}</p>
+                          <p className="text-xs font-bold text-green-600 uppercase tracking-wider mt-1">Imported</p>
+                        </div>
+                        <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-center">
+                          <p className="text-2xl font-extrabold text-amber-700">{summary.skipped}</p>
+                          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mt-1">Skipped</p>
+                        </div>
+                        <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl text-center">
+                          <p className="text-2xl font-extrabold text-red-700">{summary.failed}</p>
+                          <p className="text-xs font-bold text-red-600 uppercase tracking-wider mt-1">Failed</p>
+                        </div>
                       </div>
                       
                       {summary.skipReasons && summary.skipReasons.length > 0 && (
                         <div>
-                          <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">Skipped (Duplicates)</h4>
-                          <ul className="text-xs text-amber-600 space-y-1 list-disc list-inside bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                          <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2"><Info size={14} className="text-amber-500" /> Skipped Details</h4>
+                          <ul className="text-xs font-medium text-amber-700 space-y-1.5 list-disc list-inside bg-amber-50/30 p-4 rounded-xl border border-amber-100/50">
                             {summary.skipReasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
                           </ul>
                         </div>
@@ -182,55 +202,77 @@ export default async function SuperAdminShopDetail(props: {
 
                       {summary.failReasons && summary.failReasons.length > 0 && (
                         <div>
-                          <h4 className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2">Failed (Invalid Data)</h4>
-                          <ul className="text-xs text-red-600 space-y-1 list-disc list-inside bg-red-50/50 p-3 rounded-xl border border-red-100">
+                          <h4 className="text-xs font-bold text-red-800 uppercase tracking-wider mb-2 flex items-center gap-2"><XCircle size={14} className="text-red-500" /> Failure Details</h4>
+                          <ul className="text-xs font-medium text-red-700 space-y-1.5 list-disc list-inside bg-red-50/30 p-4 rounded-xl border border-red-100/50">
                             {summary.failReasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
                           </ul>
                         </div>
                       )}
                       
-                      <div className="pt-2">
-                        <Link href={`/superadmin/shop/${shop.id}`} className="inline-block px-5 py-2.5 bg-gray-100 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-200 transition">Done</Link>
+                      <div className="pt-2 flex justify-end">
+                        <Link href={`/superadmin/shop/${shop.id}`} className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition">Return to Shop</Link>
                       </div>
                    </div>
                  </div>
                );
              } catch(e) {
-               return <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 text-sm font-bold rounded-xl">Import completed successfully!</div>;
+               return (
+                 <div className="mb-8 flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-800 text-sm font-bold rounded-2xl">
+                   <CheckCircle2 size={20} className="text-green-600" />
+                   Import completed successfully!
+                 </div>
+               );
              }
           })()}
 
           {msg === 'import_done' && !searchParams?.result && (
-             <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 text-sm font-bold rounded-xl">Import completed successfully!</div>
+             <div className="mb-8 flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-800 text-sm font-bold rounded-2xl">
+               <CheckCircle2 size={20} className="text-green-600" />
+               Import completed successfully!
+             </div>
           )}
           
           {msg === 'import_error' && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-sm font-bold rounded-xl">
-              Error: {searchParams?.err || "Please provide a valid Excel or CSV file."}
+            <div className="mb-8 flex items-start gap-3 p-4 bg-red-50 border border-red-200 text-red-800 text-sm font-bold rounded-2xl">
+              <XCircle size={20} className="text-red-600 shrink-0" />
+              <div>
+                <span className="block mb-0.5">Import Failed</span>
+                <span className="font-medium text-red-700 text-xs">{searchParams?.err || "Please provide a valid Excel or CSV file."}</span>
+              </div>
             </div>
           )}
 
           {searchParams?.preview ? (
-            <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-               <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-                 <h3 className="text-sm font-bold text-gray-800">Preview Import Summary</h3>
+            <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                 <h3 className="text-base font-bold text-gray-900">Preview Summary</h3>
+                 <span className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1 rounded-full uppercase tracking-wide">Step 2 of 2</span>
                </div>
-               <div className="p-5 space-y-5">
+               <div className="p-6 space-y-6">
                   {(() => {
                      try {
                         const summary = JSON.parse(decodeURIComponent(searchParams.preview as string));
                         return (
                           <>
-                            <div className="flex flex-wrap items-center gap-3 text-sm font-medium">
-                              <div className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl border border-gray-200">Total Rows: {summary.total}</div>
-                              <div className="px-3 py-2 bg-green-50 text-green-700 rounded-xl border border-green-100">Valid Rows: {summary.valid}</div>
-                              <div className="px-3 py-2 bg-red-50 text-red-700 rounded-xl border border-red-100">Invalid Rows: {summary.invalid}</div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-center">
+                                <p className="text-2xl font-extrabold text-gray-900">{summary.total}</p>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">Total Rows</p>
+                              </div>
+                              <div className="p-4 bg-green-50 border border-green-200 rounded-2xl text-center">
+                                <p className="text-2xl font-extrabold text-green-700">{summary.valid}</p>
+                                <p className="text-xs font-bold text-green-600 uppercase tracking-wider mt-1">Valid Rows</p>
+                              </div>
+                              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-center">
+                                <p className="text-2xl font-extrabold text-red-700">{summary.invalid}</p>
+                                <p className="text-xs font-bold text-red-600 uppercase tracking-wider mt-1">Invalid Rows</p>
+                              </div>
                             </div>
 
                             {summary.missing && summary.missing.length > 0 && (
                               <div>
-                                <h4 className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2">Missing Required Fields</h4>
-                                <ul className="text-xs text-red-600 space-y-1 list-disc list-inside bg-red-50/50 p-4 rounded-xl border border-red-100">
+                                <h4 className="text-xs font-bold text-red-800 uppercase tracking-wider mb-2 flex items-center gap-2"><XCircle size={14} className="text-red-500" /> Missing Required Fields</h4>
+                                <ul className="text-xs font-medium text-red-700 space-y-1.5 list-disc list-inside bg-red-50/50 p-4 rounded-xl border border-red-100">
                                   {summary.missing.map((m: string, i: number) => <li key={i}>{m}</li>)}
                                 </ul>
                               </div>
@@ -238,17 +280,17 @@ export default async function SuperAdminShopDetail(props: {
 
                             {summary.duplicates && summary.duplicates.length > 0 && (
                               <div>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${summary.importMode === 'skip' ? 'text-amber-600' : 'text-blue-600'}`}>
-                                  {summary.importMode === 'skip' ? 'Duplicate Warnings (Will be skipped)' : 'Duplicate Warnings (Will be created)'}
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${summary.importMode === 'skip' ? 'text-amber-800' : 'text-blue-800'}`}>
+                                  {summary.importMode === 'skip' ? <><Info size={14} className="text-amber-500" /> Duplicates (Will be skipped)</> : <><Info size={14} className="text-blue-500" /> Duplicates (Will be created)</>}
                                 </h4>
-                                <ul className={`text-xs space-y-1 list-disc list-inside p-4 rounded-xl border ${summary.importMode === 'skip' ? 'text-amber-600 bg-amber-50/50 border-amber-100' : 'text-blue-600 bg-blue-50/50 border-blue-100'}`}>
+                                <ul className={`text-xs font-medium space-y-1.5 list-disc list-inside p-4 rounded-xl border ${summary.importMode === 'skip' ? 'text-amber-700 bg-amber-50/50 border-amber-100' : 'text-blue-700 bg-blue-50/50 border-blue-100'}`}>
                                   {summary.duplicates.map((d: string, i: number) => <li key={i}>{d}</li>)}
                                 </ul>
                               </div>
                             )}
 
-                            <div className="flex gap-3 pt-4 border-t border-gray-100">
-                               <Link href={`/superadmin/shop/${shop.id}`} className="px-5 py-2.5 bg-gray-100 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-200 transition">Cancel</Link>
+                            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-6 border-t border-gray-100">
+                               <Link href={`/superadmin/shop/${shop.id}`} className="w-full sm:w-auto px-6 py-3 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition text-center shadow-sm">Cancel</Link>
                                
                                <form action={async (fd: FormData) => {
                                   'use server';
@@ -261,11 +303,11 @@ export default async function SuperAdminShopDetail(props: {
                                   } else {
                                     redirect(`/superadmin/shop/${shop.id}?msg=import_error&err=${encodeURIComponent(res.error || '')}`);
                                   }
-                               }}>
+                               }} className="w-full sm:w-auto">
                                   <input type="hidden" name="shopId" value={shop.id} />
                                   <input type="hidden" name="importMode" value={summary.importMode || 'skip'} />
-                                  <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition">
-                                     Confirm Import
+                                  <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
+                                     <CheckCircle2 size={18} /> Confirm & Import
                                   </button>
                                </form>
                             </div>
@@ -288,62 +330,93 @@ export default async function SuperAdminShopDetail(props: {
                 } else {
                   redirect(`/superadmin/shop/${shop.id}?msg=import_error&err=${encodeURIComponent(res.error || '')}`);
                 }
-              }} className="flex flex-col gap-4">
+              }} className="space-y-8">
                 <input type="hidden" name="shopId" value={shop.id} />
                 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="flex-1 w-full relative">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-gray-900">1. Select CSV File</h3>
+                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 hover:bg-gray-50 hover:border-blue-300 transition-colors flex flex-col items-center justify-center text-center relative group">
+                    <div className="p-4 bg-white shadow-sm border border-gray-100 rounded-full mb-3 group-hover:scale-105 transition-transform duration-200">
+                      <FileText size={28} className="text-blue-500" />
+                    </div>
+                    <span className="text-sm font-bold text-gray-900">Upload your data file</span>
+                    <p className="text-xs font-medium text-gray-500 mt-1 mb-5">.csv format only</p>
+                    
                     <input 
                       type="file" 
                       name="excelFile" 
-                      accept=".xlsx, .xls, .csv" 
+                      accept=".csv" 
                       required
-                      className="w-full text-sm text-gray-500
-                      file:mr-4 file:py-2.5 file:px-4
+                      className="block w-full max-w-xs text-sm text-gray-500
+                      file:mr-4 file:py-2.5 file:px-5
                       file:rounded-xl file:border-0
-                      file:text-sm file:font-bold
+                      file:text-xs file:font-bold
                       file:bg-blue-50 file:text-blue-700
-                      hover:file:bg-blue-100 cursor-pointer"
+                      hover:file:bg-blue-100 cursor-pointer mx-auto transition-colors"
                     />
                   </div>
-                  <button 
-                    type="submit" 
-                    className="w-full sm:w-auto px-8 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition shadow-sm whitespace-nowrap"
-                  >
-                    Upload & Preview
-                  </button>
                 </div>
 
-                <div className="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-xl border border-gray-200 w-fit">
-                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Strategy:</span>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                    <input type="radio" name="importMode" value="skip" defaultChecked className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500" />
-                    Skip Duplicates
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer ml-2">
-                    <input type="radio" name="importMode" value="create_only" className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500" />
-                    Create Only
-                  </label>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-gray-900">2. Import Strategy</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="flex items-start gap-4 p-5 border border-gray-200 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors [&:has(:checked)]:border-blue-500 [&:has(:checked)]:bg-blue-50/50 shadow-sm">
+                      <input type="radio" name="importMode" value="skip" defaultChecked className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer" />
+                      <div>
+                        <span className="block text-sm font-bold text-gray-900">Skip Duplicates</span>
+                        <span className="block text-xs font-medium text-gray-500 mt-1 leading-relaxed">Products with the exact same name inside the same category will be ignored. Safe option.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-4 p-5 border border-gray-200 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors [&:has(:checked)]:border-blue-500 [&:has(:checked)]:bg-blue-50/50 shadow-sm">
+                      <input type="radio" name="importMode" value="create_only" className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer" />
+                      <div>
+                        <span className="block text-sm font-bold text-gray-900">Create All</span>
+                        <span className="block text-xs font-medium text-gray-500 mt-1 leading-relaxed">Every row will be created as a completely new product. Duplicates may occur.</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button 
+                    type="submit" 
+                    className="w-full sm:w-auto px-8 py-3.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition shadow-sm flex items-center justify-center gap-2"
+                  >
+                    Upload & Preview <ArrowRight size={16} />
+                  </button>
                 </div>
               </form>
             )
           )}
 
           {!searchParams?.preview && msg !== 'import_done' && (
-            <div className="mt-8 pt-6 border-t border-gray-50">
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Template Format & Required Columns:</p>
-               <div className="flex flex-wrap gap-2">
-                 <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">Category Name *</span>
-                 <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">Product Name *</span>
-                 <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">Price *</span>
+            <div className="mt-10 pt-8 border-t border-gray-100">
+               <h3 className="text-sm font-bold text-gray-900 mb-5">Template Formatting Rules</h3>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 <div>
+                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                     <CheckCircle2 size={14} className="text-gray-400" /> Required Columns
+                   </h4>
+                   <div className="flex flex-wrap gap-2.5">
+                     <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Category Name</span>
+                     <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Product Name</span>
+                     <span className="text-xs text-gray-800 font-bold bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Price</span>
+                   </div>
+                   <p className="text-xs font-medium text-gray-500 mt-3 leading-relaxed">Rows missing any of these values will be immediately rejected during validation.</p>
+                 </div>
                  
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Preparation Time</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Khmer Name</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Chinese Name</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Discount</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Image URL</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Popular</span>
-                 <span className="text-xs text-gray-500 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Description</span>
+                 <div>
+                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Optional Fields</h4>
+                   <div className="flex flex-wrap gap-2.5">
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Preparation Time</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Khmer Name</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Chinese Name</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Discount</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Image URL</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Popular</span>
+                     <span className="text-xs text-gray-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">Description</span>
+                   </div>
+                 </div>
                </div>
             </div>
           )}
