@@ -71,6 +71,8 @@ const handler = NextAuth({
         return { 
           id: user.id, 
           email: user.email,
+          role: user.role,
+          isSuperAdmin: user.isSuperAdmin,
           // Attach shop info to the session object
           shopId: user.shopUsers[0]?.shopId || null 
         };
@@ -78,16 +80,20 @@ const handler = NextAuth({
     })
   ],
   callbacks: {
-    // Inject shopId into the JWT and Session
+    // Inject shopId, role, and isSuperAdmin into the JWT and Session
     async jwt({ token, user }: any) {
       if (user) {
         token.shopId = user.shopId;
+        token.role = user.role;
+        token.isSuperAdmin = user.isSuperAdmin;
       }
       return token;
     },
     async session({ session, token }: any) {
       if (token && session.user) {
         session.user.shopId = token.shopId;
+        session.user.role = token.role;
+        session.user.isSuperAdmin = token.isSuperAdmin;
       }
       return session;
     }

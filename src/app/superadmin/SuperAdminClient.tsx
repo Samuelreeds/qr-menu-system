@@ -57,7 +57,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
 
   const copyInviteLink = (token: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-    const fullLink = baseUrl.startsWith('http') ? `${baseUrl}/register?token=${token}` : `https://${baseUrl}/register?token=${token}`;
+    const fullLink = baseUrl.startsWith('http') ? `${baseUrl}/auth/register?token=${token}` : `https://${baseUrl}/auth/register?token=${token}`;
     
     navigator.clipboard.writeText(fullLink);
     alert(`Invite link copied to clipboard!\n\n${fullLink}`);
@@ -477,7 +477,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                             <button type="button" title="Duplicate" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg transition-all">
                               <Copy size={16}/>
                             </button>
-                            <form action={togglePlanStatus}>
+                            <form action={async (fd) => { await togglePlanStatus(fd); }}>
                               <input type="hidden" name="id" value={plan.id} />
                               <input type="hidden" name="currentStatus" value={plan.status} />
                               <button type="submit" title={plan.status === 'ACTIVE' ? "Archive / Disable" : "Enable"} className={`p-2 border border-transparent rounded-lg transition-all ${plan.status === 'ACTIVE' ? 'text-gray-400 hover:text-orange-600 hover:border-orange-100' : 'text-orange-400 hover:text-emerald-600 hover:border-emerald-100'}`}>
@@ -512,7 +512,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                               title="Copy full URL"
                             >
                               <LinkIcon size={14} className="text-gray-400"/>
-                              <code className="text-xs font-bold text-gray-600">/register?token={invite.token.slice(0, 8)}...</code>
+                              <code className="text-xs font-bold text-gray-600">/auth/register?token={invite.token.slice(0, 8)}...</code>
                               <Copy size={12} className="text-gray-300 group-hover:text-orange-500"/>
                             </button>
                           </td>

@@ -28,6 +28,24 @@ async function getActiveShopId() {
   return user.shopUsers[0].shopId;
 }
 
+// --- SUPER ADMIN HELPER (SECURED) ---
+export async function verifySuperAdmin() {
+  const session = await getServerSession();
+  if (!session?.user?.email) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email }
+  });
+
+  if (!user) return null;
+  
+  if (user.role === 'SUPERADMIN' || user.isSuperAdmin) {
+    return user;
+  }
+  
+  return null;
+}
+
 // --- READ ACTIONS ---
 export async function getCategories() {
   const shopId = await getActiveShopId();
@@ -412,6 +430,8 @@ export async function forceRevalidateAction() {
 
 // --- SUPER ADMIN ACTIONS ---
 export async function createInvite(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const token = crypto.randomBytes(16).toString('hex');
   const expiresInDays = parseInt(formData.get('expiresInDays')?.toString() || '7', 10);
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
@@ -432,6 +452,8 @@ export async function createInvite(formData: FormData) {
 }
 
 export async function deleteInvite(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   try {
     await prisma.invite.delete({ where: { id } });
@@ -442,10 +464,13 @@ export async function deleteInvite(formData: FormData) {
 }
 
 export async function listInvites() {
+  if (!await verifySuperAdmin()) return [];
   return await prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
 }
 
 export async function toggleShopStatus(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   const currentStatus = formData.get('currentStatus') === 'true';
   await prisma.shop.update({ 
@@ -456,6 +481,8 @@ export async function toggleShopStatus(formData: FormData) {
 }
 
 export async function updateShopPlan(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   const plan = formData.get('plan') as string;
   try {
@@ -470,6 +497,8 @@ export async function updateShopPlan(formData: FormData) {
 }
 
 export async function updateShopLimits(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   const maxProducts = formData.get('overrideMaxProducts') as string;
   const maxCategories = formData.get('overrideMaxCategories') as string;
@@ -487,12 +516,16 @@ export async function updateShopLimits(formData: FormData) {
 }
 
 export async function deleteShop(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   try { await prisma.shop.delete({ where: { id } }); } catch (e) {}
   revalidatePath('/superadmin');
 }
 
 export async function softDeleteShop(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   try {
     await prisma.shop.update({
@@ -507,6 +540,8 @@ export async function softDeleteShop(formData: FormData) {
 }
 
 export async function restoreShop(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   try {
     await prisma.shop.update({
@@ -521,12 +556,16 @@ export async function restoreShop(formData: FormData) {
 }
 
 export async function deleteUser(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   try { await prisma.user.delete({ where: { id } }); } catch (e) {}
   revalidatePath('/superadmin');
 }
 
 export async function superAdminDeleteProduct(formData: FormData): Promise<void> {
+  if (!await verifySuperAdmin()) return;
+  
   const id = formData.get('id') as string;
   const shopId = formData.get('shopId') as string;
 
@@ -549,6 +588,8 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
 }
 
 export async function importMenuData(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const shopId = formData.get('shopId') as string;
   const importMode = formData.get('importMode') as string || 'skip';
   const file = formData.get('excelFile') as File | null;
@@ -688,6 +729,8 @@ export async function importMenuData(formData: FormData) {
 }
 
 export async function executeMenuImport(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const shopId = formData.get('shopId') as string;
   const importMode = formData.get('importMode') as string || 'skip';
   
@@ -832,6 +875,8 @@ export async function executeMenuImport(formData: FormData) {
 
 // --- PLAN MANAGEMENT ACTIONS ---
 export async function createPlan(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const name = formData.get('name') as string;
   const slug = formData.get('slug') as string;
   const status = formData.get('status') as string;
@@ -901,6 +946,8 @@ export async function createPlan(formData: FormData) {
 }
 
 export async function updatePlan(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   const name = formData.get('name') as string;
   const slug = formData.get('slug') as string || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -965,6 +1012,8 @@ export async function updatePlan(formData: FormData) {
 }
 
 export async function togglePlanStatus(formData: FormData) {
+  if (!await verifySuperAdmin()) return { error: "Unauthorized" };
+  
   const id = formData.get('id') as string;
   const currentStatus = formData.get('currentStatus') as string;
   const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
@@ -1045,6 +1094,8 @@ export async function registerShopFromInvite(formData: FormData) {
 
 // --- PASSWORD RESET ACTIONS ---
 export async function requestPasswordReset(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
   const email = formData.get('email') as string;
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return { success: true, debugLink: null };

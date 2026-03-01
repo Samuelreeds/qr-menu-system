@@ -1,11 +1,36 @@
 import { prisma } from '@/lib/prisma';
 import SuperAdminClient from './SuperAdminClient';
 import { PLAN_LIMITS } from '@/lib/shop-guard';
+import { getServerSession } from 'next-auth';
+import { redirect } from 'next/navigation';
+import { verifySuperAdmin } from '@/lib/actions';
+import Link from 'next/link';
 
 // Force dynamic rendering to ensure stats are always up to date
 export const revalidate = 0; 
 
 export default async function SuperAdminPage() {
+  const session = await getServerSession();
+  
+  if (!session?.user?.email) {
+    redirect('/auth/login');
+  }
+
+  const superAdminUser = await verifySuperAdmin();
+  if (!superAdminUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4 font-sans text-center">
+         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 max-w-md w-full">
+           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
+           <p className="text-gray-500 mb-6">You do not have permission to view the SuperAdmin dashboard.</p>
+           <Link href="/" className="inline-block bg-gray-900 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-gray-800 transition shadow-sm">
+             Return Home
+           </Link>
+         </div>
+      </div>
+    );
+  }
+
   const shops = await prisma.shop.findMany({ orderBy: { createdAt: 'desc' } });
   const invites = await prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
   const users = await prisma.user.findMany({ orderBy: { id: 'desc' } });

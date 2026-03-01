@@ -2,7 +2,7 @@
 // 1. npx prisma db push
 // 2. npx prisma generate
 // 3. Restart your Next.js development server
-// 4.     
+// 4.   
 
 generator client {
   provider = "prisma-client-js"
@@ -12,7 +12,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-
 }
 
 // --- USER MODEL ---
@@ -25,6 +24,7 @@ model User {
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
   isSuperAdmin     Boolean   @default(false)
+  role             String    @default("USER") // Added for role-based authorization (e.g., USER, SUPERADMIN)
   shopUsers        ShopUser[]
 }
 
@@ -34,6 +34,7 @@ model Shop {
   name        String
   slug        String    @unique 
   plan        String    @default("FREE") 
+  planId      String?
   status      String    @default("ACTIVE") 
   trialEndsAt DateTime?
   paidUntil   DateTime?
@@ -42,10 +43,10 @@ model Shop {
   overrideMaxProducts   Int?
   overrideMaxCategories Int?
   overrideMaxBanners    Int?
-
+  
   createdAt   DateTime  @default(now())
   deletedAt   DateTime?
-
+  
   shopUsers   ShopUser[]
   categories  Category[]
   products    Product[]
@@ -120,6 +121,7 @@ model Banner {
   image     String
   sortOrder Int      @default(0)
   deletedAt DateTime?
+  
   shopId    String
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   

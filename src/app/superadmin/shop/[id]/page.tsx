@@ -1,15 +1,36 @@
-
 import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Store, Trash2, ExternalLink, Power, PowerOff, RefreshCw, Upload, Download, AlertTriangle, FileText, ArrowRight, CheckCircle2, XCircle, Info } from 'lucide-react';
-import { superAdminDeleteProduct, updateShopPlan, toggleShopStatus, softDeleteShop, restoreShop, updateShopLimits, importMenuData, executeMenuImport } from '@/lib/actions';
+import { superAdminDeleteProduct, updateShopPlan, toggleShopStatus, softDeleteShop, restoreShop, updateShopLimits, importMenuData, executeMenuImport, verifySuperAdmin } from '@/lib/actions';
 import { PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
+import { getServerSession } from 'next-auth';
 
 export default async function SuperAdminShopDetail(props: { 
   params: Promise<{ id: string }>;
   searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
+  const session = await getServerSession();
+  
+  if (!session?.user?.email) {
+    redirect('/auth/login');
+  }
+
+  const superAdminUser = await verifySuperAdmin();
+  if (!superAdminUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4 font-sans text-center">
+         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 max-w-md w-full">
+           <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
+           <p className="text-gray-500 mb-6">You do not have permission to view this page.</p>
+           <Link href="/" className="inline-block bg-gray-900 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-gray-800 transition shadow-sm">
+             Return Home
+           </Link>
+         </div>
+      </div>
+    );
+  }
+
   const { id } = await props.params;
   const searchParams = await props.searchParams;
   const msg = searchParams?.msg;
@@ -34,7 +55,7 @@ export default async function SuperAdminShopDetail(props: {
   // CSV Template Data
   const csvTemplate = "data:text/csv;charset=utf-8," + encodeURIComponent(
     "Category Name,Product Name,Khmer Name,Chinese Name,Price,Discount,Preparation Time,Image URL,Popular,Description\n" +
-    "Hot Drinks,Latte,ឡាតេ,拿铁,3.50,0,5min,[https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious](https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious) espresso with steamed milk"
+    "Hot Drinks,Latte,ឡាតេ,拿铁,3.50,0,5min,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious espresso with steamed milk"
   );
 
   return (

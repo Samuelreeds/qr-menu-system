@@ -34,8 +34,17 @@ function LoginContent() {
       setError(result.error);
       setLoading(false);
     } else {
-      router.push('/admin');
-      router.refresh();
+      // Force fetch to get the very latest session after cookie is set, bypassing local cache
+      const response = await fetch('/api/auth/session', { cache: 'no-store' });
+      const session = await response.json();
+      const user = session?.user as any;
+      
+      // Use window.location.href to force a hard reload, ensuring middleware sees the new cookie
+      if (user?.role === 'SUPERADMIN' || user?.isSuperAdmin) {
+        window.location.href = '/superadmin';
+      } else {
+        window.location.href = '/admin';
+      }
     }
   };
 
