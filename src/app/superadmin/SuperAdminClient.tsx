@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useOptimistic, startTransition } from 'react';
 import Link from 'next/link';
 import { 
   LayoutDashboard, Plus, ExternalLink, PowerOff, Power, Check, 
@@ -24,7 +24,7 @@ import {
   togglePlanStatus
 } from '@/lib/actions';
 
-export default function SuperAdminClient({ shops, invites, users, plans = [] }: { shops: any[], invites: any[], users: any[], plans?: any[] }) {
+export default function SuperAdminClient({ shops, invites, users, plans = [], shopStats }: { shops: any[], invites: any[], users: any[], plans?: any[], shopStats?: any }) {
   const [activeTab, setActiveTab] = useState<'shops' | 'plans' | 'invites' | 'users'>('shops');
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -33,12 +33,43 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
   const [isSaving, setIsSaving] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
-  // Calculate Stats
-  const activeShops = shops.filter(s => s.status === 'ACTIVE' && !s.deletedAt).length;
-  const paidShops = shops.filter(s => s.plan !== 'FREE').length;
-  const activeInvites = invites.filter(i => !i.isUsed && new Date(i.expiresAt) > new Date()).length;
-
   const displayPlans = plans || [];
+
+  // --- OPTIMISTIC UI HOOKS FOR INSTANT UX ---
+  const [optShops, dispatchOptShops] = useOptimistic(
+    shops,
+    (state, action: { type: string; id: string; payload?: any }) => {
+      switch (action.type) {
+        case 'toggleStatus': return state.map(s => s.id === action.id ? { ...s, status: s.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE' } : s);
+        case 'updatePlan': return state.map(s => s.id === action.id ? { ...s, plan: action.payload } : s);
+        case 'softDelete': return state.map(s => s.id === action.id ? { ...s, deletedAt: new Date() } : s);
+        case 'restore': return state.map(s => s.id === action.id ? { ...s, deletedAt: null } : s);
+        case 'delete': return state.filter(s => s.id !== action.id);
+        default: return state;
+      }
+    }
+  );
+
+  const [optInvites, dispatchOptInvites] = useOptimistic(
+    invites,
+    (state, action: { type: string; id: string }) => action.type === 'delete' ? state.filter(i => i.id !== action.id) : state
+  );
+
+  const [optUsers, dispatchOptUsers] = useOptimistic(
+    users,
+    (state, action: { type: string; id: string }) => action.type === 'delete' ? state.filter(u => u.id !== action.id) : state
+  );
+
+  const [optPlans, dispatchOptPlans] = useOptimistic(
+    displayPlans,
+    (state, action: { type: string; id: string }) => action.type === 'toggleStatus' ? state.map(p => p.id === action.id ? { ...p, status: p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' } : p) : state
+  );
+
+  // OPTIMIZATION: Use server-provided stats for paginated shops, preserving accurate total metrics
+  const totalShopsDisplay = shopStats?.total || optShops.length;
+  const activeShopsDisplay = shopStats?.active || optShops.filter(s => s.status === 'ACTIVE' && !s.deletedAt).length;
+  const paidShopsDisplay = shopStats?.paid || optShops.filter(s => s.plan !== 'FREE').length;
+  const activeInvites = optInvites.filter((i:any) => !i.isUsed && new Date(i.expiresAt) > new Date()).length;
 
   const planFeatures = [
     { key: 'featPreparationTime', label: "Preparation Time" },
@@ -64,8 +95,8 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
   };
 
   const selectedPlan = editingPlanId === 'new' 
-    ? { id: 'new', name: 'New Plan', slug: '', priceMonthly: 0, priceYearly: 0, status: 'ACTIVE', limitsCount: 0, featuresCount: 0, order: displayPlans.length + 1, limits: {}, allowTrial: false, trialDays: 14, isRecommended: false }
-    : displayPlans.find(p => p.id === editingPlanId);
+    ? { id: 'new', name: 'New Plan', slug: '', priceMonthly: 0, priceYearly: 0, status: 'ACTIVE', limitsCount: 0, featuresCount: 0, order: optPlans.length + 1, limits: {}, allowTrial: false, trialDays: 14, isRecommended: false }
+    : optPlans.find(p => p.id === editingPlanId);
 
   const handlePlanSave = async (fd: FormData) => {
     setIsSaving(true);
@@ -159,19 +190,19 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">Total Plans <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{displayPlans.length}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{optPlans.length}</h3>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">Active Plans <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{displayPlans.filter(p => p.status === 'ACTIVE').length}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{optPlans.filter(p => p.status === 'ACTIVE').length}</h3>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">Total Enabled Features <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{displayPlans.reduce((acc, p) => acc + (p.featuresCount || 0), 0)}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{optPlans.reduce((acc, p) => acc + (p.featuresCount || 0), 0)}</h3>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">Total Configured Limits <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{displayPlans.reduce((acc, p) => acc + (p.limitsCount || 0), 0)}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{optPlans.reduce((acc, p) => acc + (p.limitsCount || 0), 0)}</h3>
               </div>
             </div>
           )}
@@ -180,17 +211,17 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">Total {activeTab === 'shops' ? 'Shops' : activeTab === 'invites' ? 'Invites' : 'Users'} <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? shops.length : activeTab === 'invites' ? invites.length : users.length}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? totalShopsDisplay : activeTab === 'invites' ? optInvites.length : optUsers.length}</h3>
                 <p className="text-[11px] font-bold text-gray-400">vs last month <span className="text-emerald-500 ml-1">+12%</span></p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">{activeTab === 'shops' ? 'Paid Subscriptions' : activeTab === 'invites' ? 'Used Invites' : 'Active Users'} <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? paidShops : activeTab === 'invites' ? invites.filter((i:any) => i.isUsed).length : users.length}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? paidShopsDisplay : activeTab === 'invites' ? optInvites.filter((i:any) => i.isUsed).length : optUsers.length}</h3>
                 <p className="text-[11px] font-bold text-gray-400">vs last month <span className="text-emerald-500 ml-1">+4%</span></p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                 <p className="text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-1.5">{activeTab === 'shops' ? 'Active Shops' : activeTab === 'invites' ? 'Pending Invites' : 'New Users'} <Info size={12} className="text-gray-300"/></p>
-                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? activeShops : activeTab === 'invites' ? activeInvites : 0}</h3>
+                <h3 className="text-2xl font-black mb-1 text-gray-900">{activeTab === 'shops' ? activeShopsDisplay : activeTab === 'invites' ? activeInvites : 0}</h3>
                 <p className="text-[11px] font-bold text-gray-400">vs last month <span className="text-emerald-500 ml-1">+2%</span></p>
               </div>
             </div>
@@ -380,7 +411,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {shops.map((shop: any) => (
+                      {optShops.map((shop: any) => (
                         <tr key={shop.id} className={`hover:bg-gray-50/50 transition-colors group ${shop.deletedAt ? 'opacity-50' : ''}`}>
                           <td className="p-4 pl-6 font-bold text-gray-900">{shop.name}</td>
                           <td className="p-4">
@@ -389,16 +420,19 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                             </Link>
                           </td>
                           <td className="p-4">
-                            <form action={async (fd) => { await updateShopPlan(fd); }}>
+                            <form action={(fd) => {
+                               startTransition(() => dispatchOptShops({ type: 'updatePlan', id: shop.id, payload: fd.get('plan') }));
+                               startTransition(async () => { await updateShopPlan(fd); });
+                            }}>
                               <input type="hidden" name="id" value={shop.id} />
                               <select 
-                                key={`${shop.id}-${shop.plan}`} // Force re-render of select box value when server responds
+                                key={`${shop.id}-${shop.plan}`} 
                                 name="plan" 
                                 defaultValue={shop.plan} 
                                 onChange={(e) => e.target.form?.requestSubmit()}
                                 className="bg-white border border-gray-200 text-xs font-bold rounded-lg px-2 py-1 outline-none cursor-pointer"
                               >
-                                {displayPlans.filter(p => p.status === 'ACTIVE' || p.id === shop.plan).map(p => (
+                                {optPlans.filter(p => p.status === 'ACTIVE' || p.id === shop.plan).map(p => (
                                   <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                               </select>
@@ -413,25 +447,36 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                             <Link href={`/superadmin/shop/${shop.id}`} className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg">
                               <Eye size={16} />
                             </Link>
-                            <form action={async (fd) => { await toggleShopStatus(fd); }}>
+                            <form action={(fd) => {
+                               startTransition(() => dispatchOptShops({ type: 'toggleStatus', id: shop.id }));
+                               startTransition(async () => { await toggleShopStatus(fd); });
+                            }}>
                               <input type="hidden" name="id" value={shop.id} />
                               <input type="hidden" name="currentStatus" value={shop.status === 'ACTIVE' ? 'true' : 'false'} />
-                              <button type="submit" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg">
+                              <button type="submit" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg transition-colors">
                                 {shop.status === 'ACTIVE' ? <PowerOff size={16} /> : <Power size={16} />}
                               </button>
                             </form>
 
                             {shop.deletedAt ? (
-                              <form action={async (fd) => { await restoreShop(fd); }}>
+                              <form action={(fd) => {
+                                 startTransition(() => dispatchOptShops({ type: 'restore', id: shop.id }));
+                                 startTransition(async () => { await restoreShop(fd); });
+                              }}>
                                 <input type="hidden" name="id" value={shop.id} />
-                                <button type="submit" className="p-2 text-emerald-600 hover:text-emerald-700 border border-transparent hover:border-emerald-100 rounded-lg">
+                                <button type="submit" className="p-2 text-emerald-600 hover:text-emerald-700 border border-transparent hover:border-emerald-100 rounded-lg transition-colors">
                                   <RefreshCw size={16} />
                                 </button>
                               </form>
                             ) : (
-                              <form action={async (fd) => { if(confirm('Soft delete this shop?')) await softDeleteShop(fd); }}>
+                              <form action={(fd) => { 
+                                 if(confirm('Soft delete this shop?')) {
+                                   startTransition(() => dispatchOptShops({ type: 'softDelete', id: shop.id }));
+                                   startTransition(async () => { await softDeleteShop(fd); });
+                                 }
+                              }}>
                                 <input type="hidden" name="id" value={shop.id} />
-                                <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg">
+                                <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg transition-colors">
                                   <Trash2 size={16} />
                                 </button>
                               </form>
@@ -440,6 +485,39 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                         </tr>
                       ))}
                     </tbody>
+                    {shopStats && shopStats.totalPages > 1 && (
+                      <tfoot>
+                        <tr>
+                          <td colSpan={5} className="p-4 border-t border-gray-100 bg-gray-50/50">
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs text-gray-500 font-medium">
+                                Showing page {shopStats.currentPage} of {shopStats.totalPages} ({shopStats.total} total shops)
+                              </span>
+                              <div className="flex gap-2">
+                                {shopStats.currentPage > 1 ? (
+                                  <Link href={`/superadmin?page=${shopStats.currentPage - 1}`} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition shadow-sm">
+                                    Previous
+                                  </Link>
+                                ) : (
+                                  <button disabled className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400 cursor-not-allowed">
+                                    Previous
+                                  </button>
+                                )}
+                                {shopStats.currentPage < shopStats.totalPages ? (
+                                  <Link href={`/superadmin?page=${shopStats.currentPage + 1}`} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition shadow-sm">
+                                    Next
+                                  </Link>
+                                ) : (
+                                  <button disabled className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400 cursor-not-allowed">
+                                    Next
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </>
                 )}
 
@@ -458,7 +536,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {displayPlans.map((plan: any) => (
+                      {optPlans.map((plan: any) => (
                         <tr key={plan.id} className={`hover:bg-gray-50/50 transition-colors group ${plan.status === 'INACTIVE' ? 'opacity-60' : ''}`}>
                           <td className="p-4 pl-6 font-bold text-gray-900">{plan.name}</td>
                           <td className="p-4 font-medium text-gray-600">${plan.priceMonthly}</td>
@@ -477,7 +555,10 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                             <button type="button" title="Duplicate" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg transition-all">
                               <Copy size={16}/>
                             </button>
-                            <form action={async (fd) => { await togglePlanStatus(fd); }}>
+                            <form action={(fd) => { 
+                               startTransition(() => dispatchOptPlans({ type: 'toggleStatus', id: plan.id }));
+                               startTransition(async () => { await togglePlanStatus(fd); });
+                            }}>
                               <input type="hidden" name="id" value={plan.id} />
                               <input type="hidden" name="currentStatus" value={plan.status} />
                               <button type="submit" title={plan.status === 'ACTIVE' ? "Archive / Disable" : "Enable"} className={`p-2 border border-transparent rounded-lg transition-all ${plan.status === 'ACTIVE' ? 'text-gray-400 hover:text-orange-600 hover:border-orange-100' : 'text-orange-400 hover:text-emerald-600 hover:border-emerald-100'}`}>
@@ -503,7 +584,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {invites.map((invite: any) => (
+                      {optInvites.map((invite: any) => (
                         <tr key={invite.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="p-4 pl-6">
                             <button 
@@ -523,11 +604,14 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                             </span>
                           </td>
                           <td className="p-4 pr-6 text-right">
-                            <form 
-                              action={async (fd) => { if(confirm('Delete invite?')) await deleteInvite(fd); }}
-                            >
+                            <form action={(fd) => { 
+                               if(confirm('Delete invite?')) {
+                                 startTransition(() => dispatchOptInvites({ type: 'delete', id: invite.id }));
+                                 startTransition(async () => { await deleteInvite(fd); });
+                               }
+                            }}>
                               <input type="hidden" name="id" value={invite.id} />
-                              <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg">
+                              <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg transition-colors">
                                 <Trash2 size={16}/>
                               </button>
                             </form>
@@ -549,7 +633,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {users.map((user: any) => (
+                      {optUsers.map((user: any) => (
                         <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="p-4 pl-6 font-bold text-gray-900">{user.email}</td>
                           <td className="p-4 text-xs font-mono text-gray-400">{user.id}</td>
@@ -570,9 +654,14 @@ export default function SuperAdminClient({ shops, invites, users, plans = [] }: 
                                 <KeyRound size={16}/>
                               </button>
                             </form>
-                            <form action={async (fd) => { if(confirm('Delete user?')) await deleteUser(fd); }}>
+                            <form action={(fd) => { 
+                               if(confirm('Delete user?')) {
+                                 startTransition(() => dispatchOptUsers({ type: 'delete', id: user.id }));
+                                 startTransition(async () => { await deleteUser(fd); });
+                               }
+                            }}>
                               <input type="hidden" name="id" value={user.id} />
-                              <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg">
+                              <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg transition-colors">
                                 <Trash2 size={16}/>
                               </button>
                             </form>

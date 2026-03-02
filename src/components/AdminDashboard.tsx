@@ -117,8 +117,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [prepTime, setPrepTime] = useState('15');
   const [isHotSale, setIsHotSale] = useState(false);
 
+  // Used strictly for modal "Unsaved Changes" blocking overlay now
   const [isSaving, setIsSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('identity');
@@ -326,10 +326,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   };
 
   const saveIdentityForm = async () => {
-    if (!previewNameEn.trim() && !previewNameKh.trim()) {
-      showToast("Please enter at least one shop name.");
-      return false;
-    }
     const fd = new FormData();
     if (!previewNameEn.trim() && previewNameKh.trim()) {
        fd.set('name', previewNameKh.trim());
@@ -344,8 +340,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     
     try {
       await updateShopIdentity(fd); 
-      showToast("Basic information saved!"); 
-      clearDirty('identity');
       return true;
     } catch(e) {
       showToast("Error saving information.");
@@ -360,10 +354,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
      if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp');
      try {
        await updateShopBranding(fd);
-       setIsDirtyLogo(false); 
-       setLogoFileBlob(null); 
-       showToast("Branding updated!"); 
-       clearDirty('branding');
        return true;
      } catch (e) {
        showToast("Error saving branding.");
@@ -380,8 +370,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         showToast(res.error);
         return false;
       }
-      showToast("Social Media Links saved!"); 
-      clearDirty('socials');
       return true;
     } catch (e) {
       showToast("Error saving socials.");
@@ -389,25 +377,37 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
-  const onIdentitySubmit = async (e?: React.FormEvent) => {
+  const onIdentitySubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setIsSaving(true);
-    await saveIdentityForm();
-    setIsSaving(false);
+    if (!previewNameEn.trim() && !previewNameKh.trim()) {
+      showToast("Please enter at least one shop name.");
+      return;
+    }
+    clearDirty('identity');
+    showToast("Basic information saved!"); 
+    startTransition(async () => {
+      await saveIdentityForm();
+    });
   };
 
-  const onBrandingSubmit = async (e?: React.FormEvent) => {
+  const onBrandingSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setIsSaving(true);
-    await saveBrandingForm();
-    setIsSaving(false);
+    clearDirty('branding');
+    setIsDirtyLogo(false); 
+    showToast("Branding updated!"); 
+    startTransition(async () => {
+      await saveBrandingForm();
+      setLogoFileBlob(null); 
+    });
   };
 
-  const onSocialsSubmit = async (e?: React.FormEvent) => {
+  const onSocialsSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setIsSaving(true);
-    await saveSocialsForm();
-    setIsSaving(false);
+    clearDirty('socials');
+    showToast("Social Media Links saved!"); 
+    startTransition(async () => {
+      await saveSocialsForm();
+    });
   };
 
   const handleMoveBanner = async (index: number, direction: number) => {
@@ -423,8 +423,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       dispatchOptBanners({ type: 'set', payload: newBanners });
     });
     
-    await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
-    showToast("Banners reordered!");
+    startTransition(async () => {
+      await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
+      showToast("Banners reordered!");
+    });
   };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -457,8 +459,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     
     setDraggedBannerIndex(null);
 
-    await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
-    showToast("Banners reordered!");
+    startTransition(async () => {
+      await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder })));
+      showToast("Banners reordered!");
+    });
   };
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => {
@@ -484,17 +488,23 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
       if (croppedBlob) {
         const objectUrl = URL.createObjectURL(croppedBlob);
-        if (cropTarget === 'logo') { 
+        const currentTarget = cropTarget;
+        
+        // Optimistically close modal immediately to prevent UI lag
+        setCropImageSrc(null); 
+        setCropTarget(null);
+
+        if (currentTarget === 'logo') { 
           setLogoFileBlob(croppedBlob); 
           setLogoPreview(objectUrl); 
           setIsDirtyLogo(true); 
           markDirty('branding');
         } 
-        else if (cropTarget === 'product') { 
+        else if (currentTarget === 'product') { 
           setProductFileBlob(croppedBlob); 
           setProductPreview(objectUrl); 
         }
-        else if (cropTarget === 'banner') {
+        else if (currentTarget === 'banner') {
           const fd = new FormData();
           fd.append('image', croppedBlob, 'banner.webp');
           const tempId = `temp-${Date.now()}`;
@@ -507,18 +517,19 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             });
           });
           
-          const res = await addBanner(fd);
-          if (res?.error) {
-            showToast(res.error);
-            // Revert optimistic update
-            startTransition(() => {
-              dispatchOptBanners({ type: 'delete', payload: tempId });
-            });
-          } else {
-            showToast("Banner added!");
-          }
+          startTransition(async () => {
+            const res = await addBanner(fd);
+            if (res?.error) {
+              showToast(res.error);
+              // Revert optimistic update if network save fails
+              startTransition(() => {
+                dispatchOptBanners({ type: 'delete', payload: tempId });
+              });
+            } else {
+              showToast("Banner added!");
+            }
+          });
         }
-        setCropImageSrc(null); setCropTarget(null);
       }
     } catch (e) { console.error(e); }
   };
@@ -813,16 +824,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           </div>
                           <div className="flex gap-1.5 shrink-0 z-10 relative">
                             <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
-                            <form action={async (fd) => { 
-                                setDeletingId(item.id);
+                            <form action={(fd) => { 
                                 startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                const res = await deleteProduct(fd); 
-                                setDeletingId(null);
-                                showToast("Product deleted"); 
+                                startTransition(async () => {
+                                  await deleteProduct(fd); 
+                                  showToast("Product deleted"); 
+                                });
                             }}>
                               <input type="hidden" name="id" value={item.id} />
-                              <button onClick={(e) => e.stopPropagation()} disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95 disabled:opacity-50">
-                                {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                              <button type="submit" onClick={(e) => e.stopPropagation()} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95">
+                                <Trash2 size={16} />
                               </button>
                             </form>
                           </div>
@@ -868,16 +879,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <td className="p-4 text-xs text-gray-400 font-medium">{item.time}</td>
                             <td className="p-4 text-right flex items-center justify-end gap-2">
                               <button onClick={() => setEditingProduct(item)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
-                              <form action={async (fd) => { 
-                                setDeletingId(item.id);
+                              <form action={(fd) => { 
                                 startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                await deleteProduct(fd); 
-                                setDeletingId(null);
-                                showToast("Product deleted"); 
+                                startTransition(async () => {
+                                  await deleteProduct(fd); 
+                                  showToast("Product deleted"); 
+                                });
                               }}>
                                 <input type="hidden" name="id" value={item.id} />
-                                <button disabled={deletingId === item.id} className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95 disabled:opacity-50">
-                                  {deletingId === item.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                <button type="submit" className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95">
+                                  <Trash2 size={18} />
                                 </button>
                               </form>
                             </td>
@@ -919,16 +930,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                            </div>
                            <div className="flex flex-col gap-2 shrink-0">
                             <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={16} /></button>
-                            <form action={async (fd) => { 
-                                setDeletingId(item.id);
+                            <form action={(fd) => { 
                                 startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                await deleteProduct(fd); 
-                                setDeletingId(null);
-                                showToast("Product deleted"); 
+                                startTransition(async () => {
+                                  await deleteProduct(fd); 
+                                  showToast("Product deleted"); 
+                                });
                             }}>
                               <input type="hidden" name="id" value={item.id} />
-                              <button disabled={deletingId === item.id} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 active:scale-95 transition-all disabled:opacity-50">
-                                {deletingId === item.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                              <button type="submit" className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 active:scale-95 transition-all">
+                                <Trash2 size={16} />
                               </button>
                             </form>
                           </div>
@@ -979,16 +990,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <td className="p-4 text-sm text-gray-500">{cat.discount ? `${cat.discount}%` : '-'}</td>
                       <td className="p-4 text-right flex items-center justify-end gap-2">
                         <button onClick={() => setEditingCategory(cat)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
-                        <form action={async (fd) => { 
-                          setDeletingId(cat.id);
+                        <form action={(fd) => { 
                           startTransition(() => dispatchOptCategories({ type: 'delete', payload: cat.id })); 
-                          await deleteCategory(fd); 
-                          setDeletingId(null);
-                          showToast("Category deleted"); 
+                          startTransition(async () => {
+                            await deleteCategory(fd); 
+                            showToast("Category deleted"); 
+                          });
                         }}>
                           <input type="hidden" name="id" value={cat.id} />
-                          <button disabled={deletingId === cat.id} className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95 disabled:opacity-50">
-                            {deletingId === cat.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          <button type="submit" className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95">
+                            <Trash2 size={18} />
                           </button>
                         </form>
                       </td>
@@ -1136,9 +1147,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   </div>
 
                   <div className="flex justify-end pt-4 border-t border-gray-100">
-                     <button type="submit" disabled={isSaving || !dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
-                       {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                       {dirtySections['identity'] ? (isSaving ? 'Saving...' : 'Save Changes') : 'Saved'}
+                     <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                       <CheckCircle size={16}/>
+                       {dirtySections['identity'] ? 'Save Changes' : 'Saved'}
                      </button>
                   </div>
                 </form>
@@ -1262,9 +1273,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    </div>
 
                    <div className="flex justify-end pt-4">
-                       <button type="submit" disabled={isSaving || !dirtySections['branding']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
-                         {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                         {dirtySections['branding'] ? (isSaving ? 'Saving...' : 'Save Design') : 'Saved'}
+                       <button type="submit" disabled={!dirtySections['branding']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                         <CheckCircle size={16}/> 
+                         {dirtySections['branding'] ? 'Save Design' : 'Saved'}
                        </button>
                    </div>
                 </form>
@@ -1305,16 +1316,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             <button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button>
                          </div>
 
-                         <form action={async (fd) => {
-                           setDeletingId(b.id);
+                         <form action={(fd) => {
                            startTransition(() => dispatchOptBanners({ type: 'delete', payload: b.id }));
-                           await deleteBanner(fd);
-                           setDeletingId(null);
-                           showToast("Banner deleted");
+                           startTransition(async () => {
+                             await deleteBanner(fd);
+                             showToast("Banner deleted");
+                           });
                          }}>
                            <input type="hidden" name="id" value={b.id} />
-                           <button disabled={deletingId === b.id} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 disabled:opacity-50">
-                             {deletingId === b.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14}/>}
+                           <button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600">
+                             <Trash2 size={14}/>
                            </button>
                          </form>
                        </div>
@@ -1392,9 +1403,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     </button>
 
                     <div className="flex justify-end pt-4">
-                      <button type="submit" disabled={isSaving || !dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
-                        {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle size={16}/>} 
-                        {dirtySections['socials'] ? (isSaving ? 'Saving...' : 'Save Social Links') : 'Saved'}
+                      <button type="submit" disabled={!dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                        <CheckCircle size={16}/> 
+                        {dirtySections['socials'] ? 'Save Social Links' : 'Saved'}
                       </button>
                     </div>
                   </form>
@@ -1437,6 +1448,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   setIsSaving(false);
 
                   if (success) {
+                    clearDirty(pendingNav.source);
+                    if (pendingNav.source === 'branding') setLogoFileBlob(null);
+                    showToast("Changes saved!");
                     executeNav(pendingNav.type, pendingNav.payload);
                     setPendingNav(null);
                   }
@@ -1622,8 +1636,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    setIsFormOpen(false); 
                    setEditingProduct(null); 
                    
-                   // Execute request in background without blocking UI
-                   setTimeout(async () => {
+                   // Execute request in background using transition
+                   startTransition(async () => {
                      if (productFileBlob) fd.set('image', productFileBlob, 'product.webp');
                      fd.set('name', prodName.en);
                      fd.set('name_kh', prodName.kh);
@@ -1639,7 +1653,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      } catch (err) {
                        showToast("Failed to save product.");
                      }
-                   }, 0);
+                   });
                  }} 
                  className="space-y-4"
                >
@@ -1753,8 +1767,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     setIsCatFormOpen(false); 
                     setEditingCategory(null); 
 
-                    // Execute request in background
-                    setTimeout(async () => {
+                    // Execute request in background using transition
+                    startTransition(async () => {
                       fd.set('name', catName.en);
                       fd.set('name_kh', catName.kh);
                       fd.set('name_zh', catName.zh);
@@ -1766,7 +1780,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       } catch (err) {
                         showToast("Failed to save category.");
                       }
-                    }, 0);
+                    });
                  }} 
                  className="space-y-4"
                >

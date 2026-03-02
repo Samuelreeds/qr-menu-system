@@ -52,8 +52,8 @@ export default async function SuperAdminShopDetail(props: {
   const currentPlan = rawPlan && rawPlan in PLAN_LIMITS ? (rawPlan as keyof typeof PLAN_LIMITS) : 'FREE';
   const defaults = PLAN_LIMITS[currentPlan];
 
-  // CSV Template Data
-  const csvTemplate = "data:text/csv;charset=utf-8," + encodeURIComponent(
+  // CSV Template Data (with UTF-8 BOM to preserve Khmer/Chinese in Excel)
+  const csvTemplate = "data:text/csv;charset=utf-8,%EF%BB%BF" + encodeURIComponent(
     "Category Name,Product Name,Khmer Name,Chinese Name,Price,Discount,Preparation Time,Image URL,Popular,Description\n" +
     "Hot Drinks,Latte,ឡាតេ,拿铁,3.50,0,5min,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,TRUE,Delicious espresso with steamed milk"
   );
@@ -361,7 +361,8 @@ export default async function SuperAdminShopDetail(props: {
                       <FileText size={28} className="text-blue-500" />
                     </div>
                     <span className="text-sm font-bold text-gray-900">Upload your data file</span>
-                    <p className="text-xs font-medium text-gray-500 mt-1 mb-5">.csv format only</p>
+                    <p className="text-xs font-medium text-gray-500 mt-1 mb-2">.csv format only</p>
+                    <p className="text-[10px] font-bold text-amber-600 mb-4 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-100">Save as "CSV UTF-8" in Excel to preserve Khmer/Chinese</p>
                     
                     <input 
                       type="file" 

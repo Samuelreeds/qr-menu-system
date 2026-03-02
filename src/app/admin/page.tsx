@@ -38,21 +38,45 @@ export default async function AdminPage() {
     );
   }
 
-  const planState = await getShopPlanState(shopId);
-  const currentPlan = (planState?.plan as PlanKey) || 'FREE';
-  const planLimits = await getShopLimitsAndFeatures(shopId);
+  // OPTIMIZATION: Batch all independent database queries using Promise.all
+  // This eliminates the sequential waterfall and drastically reduces page load time
+  // which makes the dashboard feel much faster during initial loads and revalidations.
+  const [
+    planState,
+    planLimits,
+    categories,
+    rawProducts,
+    banners,
+    dbSettings,
+    dbPlan
+  ] = await Promise.all([
+    getShopPlanState(shopId),
+    getShopLimitsAndFeatures(shopId),
+    prisma.category.findMany({
+      where: { shopId },
+      orderBy: { sortOrder: 'asc' }
+    }),
+    prisma.product.findMany({
+      where: { shopId },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' }
+    }),
+    prisma.banner.findMany({
+      where: { shopId, deletedAt: null },
+      orderBy: { sortOrder: 'asc' }
+    }),
+    prisma.shopSettings.findUnique({
+      where: { shopId }
+    }),
+    // UI FIX: Fetch plan name if shop plan is saved as an ID rather than a label
+    shop.plan ? (prisma as any).plan.findFirst({
+      where: { OR: [{ id: shop.plan }, { slug: shop.plan.toLowerCase() }] }
+    }).catch(() => null) : Promise.resolve(null)
+  ]);
 
-  // Fetch data for the dashboard matching the exact props expected
-  const categories = await prisma.category.findMany({
-    where: { shopId },
-    orderBy: { sortOrder: 'asc' }
-  });
-
-  const rawProducts = await prisma.product.findMany({
-    where: { shopId },
-    include: { category: true },
-    orderBy: { createdAt: 'desc' }
-  });
+  const rawPlanId = planState?.plan as string;
+  // Fallback to name, else if it's a long CUID, show 'PRO', otherwise show raw label (e.g. 'FREE')
+  const currentPlanName = dbPlan?.name || (rawPlanId && rawPlanId.length > 15 ? 'PRO' : rawPlanId) || 'FREE';
 
   // Map raw products to ensure types align with frontend expectations
   const formattedProducts = rawProducts.map((p) => ({
@@ -70,15 +94,6 @@ export default async function AdminPage() {
     isPopular: p.isPopular,
     discount: p.discount
   }));
-
-  const banners = await prisma.banner.findMany({
-    where: { shopId, deletedAt: null },
-    orderBy: { sortOrder: 'asc' }
-  });
-
-  let dbSettings = await prisma.shopSettings.findUnique({
-    where: { shopId }
-  });
 
   // Provide fallback to avoid undefined crashes if settings table is completely empty
   const settings = dbSettings || {
@@ -103,7 +118,7 @@ export default async function AdminPage() {
       settings={settings as any} // Cast as any to bypass strict setting type checking if un-synced
       shopSlug={shop.id} // FIXED: Used shopId as the URL slug for live view and QR codes
       banners={banners}
-      shopPlan={currentPlan}
+      shopPlan={currentPlanName}
       planLimits={planLimits}
     />
   );

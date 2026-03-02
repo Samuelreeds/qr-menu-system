@@ -9,7 +9,7 @@ import Link from 'next/link';
 // Force dynamic rendering to ensure stats are always up to date
 export const revalidate = 0; 
 
-export default async function SuperAdminPage() {
+export default async function SuperAdminPage(props: { searchParams?: Promise<{ [key: string]: string | undefined }> }) {
   const session = await getServerSession();
   
   if (!session?.user?.email) {
@@ -31,9 +31,66 @@ export default async function SuperAdminPage() {
     );
   }
 
-  const shops = await prisma.shop.findMany({ orderBy: { createdAt: 'desc' } });
-  const invites = await prisma.invite.findMany({ orderBy: { createdAt: 'desc' } });
-  const users = await prisma.user.findMany({ orderBy: { id: 'desc' } });
+  // OPTIMIZATION: Pagination Logic
+  const searchParams = await props.searchParams;
+  const pageParam = parseInt(searchParams?.page || '1', 10);
+  const page = isNaN(pageParam) ? 1 : Math.max(1, pageParam);
+  const limit = 25;
+  const skip = (page - 1) * limit;
+
+  // OPTIMIZATION: Query only necessary fields and use DB count for stats to drastically reduce memory footprint
+  const [
+    shops, 
+    totalShops,
+    activeShops,
+    paidShops,
+    invites, 
+    users
+  ] = await Promise.all([
+    prisma.shop.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        plan: true,
+        status: true,
+        deletedAt: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit
+    }),
+    prisma.shop.count(),
+    prisma.shop.count({ where: { status: 'ACTIVE', deletedAt: null } }),
+    prisma.shop.count({ where: { plan: { not: 'FREE' } } }),
+    prisma.invite.findMany({ 
+      select: {
+        id: true,
+        token: true,
+        shopName: true,
+        isUsed: true,
+        expiresAt: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' } 
+    }),
+    prisma.user.findMany({ 
+      select: {
+        id: true,
+        email: true
+      },
+      orderBy: { id: 'desc' } 
+    })
+  ]);
+
+  const shopStats = {
+    total: totalShops,
+    active: activeShops,
+    paid: paidShops,
+    currentPage: page,
+    totalPages: Math.ceil(totalShops / limit)
+  };
 
   // Transform hardcoded PLAN_LIMITS into a format suitable for the read-only UI
   const hardcodedPlans = Object.entries(PLAN_LIMITS).map(([key, limits], index) => {
@@ -142,5 +199,5 @@ export default async function SuperAdminPage() {
   finalPlans.push(...Array.from(dbPlanMap.values()));
   finalPlans.sort((a, b) => a.order - b.order);
 
-  return <SuperAdminClient shops={shops} invites={invites} users={users} plans={finalPlans} />;
+  return <SuperAdminClient shops={shops} invites={invites} users={users} plans={finalPlans} shopStats={shopStats} />;
 }

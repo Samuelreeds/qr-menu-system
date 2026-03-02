@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { cache } from 'react';
 
 // --- CONFIGURATION ---
 export const PLAN_LIMITS = {
@@ -32,8 +33,9 @@ export type PlanKey = string;
 
 /**
  * Returns the current plan and full shop record.
+ * OPTIMIZATION: Wrapped in React cache to prevent duplicate DB queries during the same request lifecycle.
  */
-export async function getShopPlanState(shopId: string) {
+export const getShopPlanState = cache(async (shopId: string) => {
   const shop = await prisma.shop.findUnique({
     where: { id: shopId },
     select: {
@@ -54,13 +56,14 @@ export async function getShopPlanState(shopId: string) {
     ...shop,
     plan: shop.plan || 'FREE'
   };
-}
+});
 
 /**
  * Resolves the ultimate limits and features for a shop.
  * Priority: Per-Shop Overrides > Dynamic DB Plan Settings > Legacy Hardcoded Defaults
+ * OPTIMIZATION: Wrapped in React cache to prevent duplicate DB queries during the same request lifecycle.
  */
-export async function getShopLimitsAndFeatures(shopId: string) {
+export const getShopLimitsAndFeatures = cache(async (shopId: string) => {
   const state: any = await getShopPlanState(shopId);
   if (!state) return null;
 
@@ -105,7 +108,7 @@ export async function getShopLimitsAndFeatures(shopId: string) {
     featDedicatedSupport: dbPlan ? !!dbPlan.featDedicatedSupport : (planKey !== 'FREE'),
     featAiUpload: dbPlan ? !!dbPlan.featAiUpload : (planKey !== 'FREE'),
   };
-}
+});
 
 /**
  * Checks if a specific feature is enabled for the shop's plan (backed by DB).

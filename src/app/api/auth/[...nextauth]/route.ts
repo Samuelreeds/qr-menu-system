@@ -1,9 +1,12 @@
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 
-const handler = NextAuth({
+// OPTIMIZATION: Export authOptions so it can be used by getServerSession in server actions
+// This prevents NextAuth from falling back to default session properties and allows us to read 
+// token.shopId without executing a database lookup on every single admin request.
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -99,7 +102,6 @@ const handler = NextAuth({
     }
   },
   pages: {
-    // UPDATED PATH: Points to your new auth/login location
     signIn: "/auth/login",
     error: "/auth/login" 
   },
@@ -107,6 +109,8 @@ const handler = NextAuth({
     strategy: "jwt",
   },
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };

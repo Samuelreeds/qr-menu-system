@@ -8,6 +8,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 import { getServerSession } from 'next-auth';
 import { canUseFeature, getLimit } from '@/lib/shop-guard';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 // --- SETUP ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -16,7 +17,15 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 
 // --- MULTI-TENANT HELPER (SECURED) ---
 async function getActiveShopId() {
-  const session = await getServerSession();
+  // OPTIMIZATION: Read shopId directly from JWT session using authOptions.
+  // This completely eliminates the `prisma.user.findUnique` query from EVERY admin action!
+  const session = await getServerSession(authOptions);
+  
+  if ((session as any)?.user?.shopId) {
+    return (session as any).user.shopId;
+  }
+
+  // Fallback behavior if session is somehow missing shopId but has email
   if (!session?.user?.email) return null;
 
   const user = await prisma.user.findUnique({
@@ -28,9 +37,37 @@ async function getActiveShopId() {
   return user.shopUsers[0].shopId;
 }
 
+// --- OPTIMIZATION: TARGETED REVALIDATION HELPER ---
+async function revalidateActiveShop() {
+  revalidatePath('/admin');
+  try {
+    const shopId = await getActiveShopId();
+    if (shopId) {
+      const shop = await prisma.shop.findUnique({ where: { id: shopId }, select: { slug: true } });
+      if (shop?.slug) {
+        revalidatePath(`/${shop.slug}`);
+      }
+      revalidatePath(`/${shopId}`);
+    }
+  } catch (e) {
+    console.error("Targeted revalidation failed", e);
+  }
+}
+
 // --- SUPER ADMIN HELPER (SECURED) ---
 export async function verifySuperAdmin() {
-  const session = await getServerSession();
+  // OPTIMIZATION: Read role flags directly from session to avoid DB lookup.
+  const session = await getServerSession(authOptions);
+  
+  if ((session as any)?.user?.isSuperAdmin || (session as any)?.user?.role === 'SUPERADMIN') {
+    return {
+      id: (session as any).user?.id,
+      email: session?.user?.email,
+      role: (session as any).user?.role,
+      isSuperAdmin: (session as any).user?.isSuperAdmin
+    };
+  }
+
   if (!session?.user?.email) return null;
 
   const user = await prisma.user.findUnique({
@@ -162,7 +199,7 @@ export async function addBanner(formData: FormData) {
     await prismaAny.banner.create({
       data: { image: imagePath, sortOrder: nextOrder, shopId }
     });
-    revalidatePath('/', 'layout');
+    await revalidateActiveShop();
   }
 }
 
@@ -174,7 +211,7 @@ export async function deleteBanner(formData: FormData) {
     if (banner) {
       await prismaAny.banner.delete({ where: { id } });
       await deleteFromSupabase(banner.image);
-      revalidatePath('/', 'layout');
+      await revalidateActiveShop();
     }
   } catch (e) {}
 }
@@ -187,7 +224,7 @@ export async function softDeleteBanner(formData: FormData) {
       where: { id },
       data: { deletedAt: new Date() }
     });
-    revalidatePath('/', 'layout');
+    await revalidateActiveShop();
   } catch (e) {}
 }
 
@@ -199,7 +236,7 @@ export async function undoDeleteBanner(formData: FormData) {
       where: { id },
       data: { deletedAt: null }
     });
-    revalidatePath('/', 'layout');
+    await revalidateActiveShop();
   } catch (e) {}
 }
 
@@ -215,7 +252,7 @@ export async function reorderBanners(banners: {id: string, sortOrder: number}[])
         data: { sortOrder: banner.sortOrder }
       });
     }
-    revalidatePath('/', 'layout');
+    await revalidateActiveShop();
   } catch (error) {
     console.error("Failed to reorder banners", error);
   }
@@ -245,7 +282,7 @@ export async function createCategory(formData: FormData) {
   await prisma.category.create({ 
     data: { name, name_kh, name_zh, sortOrder: nextOrder, discount, shopId } 
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function updateCategory(formData: FormData) {
@@ -260,13 +297,13 @@ export async function updateCategory(formData: FormData) {
     where: { id }, 
     data: { name, name_kh, name_zh, sortOrder, discount } 
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function deleteCategory(formData: FormData) {
   const id = formData.get('id') as string;
   try { await prisma.category.delete({ where: { id } }); } catch (e) {}
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 // --- PRODUCT ACTIONS ---
@@ -294,7 +331,7 @@ export async function createProduct(formData: FormData) {
   await prisma.product.create({
     data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
   })
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function updateProduct(formData: FormData) {
@@ -319,7 +356,7 @@ export async function updateProduct(formData: FormData) {
     where: { id },
     data: { name, name_kh, name_zh, price, discount, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on' }
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function deleteProduct(formData: FormData) {
@@ -329,7 +366,7 @@ export async function deleteProduct(formData: FormData) {
     await prisma.product.delete({ where: { id } });
     await deleteFromSupabase(product?.image || null);
   } catch (e) {}
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 // --- SETTINGS ACTIONS ---
@@ -363,7 +400,7 @@ export async function updateShopIdentity(formData: FormData) {
       headerDesign: 'design1'
     }
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function updateShopBranding(formData: FormData) {
@@ -399,7 +436,7 @@ export async function updateShopBranding(formData: FormData) {
       headerDesign: canUseThemes ? (formData.get('headerDesign') as string || 'design1') : 'design1'
     }
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function updateShopSocials(formData: FormData) {
@@ -421,11 +458,11 @@ export async function updateShopSocials(formData: FormData) {
       socials
     }
   });
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 export async function forceRevalidateAction() {
-  revalidatePath('/', 'layout');
+  await revalidateActiveShop();
 }
 
 // --- SUPER ADMIN ACTIONS ---
@@ -473,11 +510,14 @@ export async function toggleShopStatus(formData: FormData) {
   
   const id = formData.get('id') as string;
   const currentStatus = formData.get('currentStatus') === 'true';
-  await prisma.shop.update({ 
+  const shop = await prisma.shop.update({ 
     where: { id }, 
-    data: { status: currentStatus ? "LOCKED" : "ACTIVE" } 
+    data: { status: currentStatus ? "LOCKED" : "ACTIVE" },
+    select: { id: true, slug: true }
   });
   revalidatePath('/superadmin');
+  if (shop.slug) revalidatePath(`/${shop.slug}`);
+  revalidatePath(`/${shop.id}`);
 }
 
 export async function updateShopPlan(formData: FormData) {
@@ -486,11 +526,14 @@ export async function updateShopPlan(formData: FormData) {
   const id = formData.get('id') as string;
   const plan = formData.get('plan') as string;
   try {
-    await prisma.shop.update({ 
+    const shop = await prisma.shop.update({ 
       where: { id }, 
-      data: { plan } 
+      data: { plan },
+      select: { id: true, slug: true }
     });
     revalidatePath('/superadmin');
+    if (shop.slug) revalidatePath(`/${shop.slug}`);
+    revalidatePath(`/${shop.id}`);
   } catch (error) {
     console.error("Failed to update shop plan:", error);
   }
@@ -504,23 +547,33 @@ export async function updateShopLimits(formData: FormData) {
   const maxCategories = formData.get('overrideMaxCategories') as string;
   const maxBanners = formData.get('overrideMaxBanners') as string;
 
-  await prisma.shop.update({
+  const shop = await prisma.shop.update({
     where: { id },
     data: {
       overrideMaxProducts: maxProducts ? parseInt(maxProducts, 10) : null,
       overrideMaxCategories: maxCategories ? parseInt(maxCategories, 10) : null,
       overrideMaxBanners: maxBanners ? parseInt(maxBanners, 10) : null,
-    }
+    },
+    select: { id: true, slug: true }
   });
   revalidatePath('/superadmin');
+  if (shop.slug) revalidatePath(`/${shop.slug}`);
+  revalidatePath(`/${shop.id}`);
 }
 
 export async function deleteShop(formData: FormData) {
   if (!await verifySuperAdmin()) return { error: "Unauthorized" };
   
   const id = formData.get('id') as string;
-  try { await prisma.shop.delete({ where: { id } }); } catch (e) {}
-  revalidatePath('/superadmin');
+  try { 
+    const shop = await prisma.shop.delete({ 
+      where: { id },
+      select: { id: true, slug: true }
+    }); 
+    revalidatePath('/superadmin');
+    if (shop.slug) revalidatePath(`/${shop.slug}`);
+    revalidatePath(`/${shop.id}`);
+  } catch (e) {}
 }
 
 export async function softDeleteShop(formData: FormData) {
@@ -528,11 +581,14 @@ export async function softDeleteShop(formData: FormData) {
   
   const id = formData.get('id') as string;
   try {
-    await prisma.shop.update({
+    const shop = await prisma.shop.update({
       where: { id },
-      data: { deletedAt: new Date() }
+      data: { deletedAt: new Date() },
+      select: { id: true, slug: true }
     });
     revalidatePath('/superadmin');
+    if (shop.slug) revalidatePath(`/${shop.slug}`);
+    revalidatePath(`/${shop.id}`);
     return { success: true };
   } catch (e) {
     return { success: false, error: "Failed to soft delete shop" };
@@ -544,11 +600,14 @@ export async function restoreShop(formData: FormData) {
   
   const id = formData.get('id') as string;
   try {
-    await prisma.shop.update({
+    const shop = await prisma.shop.update({
       where: { id },
-      data: { deletedAt: null }
+      data: { deletedAt: null },
+      select: { id: true, slug: true }
     });
     revalidatePath('/superadmin');
+    if (shop.slug) revalidatePath(`/${shop.slug}`);
+    revalidatePath(`/${shop.id}`);
     return { success: true };
   } catch (e) {
     return { success: false, error: "Failed to restore shop" };
@@ -607,12 +666,14 @@ export async function importMenuData(formData: FormData) {
   }
 
   try {
-    const text = await file.text();
+    const arrayBuffer = await file.arrayBuffer();
+    // Parse as UTF-8 explicitly and remove BOM if present
+    const text = Buffer.from(arrayBuffer).toString('utf8').replace(/^\uFEFF/, '');
     
     // Stash the parsed text safely in Supabase for the confirm step
     try {
-      await supabase.storage.from('uploads').upload(`imports/${shopId}.txt`, Buffer.from(text), {
-        contentType: 'text/plain',
+      await supabase.storage.from('uploads').upload(`imports/${shopId}.txt`, Buffer.from(text, 'utf8'), {
+        contentType: 'text/plain;charset=UTF-8',
         upsert: true
       });
     } catch (e) {
@@ -742,8 +803,11 @@ export async function executeMenuImport(formData: FormData) {
       return { success: false, error: "Import session expired or file missing. Please upload the CSV again." };
     }
 
-    const text = await data.text();
+    const arrayBuffer = await data.arrayBuffer();
+    // Parse as UTF-8 explicitly and remove BOM if present
+    const text = Buffer.from(arrayBuffer).toString('utf8').replace(/^\uFEFF/, '');
     const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
+    
     if (rows.length < 2) return { success: false, error: "No data rows found." };
 
     const parseCSVRow = (row: string) => {
@@ -1037,7 +1101,6 @@ export async function togglePlanStatus(formData: FormData) {
       });
     }
     revalidatePath('/superadmin');
-    revalidatePath('/', 'layout');
   } catch (error) {
     console.error("Failed to toggle plan status:", error);
   }

@@ -43,8 +43,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   const limits = PLAN_LIMITS[currentPlan];
 
   const effectiveMaxBanners = (planState as any)?.overrideMaxBanners ?? limits.maxBanners;
-  const effectivePremiumThemes = limits.premiumThemes;
-  const effectiveCustomSocials = limits.customSocials;
 
   const safeSettings = shop.settings || {
     name: shop.name,
@@ -65,8 +63,8 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     socials: '[]', 
   };
 
-  // ENFORCEMENT: Strip out premium visuals if the current plan doesn't allow them.
-  // The database retains the actual values (preserving data), but we serve the defaults.
+  // DATA SYNC: Read visual configurations directly from the database value.
+  // Enforcement happens during the save/update action in the admin dashboard.
   const formattedSettings = {
     name: safeSettings.name || shop.name,
     name_kh: safeSettings.name_kh || '',
@@ -74,8 +72,8 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     address: safeSettings.address || '',
     phone: safeSettings.phone || '',
     openingHours: safeSettings.openingHours || '',
-    themeColor: effectivePremiumThemes ? (safeSettings.themeColor || '#000000') : '#000000',
-    headerDesign: effectivePremiumThemes ? (safeSettings.headerDesign || 'design1') : 'design1',
+    themeColor: safeSettings.themeColor || '#000000',
+    headerDesign: safeSettings.headerDesign || 'design1',
     logo: safeSettings.logo || '', 
     facebook: safeSettings.facebook || '',
     showFacebook: safeSettings.showFacebook || false,
@@ -83,7 +81,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: safeSettings.showInstagram || false,
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
-    socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
+    socials: safeSettings.socials || '[]', 
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
