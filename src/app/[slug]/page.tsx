@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import MenuClient from '@/components/MenuClient';
-import { getShopPlanState, PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
+import { getShopLimitsAndFeatures } from '@/lib/shop-guard';
 
 export const revalidate = 0; 
 
@@ -37,12 +37,12 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   }
 
   // ENFORCEMENT: Fetch the effective capabilities for this shop to apply downgrade logic
-  const planState = await getShopPlanState(shop.id);
-  const rawPlan = planState?.plan as string | undefined;
-  const currentPlan = rawPlan && rawPlan in PLAN_LIMITS ? (rawPlan as keyof typeof PLAN_LIMITS) : 'FREE';
-  const limits = PLAN_LIMITS[currentPlan];
-
-  const effectiveMaxBanners = (planState as any)?.overrideMaxBanners ?? limits.maxBanners;
+  const planLimits = await getShopLimitsAndFeatures(shop.id);
+  
+  const effectiveMaxBanners = (planLimits as any)?.maxBanners || 1;
+  const effectivePremiumThemes = (planLimits as any)?.premiumThemes || false;
+  const effectiveCustomSocials = (planLimits as any)?.customSocials || false;
+  const multiLanguageEnabled = !!(planLimits as any)?.featMultipleLanguage;
 
   const safeSettings = shop.settings || {
     name: shop.name,
@@ -72,8 +72,8 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     address: safeSettings.address || '',
     phone: safeSettings.phone || '',
     openingHours: safeSettings.openingHours || '',
-    themeColor: safeSettings.themeColor || '#000000',
-    headerDesign: safeSettings.headerDesign || 'design1',
+    themeColor: effectivePremiumThemes ? (safeSettings.themeColor || '#000000') : '#000000',
+    headerDesign: effectivePremiumThemes ? (safeSettings.headerDesign || 'design1') : 'design1',
     logo: safeSettings.logo || '', 
     facebook: safeSettings.facebook || '',
     showFacebook: safeSettings.showFacebook || false,
@@ -81,7 +81,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     showInstagram: safeSettings.showInstagram || false,
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
-    socials: safeSettings.socials || '[]', 
+    socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
@@ -125,6 +125,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
       categories={formattedCategories}
       shopSettings={formattedSettings}
       banners={formattedBanners}
+      multiLanguageEnabled={multiLanguageEnabled}
     />
   );
 }

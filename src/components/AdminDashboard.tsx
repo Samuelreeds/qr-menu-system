@@ -1,3 +1,4 @@
+
 'use client';
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
@@ -135,9 +136,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     maxBanners: 0,
     premiumThemes: false,
     customSocials: false,
+    featMultipleLanguage: false
   };
   const canUsePremiumThemes = safeLimits.premiumThemes;
   const canUseCustomSocials = safeLimits.customSocials;
+  const multiLanguageEnabled = !!safeLimits.featMultipleLanguage;
 
   const [headerDesign, setHeaderDesign] = useState(settings?.headerDesign || 'design1');
   const [themeColorPreview, setThemeColorPreview] = useState(settings?.themeColor || '#000000');
@@ -1671,7 +1674,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      <input type="file" accept="image/*" ref={productInputRef} onChange={(e) => onFileSelect(e, 'product')} className="hidden" />
                   </div>
 
-                  <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required />
+                  <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required multiLangEnabled={multiLanguageEnabled} />
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
@@ -1785,7 +1788,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                  className="space-y-4"
                >
                   {editingCategory && <input type="hidden" name="id" value={editingCategory.id} />}
-                  <LocalizedInput label="Category Name" value={catName.en} valueKh={catName.kh} valueZh={catName.zh} onChange={(lang, val) => setCatName(prev => ({ ...prev, [lang]: val }))} required />
+                  <LocalizedInput label="Category Name" value={catName.en} valueKh={catName.kh} valueZh={catName.zh} onChange={(lang, val) => setCatName(prev => ({ ...prev, [lang]: val }))} required multiLangEnabled={multiLanguageEnabled} />
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">

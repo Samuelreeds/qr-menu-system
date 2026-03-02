@@ -3,17 +3,27 @@ import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { ChevronDown, Check } from "lucide-react";
 
-// Use direct image URLs instead of text emojis
-const languages = [
+const ALL_LANGUAGES = [
   { code: 'en', label: 'English', flag: 'https://flagcdn.com/w40/us.png' }, 
   { code: 'kh', label: 'ខ្មែរ', flag: 'https://flagcdn.com/w40/kh.png' },
   { code: 'zh', label: '中文', flag: 'https://flagcdn.com/w40/cn.png' }
 ];
 
 export default function LangSwitcher() {
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang, multiLangEnabled } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const languages = multiLangEnabled 
+    ? ALL_LANGUAGES 
+    : ALL_LANGUAGES.filter(l => l.code !== 'zh');
+
+  // Fallback if current lang is not allowed
+  useEffect(() => {
+    if (!multiLangEnabled && lang === 'zh') {
+      setLang('en');
+    }
+  }, [multiLangEnabled, lang, setLang]);
 
   const activeLang = languages.find(l => l.code === lang) || languages[0];
 

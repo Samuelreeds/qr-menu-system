@@ -58,9 +58,10 @@ interface MenuClientProps {
   categories: Category[];
   shopSettings: ShopSettings;
   banners?: Banner[];
+  multiLanguageEnabled?: boolean;
 }
 
-export default function MenuClient({ initialProducts, categories, shopSettings, banners = [] }: MenuClientProps) {
+export default function MenuClient({ initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false }: MenuClientProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -71,7 +72,14 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   
-  const { lang } = useLanguage(); 
+  const { lang, setMultiLangEnabled } = useLanguage(); 
+
+  // Push server-side capability to Language Context for LangSwitcher to consume
+  useEffect(() => {
+    if (setMultiLangEnabled) {
+      setMultiLangEnabled(multiLanguageEnabled);
+    }
+  }, [multiLanguageEnabled, setMultiLangEnabled]);
 
   // Default values
   const shopNameEn = shopSettings?.name || 'Gourmet Shop';
@@ -117,7 +125,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
   const getCategoryName = (cat: Category) => {
     if (lang === 'kh') return cat.name_kh || cat.name;
-    if (lang === 'zh') return cat.name_zh || cat.name;
+    if (lang === 'zh' && multiLanguageEnabled) return cat.name_zh || cat.name;
     return cat.name;
   };
 
@@ -132,7 +140,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
     return products.filter(p => 
       p.name.toLowerCase().includes(lowerQuery) || 
       (p.name_kh && p.name_kh.includes(searchQuery)) ||
-      (p.name_zh && p.name_zh.includes(searchQuery))
+      (multiLanguageEnabled && p.name_zh && p.name_zh.includes(searchQuery))
     );
   };
 
@@ -241,7 +249,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               }`}
               style={activeCategory === 'All' ? { backgroundColor: themeColor } : {}}
             >
-              {lang === 'kh' ? 'ទាំងអស់' : lang === 'zh' ? '全部' : 'All'}
+              {lang === 'kh' ? 'ទាំងអស់' : lang === 'zh' && multiLanguageEnabled ? '全部' : 'All'}
           </button>
 
           {hasPopularProducts && (
@@ -254,7 +262,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                 }`}
                 style={activeCategory === 'Hot Sale' ? { backgroundColor: themeColor } : {}}
               >
-                🔥 {lang === 'kh' ? 'ពេញនិយម' : lang === 'zh' ? '热卖' : 'Hot Sale'}
+                🔥 {lang === 'kh' ? 'ពេញនិយម' : lang === 'zh' && multiLanguageEnabled ? '热卖' : 'Hot Sale'}
             </button>
           )}
 
@@ -418,7 +426,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           
           <div className="p-6">
             <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-2">
-              {lang === 'kh' ? (selectedItem.name_kh || selectedItem.name) : lang === 'zh' ? (selectedItem.name_zh || selectedItem.name) : selectedItem.name}
+              {lang === 'kh' ? (selectedItem.name_kh || selectedItem.name) : (lang === 'zh' && multiLanguageEnabled) ? (selectedItem.name_zh || selectedItem.name) : selectedItem.name}
             </h2>
             
             <div className="flex items-center gap-3 text-gray-500 text-sm mb-4 font-medium">

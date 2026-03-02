@@ -1,18 +1,26 @@
+// src/context/LanguageContext.tsx
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { translations } from "@/constants/translations";
 
 type Lang = 'en' | 'kh' | 'zh';
 
-const LanguageContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({ 
-  lang: 'en', setLang: () => {} 
+const LanguageContext = createContext<{ 
+  lang: Lang; 
+  setLang: (l: Lang) => void;
+  multiLangEnabled: boolean;
+  setMultiLangEnabled: (val: boolean) => void;
+}>({ 
+  lang: 'en', 
+  setLang: () => {},
+  multiLangEnabled: false,
+  setMultiLangEnabled: () => {}
 });
 
 export const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
   const [lang, setLang] = useState<Lang>('en');
+  const [multiLangEnabled, setMultiLangEnabled] = useState(false);
 
   useEffect(() => {
-    // Load saved language from local storage on start
     const saved = localStorage.getItem('app_lang') as Lang;
     if (saved) setLang(saved);
   }, []);
@@ -23,7 +31,7 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang: handleSetLang }}>
+    <LanguageContext.Provider value={{ lang, setLang: handleSetLang, multiLangEnabled, setMultiLangEnabled }}>
       {children}
     </LanguageContext.Provider>
   );
