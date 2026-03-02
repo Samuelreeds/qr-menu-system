@@ -1,4 +1,3 @@
-
 'use client';
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
@@ -19,6 +18,9 @@ import {
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
   Info, Loader2, Clock, AlertTriangle, Star, Lock
 } from 'lucide-react';
+
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
+const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
 // --- TYPES ---
 interface SocialLink { id: string; platform: string; url: string; active: boolean; }
@@ -225,7 +227,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   useEffect(() => {
     if (editingProduct) {
-      setProductPreview(editingProduct.image);
+      setProductPreview(getValidImage(editingProduct.image) === PLACEHOLDER_IMAGE ? '' : editingProduct.image);
       setProductFileBlob(null);
       setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' });
       setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15');
@@ -807,7 +809,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{effectiveDiscount}%</span>}
                       </div>
                       <div className="relative w-full aspect-square mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
-                        <img src={item.image} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
+                        <img src={getValidImage(item.image)} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
                       </div>
                       <div className="flex flex-col flex-1 space-y-1">
                         <h3 className="font-bold text-gray-900 text-lg sm:text-xl leading-tight line-clamp-2">{item.name}</h3>
@@ -861,7 +863,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           return (
                           <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
                             <td className="p-4 flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <span className="font-bold text-gray-900 flex items-center gap-2">
                                 {item.name}
                                 {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
@@ -912,7 +914,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        return(
                         <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-[0.98] transition-transform cursor-default">
                            <div className="flex items-center gap-4">
-                              <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={item.image} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div>
                                 <h4 className="font-bold text-gray-900 text-base leading-tight mb-1 flex items-center gap-2">
                                   {item.name}
@@ -1625,7 +1627,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      name_zh: prodName.zh,
                      price: parseFloat(fd.get('price') as string),
                      discount: parseFloat(fd.get('discount') as string) || 0,
-                     image: productPreview || editingProduct?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+                     image: productPreview || editingProduct?.image || PLACEHOLDER_IMAGE,
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
                      isPopular: isHotSale, 

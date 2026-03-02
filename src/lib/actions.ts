@@ -15,17 +15,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
+const PRODUCT_PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
+
 // --- MULTI-TENANT HELPER (SECURED) ---
 async function getActiveShopId() {
-  // OPTIMIZATION: Read shopId directly from JWT session using authOptions.
-  // This completely eliminates the `prisma.user.findUnique` query from EVERY admin action!
   const session = await getServerSession(authOptions);
   
   if ((session as any)?.user?.shopId) {
     return (session as any).user.shopId;
   }
 
-  // Fallback behavior if session is somehow missing shopId but has email
   if (!session?.user?.email) return null;
 
   const user = await prisma.user.findUnique({
@@ -56,7 +55,6 @@ async function revalidateActiveShop() {
 
 // --- SUPER ADMIN HELPER (SECURED) ---
 export async function verifySuperAdmin() {
-  // OPTIMIZATION: Read role flags directly from session to avoid DB lookup.
   const session = await getServerSession(authOptions);
   
   if ((session as any)?.user?.isSuperAdmin || (session as any)?.user?.role === 'SUPERADMIN') {
@@ -181,7 +179,6 @@ export async function addBanner(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
-  // ENFORCEMENT: Limit check
   const limit = await getLimit(shopId, 'maxBanners');
   const prismaAny = prisma as any;
   const currentCount = await prismaAny.banner.count({ where: { shopId, deletedAt: null } });
@@ -263,7 +260,6 @@ export async function createCategory(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
-  // ENFORCEMENT: Limit check
   const limit = await getLimit(shopId, 'maxCategories');
   const currentCount = await prisma.category.count({ where: { shopId } });
   if (currentCount >= limit) return { error: "Category limit reached." };
@@ -311,7 +307,6 @@ export async function createProduct(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
-  // ENFORCEMENT: Limit check
   const limit = await getLimit(shopId, 'maxProducts');
   const currentCount = await prisma.product.count({ where: { shopId } });
   if (currentCount >= limit) return { error: "Product limit reached." };
@@ -326,7 +321,7 @@ export async function createProduct(formData: FormData) {
   const imageFile = formData.get('image') as File
   
   let imagePath = await uploadToSupabase(imageFile, 'products');
-  if (!imagePath) imagePath = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
+  if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
   await prisma.product.create({
     data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
@@ -407,7 +402,6 @@ export async function updateShopBranding(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
-  // ENFORCEMENT: Check if the user is authorized to save premium visuals
   const canUseThemes = await canUseFeature(shopId, 'premiumThemes');
   const logoFile = formData.get('logo') as File;
   const newLogoPath = await uploadToSupabase(logoFile, 'branding');
@@ -443,7 +437,6 @@ export async function updateShopSocials(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
-  // ENFORCEMENT: Block modification of socials if on free plan.
   const canUseSocials = await canUseFeature(shopId, 'customSocials');
   if (!canUseSocials) return { error: "Custom socials require an upgraded plan." };
 
@@ -906,7 +899,7 @@ export async function executeMenuImport(formData: FormData) {
                 discount: item.discount,
                 categoryId: categoryId,
                 time: item.preparationTime || '15min',
-                image: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+                image: item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE,
                 rating: 5.0,
                 description: item.description || '',
                 isPopular: item.isPopular,
@@ -1101,6 +1094,7 @@ export async function togglePlanStatus(formData: FormData) {
       });
     }
     revalidatePath('/superadmin');
+    revalidatePath('/', 'layout');
   } catch (error) {
     console.error("Failed to toggle plan status:", error);
   }

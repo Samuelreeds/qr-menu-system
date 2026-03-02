@@ -8,6 +8,9 @@ import CartFloat from '@/components/CartFloat';
 import { useLanguage } from '@/context/LanguageContext'; 
 import { Menu, X, Star } from 'lucide-react';
 
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
+const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
+
 // --- TYPES ---
 interface ShopSettings {
   name: string;
@@ -405,7 +408,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           </button>
           
           <div className="w-full aspect-square bg-gray-100 relative">
-            <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-full object-cover" />
+            <img src={getValidImage(selectedItem.image)} alt={selectedItem.name} className="w-full h-full object-cover" />
             <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
               {selectedItem.isPopular && (
                  <span className="bg-orange-500 text-white text-xs px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
