@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Store, Trash2, ExternalLink, Power, PowerOff, RefreshCw, Upload, Download, AlertTriangle, FileText, ArrowRight, CheckCircle2, XCircle, Info } from 'lucide-react';
-import { superAdminDeleteProduct, updateShopPlan, toggleShopStatus, softDeleteShop, restoreShop, updateShopLimits, importMenuData, executeMenuImport, verifySuperAdmin } from '@/lib/actions';
-import { PLAN_LIMITS, PlanKey } from '@/lib/shop-guard';
+import { ArrowLeft, ExternalLink, Power, PowerOff, RefreshCw, Upload, Download, AlertTriangle, FileText, ArrowRight, CheckCircle2, XCircle, Info, Trash2 } from 'lucide-react';
+import { updateShopPlan, toggleShopStatus, softDeleteShop, restoreShop, updateShopLimits, importMenuData, executeMenuImport, verifySuperAdmin, deleteShop } from '@/lib/actions';
+import { PLAN_LIMITS } from '@/lib/shop-guard';
 import { getServerSession } from 'next-auth';
+import MenuModerationClient from './MenuModerationClient';
 
 export default async function SuperAdminShopDetail(props: { 
   params: Promise<{ id: string }>;
@@ -35,16 +36,36 @@ export default async function SuperAdminShopDetail(props: {
   const searchParams = await props.searchParams;
   const msg = searchParams?.msg;
 
-  // Fetch the shop and all its products
+  const limit = 50;
+
+  // Fetch the shop and initial paginated products chunk
   const shop = await prisma.shop.findUnique({
     where: { id },
     include: {
-      products: { include: { category: true }, orderBy: { createdAt: 'desc' } },
-      shopUsers: { include: { user: true } }
+      products: { 
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          createdAt: true,
+          category: { select: { name: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1
+      },
+      shopUsers: { include: { user: true } },
+      _count: { select: { products: true } }
     }
   });
 
   if (!shop) notFound();
+
+  let initialNextCursor = null;
+  let initialProducts = shop.products;
+  if (initialProducts.length > limit) {
+    const nextItem = initialProducts.pop();
+    initialNextCursor = nextItem!.id;
+  }
 
   const ownerEmail = shop.shopUsers[0]?.user?.email || 'No owner email attached';
   
@@ -130,26 +151,49 @@ export default async function SuperAdminShopDetail(props: {
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Danger Zone</p>
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between h-full">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Danger Zone</p>
             {shop.deletedAt ? (
-              <form action={async (fd: FormData) => {
-                'use server';
-                await restoreShop(fd);
-              }}>
-                <input type="hidden" name="id" value={shop.id} />
-                <button type="submit" className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl text-sm font-bold transition-all shadow-sm">
-                  <RefreshCw size={16} /> Restore
-                </button>
-              </form>
+              <div className="space-y-3">
+                <form action={async (fd: FormData) => {
+                  'use server';
+                  await restoreShop(fd);
+                }}>
+                  <input type="hidden" name="id" value={shop.id} />
+                  <button type="submit" className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl text-sm font-bold transition-all shadow-sm">
+                    <RefreshCw size={16} /> Restore Shop
+                  </button>
+                </form>
+
+                <form action={async (fd: FormData) => {
+                  'use server';
+                  if (fd.get('confirmDelete') === 'on') {
+                    const res = await deleteShop(fd);
+                    if (res?.warning) {
+                      redirect(`/superadmin?msg=${encodeURIComponent(res.warning)}`);
+                    }
+                  }
+                }} className="border border-red-100 bg-red-50 p-3 rounded-2xl space-y-3">
+                  <input type="hidden" name="id" value={shop.id} />
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" name="confirmDelete" required className="mt-0.5" />
+                    <span className="text-[11px] font-bold text-red-800 leading-tight">
+                      I understand this will permanently erase all data. This cannot be undone.
+                    </span>
+                  </label>
+                  <button type="submit" className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl text-sm font-bold transition-all shadow-sm">
+                    <Trash2 size={16} /> Delete Permanently
+                  </button>
+                </form>
+              </div>
             ) : (
               <form action={async (fd: FormData) => {
                 'use server';
                 await softDeleteShop(fd);
-              }}>
+              }} className="mt-auto">
                 <input type="hidden" name="id" value={shop.id} />
                 <button type="submit" className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-xl text-sm font-bold transition-all shadow-sm">
-                  <Trash2 size={16} /> Soft Delete
+                  <Trash2 size={16} /> Soft Delete Shop
                 </button>
               </form>
             )}
@@ -231,7 +275,7 @@ export default async function SuperAdminShopDetail(props: {
                       )}
                       
                       <div className="pt-2 flex justify-end">
-                        <Link href={`/superadmin/shop/${shop.id}`} className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition">Return to Shop</Link>
+                        <Link href={`/superadmin/shop/${shop.id}`} scroll={false} className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition">Return to Shop</Link>
                       </div>
                    </div>
                  </div>
@@ -311,7 +355,7 @@ export default async function SuperAdminShopDetail(props: {
                             )}
 
                             <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-6 border-t border-gray-100">
-                               <Link href={`/superadmin/shop/${shop.id}`} className="w-full sm:w-auto px-6 py-3 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition text-center shadow-sm">Cancel</Link>
+                               <Link href={`/superadmin/shop/${shop.id}`} scroll={false} className="w-full sm:w-auto px-6 py-3 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition text-center shadow-sm">Cancel</Link>
                                
                                <form action={async (fd: FormData) => {
                                   'use server';
@@ -486,56 +530,13 @@ export default async function SuperAdminShopDetail(props: {
         </div>
 
         {/* --- INVENTORY MODERATION (DELETE) --- */}
-        <section className={`bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden ${shop.deletedAt ? 'opacity-50 pointer-events-none' : ''}`}>
-          <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Store size={20} className="text-gray-400" />
-              <h2 className="text-lg font-bold text-gray-900">Menu Moderation</h2>
-            </div>
-            <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full">{shop.products.length} Items</span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                  <th className="p-5">Product Image</th>
-                  <th className="p-5">Name</th>
-                  <th className="p-5">Category</th>
-                  <th className="p-5 text-right">Admin Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {shop.products.length === 0 && (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-medium">No items in this menu yet.</td></tr>
-                )}
-                {shop.products.map(product => (
-                  <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4">
-                      <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden">
-                        <img src={product.image} className="w-full h-full object-cover" alt="" />
-                      </div>
-                    </td>
-                    <td className="p-4 font-bold text-gray-800">{product.name}</td>
-                    <td className="p-4 text-sm text-gray-500">{product.category.name}</td>
-                    <td className="p-4 text-right">
-                      <form action={async (fd: FormData) => {
-                        'use server';
-                        await superAdminDeleteProduct(fd);
-                      }}>
-                        <input type="hidden" name="id" value={product.id} />
-                        <input type="hidden" name="shopId" value={shop.id} />
-                        <button type="submit" className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-xl text-xs font-bold transition shadow-sm">
-                          <Trash2 size={14} /> Force Delete
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <MenuModerationClient 
+          shopId={shop.id} 
+          initialProducts={initialProducts as any} 
+          initialNextCursor={initialNextCursor} 
+          totalProducts={shop._count.products} 
+          isDeleted={!!shop.deletedAt} 
+        />
 
       </div>
     </div>

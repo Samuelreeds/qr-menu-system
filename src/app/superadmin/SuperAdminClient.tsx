@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useOptimistic, startTransition } from 'react';
@@ -453,21 +454,38 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
                             }}>
                               <input type="hidden" name="id" value={shop.id} />
                               <input type="hidden" name="currentStatus" value={shop.status === 'ACTIVE' ? 'true' : 'false'} />
-                              <button type="submit" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg transition-colors">
+                              <button type="submit" title="Toggle Status" className="p-2 text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-200 rounded-lg transition-colors">
                                 {shop.status === 'ACTIVE' ? <PowerOff size={16} /> : <Power size={16} />}
                               </button>
                             </form>
 
                             {shop.deletedAt ? (
-                              <form action={(fd) => {
-                                 startTransition(() => dispatchOptShops({ type: 'restore', id: shop.id }));
-                                 startTransition(async () => { await restoreShop(fd); });
-                              }}>
-                                <input type="hidden" name="id" value={shop.id} />
-                                <button type="submit" className="p-2 text-emerald-600 hover:text-emerald-700 border border-transparent hover:border-emerald-100 rounded-lg transition-colors">
-                                  <RefreshCw size={16} />
-                                </button>
-                              </form>
+                              <>
+                                <form action={(fd) => {
+                                   startTransition(() => dispatchOptShops({ type: 'restore', id: shop.id }));
+                                   startTransition(async () => { await restoreShop(fd); });
+                                }}>
+                                  <input type="hidden" name="id" value={shop.id} />
+                                  <button type="submit" title="Restore Shop" className="p-2 text-emerald-600 hover:text-emerald-700 border border-transparent hover:border-emerald-100 rounded-lg transition-colors">
+                                    <RefreshCw size={16} />
+                                  </button>
+                                </form>
+                                <form action={(fd) => {
+                                   if(confirm('WARNING: This will permanently erase the shop and all its data. This cannot be undone. Proceed?')) {
+                                     startTransition(() => dispatchOptShops({ type: 'delete', id: shop.id }));
+                                     startTransition(async () => { 
+                                       const res = await deleteShop(fd); 
+                                       if (res?.warning) alert(res.warning);
+                                       if (res?.error) alert(res.error);
+                                     });
+                                   }
+                                }}>
+                                  <input type="hidden" name="id" value={shop.id} />
+                                  <button type="submit" title="Permanently Delete" className="p-2 text-red-600 hover:text-red-800 bg-red-50 border border-red-100 hover:border-red-200 rounded-lg transition-colors">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </form>
+                              </>
                             ) : (
                               <form action={(fd) => { 
                                  if(confirm('Soft delete this shop?')) {
@@ -476,7 +494,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
                                  }
                               }}>
                                 <input type="hidden" name="id" value={shop.id} />
-                                <button type="submit" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg transition-colors">
+                                <button type="submit" title="Soft Delete" className="p-2 text-gray-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded-lg transition-colors">
                                   <Trash2 size={16} />
                                 </button>
                               </form>

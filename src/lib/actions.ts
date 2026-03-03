@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@supabase/supabase-js'
 import sharp from 'sharp'
@@ -556,17 +557,65 @@ export async function updateShopLimits(formData: FormData) {
 
 export async function deleteShop(formData: FormData) {
   if (!await verifySuperAdmin()) return { error: "Unauthorized" };
-  
+
   const id = formData.get('id') as string;
+  let success = false;
+  let warningMsg: string | null = null;
+
   try { 
-    const shop = await prisma.shop.delete({ 
+    const shop = await prisma.shop.findUnique({
       where: { id },
-      select: { id: true, slug: true }
-    }); 
+      include: {
+        products: { select: { image: true } },
+        banners: { select: { image: true } },
+        settings: { select: { logo: true } }
+      }
+    });
+
+    if (!shop) return { error: "Shop not found" };
+    if (!shop.deletedAt) return { error: "Shop must be soft-deleted before permanent deletion" };
+
+    const pathsToDelete: string[] = [];
+    const extractPath = (url: string | null | undefined) => {
+      if (!url || url.includes('unsplash.com') || url.startsWith('data:image')) return null;
+      try { 
+        const parts = url.split('/uploads/');
+        return parts.length > 1 ? parts[1] : null; 
+      } catch { return null; }
+    };
+
+    shop.products.forEach(p => { const path = extractPath(p.image); if (path) pathsToDelete.push(path); });
+    shop.banners.forEach(b => { const path = extractPath(b.image); if (path) pathsToDelete.push(path); });
+    if (shop.settings?.logo) { const path = extractPath(shop.settings.logo); if (path) pathsToDelete.push(path); }
+
+    await prisma.$transaction([
+      prisma.shopUser.deleteMany({ where: { shopId: id } }),
+      prisma.product.deleteMany({ where: { shopId: id } }),
+      prisma.category.deleteMany({ where: { shopId: id } }),
+      prisma.banner.deleteMany({ where: { shopId: id } }),
+      prisma.shopSettings.deleteMany({ where: { shopId: id } }),
+      prisma.shop.delete({ where: { id } })
+    ]); 
+    
+    success = true;
+
+    if (pathsToDelete.length > 0) {
+      const { error } = await supabase.storage.from('uploads').remove(pathsToDelete);
+      if (error) {
+        console.error("Storage deletion error:", error);
+        warningMsg = "Shop deleted from database, but failed to remove some files from storage.";
+      }
+    }
+  } catch (error: any) {
+    console.error("Delete shop failed:", error);
+    return { error: "Failed to permanently delete shop." };
+  }
+
+  if (success) {
     revalidatePath('/superadmin');
-    if (shop.slug) revalidatePath(`/${shop.slug}`);
-    revalidatePath(`/${shop.id}`);
-  } catch (e) {}
+    if (warningMsg) return { success: true, warning: warningMsg };
+    redirect('/superadmin');
+  }
 }
 
 export async function softDeleteShop(formData: FormData) {
@@ -637,6 +686,32 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
   } catch (error) {
     console.error("Super Admin Delete Failed:", error);
   }
+}
+
+export async function listShopProductsForModeration(shopId: string, cursor?: string, take = 50) {
+  if (!await verifySuperAdmin()) return null;
+  
+  const products = await prisma.product.findMany({
+    where: { shopId },
+    take: take + 1,
+    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      image: true,
+      createdAt: true,
+      category: { select: { name: true } }
+    }
+  });
+
+  let nextCursor: string | null = null;
+  if (products.length > take) {
+    const nextItem = products.pop();
+    nextCursor = nextItem!.id;
+  }
+
+  return { products, nextCursor };
 }
 
 export async function importMenuData(formData: FormData) {
