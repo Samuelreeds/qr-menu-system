@@ -1,3 +1,4 @@
+
 import { prisma } from '@/lib/prisma';
 import SuperAdminClient from './SuperAdminClient';
 import { PLAN_LIMITS } from '@/lib/shop-guard';
@@ -78,7 +79,9 @@ export default async function SuperAdminPage(props: { searchParams?: Promise<{ [
     prisma.user.findMany({ 
       select: {
         id: true,
-        email: true
+        email: true,
+        role: true,
+        isSuperAdmin: true
       },
       orderBy: { id: 'desc' } 
     })

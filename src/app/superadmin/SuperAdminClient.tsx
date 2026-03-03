@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useOptimistic, startTransition } from 'react';
@@ -8,7 +7,7 @@ import {
   XCircle, Link as LinkIcon, Info, Mail, Settings, Users, 
   MoreHorizontal, Clock, Menu, Trash2, KeyRound, Copy, Bell,
   RefreshCw, Eye, Layers, Pencil, Archive, ArrowLeft, ShieldCheck,
-  Loader2
+  Loader2, CheckCircle2
 } from 'lucide-react';
 import { 
   toggleShopStatus, 
@@ -22,7 +21,8 @@ import {
   restoreShop,
   createPlan,
   updatePlan,
-  togglePlanStatus
+  togglePlanStatus,
+  createSuperAdminUser
 } from '@/lib/actions';
 
 export default function SuperAdminClient({ shops, invites, users, plans = [], shopStats }: { shops: any[], invites: any[], users: any[], plans?: any[], shopStats?: any }) {
@@ -31,6 +31,10 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   
+  const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState(false);
+  const [superAdminDetails, setSuperAdminDetails] = useState<{email: string, password: string} | null>(null);
+  const [saError, setSaError] = useState<string | null>(null);
+
   const [isSaving, setIsSaving] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
@@ -58,7 +62,11 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
 
   const [optUsers, dispatchOptUsers] = useOptimistic(
     users,
-    (state, action: { type: string; id: string }) => action.type === 'delete' ? state.filter(u => u.id !== action.id) : state
+    (state, action: { type: string; id?: string; payload?: any }) => {
+      if (action.type === 'delete') return state.filter(u => u.id !== action.id);
+      if (action.type === 'add') return [action.payload, ...state];
+      return state;
+    }
   );
 
   const [optPlans, dispatchOptPlans] = useOptimistic(
@@ -178,6 +186,11 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
             {activeTab === 'plans' && !editingPlanId && (
               <button onClick={() => setEditingPlanId('new')} className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-colors">
                 <Plus size={18}/> Create Plan
+              </button>
+            )}
+            {activeTab === 'users' && (
+              <button onClick={() => setIsSuperAdminModalOpen(true)} className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-colors">
+                <Plus size={18}/> Create SuperAdmin
               </button>
             )}
             <button className="p-2 bg-white border rounded-full text-gray-400 hover:text-gray-900 transition-colors"><Bell size={18}/></button>
@@ -647,6 +660,7 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
                       <tr>
                         <th className="p-4 pl-6">Email Address</th>
                         <th className="p-4">User ID</th>
+                        <th className="p-4">Role</th>
                         <th className="p-4 pr-6 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -655,6 +669,11 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
                         <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="p-4 pl-6 font-bold text-gray-900">{user.email}</td>
                           <td className="p-4 text-xs font-mono text-gray-400">{user.id}</td>
+                          <td className="p-4">
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase ${user.role === 'SUPERADMIN' || user.isSuperAdmin ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                              {user.role === 'SUPERADMIN' || user.isSuperAdmin ? 'SUPERADMIN' : (user.role || 'USER')}
+                            </span>
+                          </td>
                           <td className="p-4 pr-6 text-right flex items-center justify-end gap-2">
                             <form action={async (fd) => {
                               if (confirm(`Generate reset token for ${user.email}?`)) {
@@ -720,6 +739,68 @@ export default function SuperAdminClient({ shops, invites, users, plans = [], sh
                     Create Link
                  </button>
               </form>
+           </div>
+        </div>
+      )}
+
+      {/* SUPERADMIN MODAL */}
+      {isSuperAdminModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="font-bold text-gray-900 text-lg">Create SuperAdmin</h2>
+                <button onClick={() => { setIsSuperAdminModalOpen(false); setSuperAdminDetails(null); setSaError(null); }} className="text-gray-400 hover:text-gray-900"><XCircle/></button>
+              </div>
+              
+              {superAdminDetails ? (
+                <div className="space-y-4">
+                  <div className="bg-green-50 text-green-800 p-4 rounded-xl border border-green-200 text-sm font-bold flex items-center gap-2">
+                    <CheckCircle2 size={18} className="text-green-600"/> Successfully created!
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Email</p>
+                      <p className="text-sm font-bold text-gray-900 select-all">{superAdminDetails.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Temporary Password</p>
+                      <p className="text-sm font-bold text-gray-900 select-all">{superAdminDetails.password}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-amber-600 font-medium bg-amber-50 p-3 rounded-xl border border-amber-100">
+                    Please copy these details now. The password will not be shown again.
+                  </p>
+                  <button onClick={() => { setIsSuperAdminModalOpen(false); setSuperAdminDetails(null); }} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-black transition-all shadow-lg active:scale-[0.98]">
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <form action={async (fd) => { 
+                  setSaError(null);
+                  const email = fd.get('email') as string;
+                  const password = fd.get('password') as string;
+                  const res = await createSuperAdminUser(fd); 
+                  if (res.success) {
+                    setSuperAdminDetails({ email, password });
+                    startTransition(() => dispatchOptUsers({ type: 'add', payload: { id: 'temp-'+Date.now(), email, role: 'SUPERADMIN', isSuperAdmin: true } }));
+                  } else {
+                    setSaError(res.error || "Failed to create account");
+                  }
+                }} className="space-y-4">
+                   {saError && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl font-bold border border-red-100">{saError}</div>}
+                   <div>
+                     <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Email Address</label>
+                     <input name="email" type="email" required placeholder="admin@scandine.xyz" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-gray-900 transition-all" />
+                   </div>
+                   <div>
+                     <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Temporary Password</label>
+                     <input name="password" type="text" required placeholder="StrongPassword123!" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-gray-900 transition-all" />
+                   </div>
+                   <button type="submit" className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-black transition-all shadow-lg active:scale-[0.98]">
+                      Create SuperAdmin
+                   </button>
+                </form>
+              )}
            </div>
         </div>
       )}

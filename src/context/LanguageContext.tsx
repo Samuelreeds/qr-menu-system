@@ -1,4 +1,3 @@
-// src/context/LanguageContext.tsx
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
@@ -21,6 +20,7 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
   const [multiLangEnabled, setMultiLangEnabled] = useState(false);
 
   useEffect(() => {
+    // Load saved language from local storage on start
     const saved = localStorage.getItem('app_lang') as Lang;
     if (saved) setLang(saved);
   }, []);

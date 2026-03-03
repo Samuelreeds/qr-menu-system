@@ -1314,3 +1314,33 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
     return { success: false, error: "Registration failed. Please try again." };
   }
 }
+
+export async function createSuperAdminUser(formData: FormData) {
+  if (!await verifySuperAdmin()) return { success: false, error: "Unauthorized" };
+  
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  
+  if (!email || !password) return { success: false, error: "Email and password are required" };
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return { success: false, error: "Email already exists" };
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  try {
+    await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        role: "SUPERADMIN",
+        isSuperAdmin: true
+      }
+    });
+    revalidatePath('/superadmin');
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to create super admin", error);
+    return { success: false, error: "Failed to create SuperAdmin account" };
+  }
+}
