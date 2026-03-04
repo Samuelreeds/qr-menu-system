@@ -556,7 +556,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const handlePrevDesign = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6'];
+    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx - 1 + designs.length) % designs.length]);
     markDirty('branding');
@@ -564,7 +564,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const handleNextDesign = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6'];
+    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
     const idx = designs.indexOf(headerDesign);
     setHeaderDesign(designs[(idx + 1) % designs.length]);
     markDirty('branding');
@@ -1247,6 +1247,17 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                         <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
                                           <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
                                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                        </div>
+                                      ) : (
+                                        <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>
+                                      )}
+                                    </div>
+                                  ) : headerDesign === 'design7' ? (
+                                    <div className="flex flex-col items-center justify-center w-full max-w-full">
+                                      {(logoPreview || settings?.logo) ? (
+                                        <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                          <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
                                         </div>
                                       ) : (
                                         <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>

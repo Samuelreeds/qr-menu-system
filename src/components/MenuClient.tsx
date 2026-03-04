@@ -228,6 +228,16 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                 <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">{displayShopName}</h1>
               )}
             </div>
+          ) : headerDesign === 'design7' ? (
+            <div className="flex flex-col items-center w-full">
+              {shopSettings?.logo ? (
+                <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-24 h-24 shadow-xl p-0.5">
+                  <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-full" />
+                </div>
+              ) : (
+                <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">{displayShopName}</h1>
+              )}
+            </div>
           ) : headerDesign === 'design6' ? (
             <div className="flex items-center justify-between w-full gap-3 pt-2">
               <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-12 h-12 shadow-sm p-0.5">
