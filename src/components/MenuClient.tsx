@@ -162,7 +162,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
 
     {/* --- HEADER SECTION --- */}
     <header
-      className="relative overflow-hidden pb-12 pt-4 transition-colors duration-300 min-h-[140px]"
+      className="relative overflow-hidden transition-colors duration-300 min-h-[140px]"
       style={{ background: themeColor }}
     >
       <div className="absolute inset-0 bg-black/10 z-0" />
@@ -187,17 +187,19 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       />
 
       <div className="relative z-10 flex flex-col h-full max-w-7xl mx-auto w-full">
-        <div className="absolute top-2 left-4 sm:left-6 lg:left-8 z-20">
-          <button
-            onClick={() => setIsInfoOpen(true)}
-            aria-label="Shop info"
-            className="p-2 sm:p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 transition-all shadow-sm flex items-center justify-center active:scale-95"
-          >
-            <Menu size={24} strokeWidth={2.5} />
-          </button>
-        </div>
+        {headerDesign !== 'design6' && (
+          <div className="absolute top-2 left-4 sm:left-6 lg:left-8 z-20">
+            <button
+              onClick={() => setIsInfoOpen(true)}
+              aria-label="Shop info"
+              className="p-2 sm:p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 transition-all shadow-sm flex items-center justify-center active:scale-95"
+            >
+              <Menu size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+        )}
 
-        <div className="flex items-center justify-center px-4 sm:px-6 lg:px-8 pt-12 pb-2 w-full h-full">
+        <div className={`flex items-center justify-center px-4 sm:px-6 lg:px-8 pb-2 w-full h-full ${headerDesign === 'design6' ? 'pt-6' : 'pt-12'}`}>
           {headerDesign === 'design2' ? (
             <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">
               {displayShopName}
@@ -215,6 +217,34 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                 <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-full" />
               </div>
               <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
+            </div>
+          ) : headerDesign === 'design5' ? (
+            <div className="flex flex-col items-center w-full">
+              {shopSettings?.logo ? (
+                <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-24 h-24 shadow-xl p-0.5">
+                  <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-[14px]" />
+                </div>
+              ) : (
+                <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">{displayShopName}</h1>
+              )}
+            </div>
+          ) : headerDesign === 'design6' ? (
+            <div className="flex items-center justify-between w-full gap-3 pt-2">
+              <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-12 h-12 shadow-sm p-0.5">
+                {shopSettings?.logo ? (
+                  <img src={logoUrl} alt={displayShopName} className="w-full h-full object-cover rounded-full" />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xl">{displayShopName.charAt(0).toUpperCase()}</div>
+                )}
+              </div>
+              <h1 className="text-white tracking-wide text-center text-xl sm:text-2xl font-bold drop-shadow-sm flex-1 truncate px-2">{displayShopName}</h1>
+              <button
+                onClick={() => setIsInfoOpen(true)}
+                aria-label="Shop info"
+                className="flex-shrink-0 p-2 sm:p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 transition-all shadow-sm flex items-center justify-center active:scale-95"
+              >
+                <Menu size={20} strokeWidth={2.5} />
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
