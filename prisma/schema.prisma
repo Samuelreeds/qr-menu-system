@@ -43,10 +43,11 @@ model Shop {
   overrideMaxProducts   Int?
   overrideMaxCategories Int?
   overrideMaxBanners    Int?
+  overrideHeaderStyle   String?
   
   createdAt   DateTime  @default(now())
   deletedAt   DateTime?
-  
+
   shopUsers   ShopUser[]
   categories  Category[]
   products    Product[]
@@ -121,7 +122,7 @@ model Banner {
   image     String
   sortOrder Int      @default(0)
   deletedAt DateTime?
-  
+
   shopId    String
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   

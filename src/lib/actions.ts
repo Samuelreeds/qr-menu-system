@@ -540,6 +540,7 @@ export async function updateShopLimits(formData: FormData) {
   const maxProducts = formData.get('overrideMaxProducts') as string;
   const maxCategories = formData.get('overrideMaxCategories') as string;
   const maxBanners = formData.get('overrideMaxBanners') as string;
+  const overrideHeaderStyle = formData.get('overrideHeaderStyle') as string;
 
   const shop = await prisma.shop.update({
     where: { id },
@@ -547,6 +548,7 @@ export async function updateShopLimits(formData: FormData) {
       overrideMaxProducts: maxProducts ? parseInt(maxProducts, 10) : null,
       overrideMaxCategories: maxCategories ? parseInt(maxCategories, 10) : null,
       overrideMaxBanners: maxBanners ? parseInt(maxBanners, 10) : null,
+      overrideHeaderStyle: overrideHeaderStyle ? overrideHeaderStyle : null,
     },
     select: { id: true, slug: true }
   });

@@ -503,7 +503,7 @@ export default async function SuperAdminShopDetail(props: {
           <form action={async (fd: FormData) => {
             'use server';
             await updateShopLimits(fd);
-          }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <input type="hidden" name="id" value={shop.id} />
 
             <div className="space-y-1.5">
@@ -521,7 +521,21 @@ export default async function SuperAdminShopDetail(props: {
               <input type="number" name="overrideMaxBanners" defaultValue={shop.overrideMaxBanners ?? ''} placeholder={`Default: ${defaults.maxBanners}`} className="w-full bg-gray-50 border border-gray-200 text-sm font-bold text-gray-900 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-gray-900 transition-all" />
             </div>
 
-            <div className="col-span-1 sm:col-span-3 flex justify-end mt-2">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Header Style Override</label>
+              <select name="overrideHeaderStyle" defaultValue={shop.overrideHeaderStyle ?? ''} className="w-full bg-gray-50 border border-gray-200 text-sm font-bold text-gray-900 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-gray-900 transition-all cursor-pointer">
+                 <option value="">No Override</option>
+                 <option value="design1">Design 1</option>
+                 <option value="design2">Design 2</option>
+                 <option value="design3">Design 3</option>
+                 <option value="design4">Design 4</option>
+                 <option value="design5">Design 5 (PRO)</option>
+                 <option value="design6">Design 6 (PRO)</option>
+                 <option value="design7">Design 7 (PRO)</option>
+              </select>
+            </div>
+
+            <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex justify-end mt-2">
               <button type="submit" className="bg-gray-900 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-colors shadow-sm">
                 Save Overrides
               </button>

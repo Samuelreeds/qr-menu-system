@@ -21,9 +21,13 @@ interface FoodCardProps {
   item: MenuItem;
   themeColor?: string; 
   onClick?: () => void;
+  adminActions?: React.ReactNode;
 }
 
-export default function FoodCard({ item, onClick }: FoodCardProps) {
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
+const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
+
+export default function FoodCard({ item, onClick, adminActions }: FoodCardProps) {
   const { lang } = useLanguage(); 
 
   const displayName = 
@@ -58,7 +62,7 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
       {/* Image Container */}
       <div className="relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden">
         <img 
-          src={item.image} 
+          src={getValidImage(item.image)} 
           alt={displayName} 
           className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
@@ -81,7 +85,7 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
           )}
         </div>
 
-        {/* Footer: Price */}
+        {/* Footer: Price & Admin Actions */}
         <div className="mt-auto flex items-center justify-between">
           <div>
             {effectiveDiscount > 0 ? (
@@ -99,6 +103,12 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
               </span>
             )}
           </div>
+
+          {adminActions && (
+            <div className="flex gap-1.5 shrink-0 z-10 relative">
+              {adminActions}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -16,7 +16,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, AlertTriangle, Star, Lock
+  Info, Loader2, Clock, AlertTriangle, Star, Lock, MoreVertical
 } from 'lucide-react';
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -88,6 +88,8 @@ interface PendingDelete {
   expiresAt: number;
   timeLeft: number;
 }
+
+const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
 
 export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [], shopPlan, planLimits }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
@@ -166,6 +168,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     maxProducts: 0,
     maxCategories: 0,
     maxBanners: 0,
+    overrideHeaderStyle: null,
     premiumThemes: false,
     customSocials: false,
     featMultipleLanguage: false
@@ -173,9 +176,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const canUsePremiumThemes = safeLimits.premiumThemes;
   const canUseCustomSocials = safeLimits.customSocials;
   const multiLanguageEnabled = !!safeLimits.featMultipleLanguage;
+  const isFreePlan = shopPlan === 'FREE' || shopPlan === 'STARTER'; 
 
   const [headerDesign, setHeaderDesign] = useState(settings?.headerDesign || 'design1');
   const [themeColorPreview, setThemeColorPreview] = useState(settings?.themeColor || '#000000');
+  
+  const currentDesignIndex = allDesigns.indexOf(headerDesign);
+  const isCurrentDesignLocked = isFreePlan && currentDesignIndex > 3 && headerDesign !== safeLimits.overrideHeaderStyle;
 
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({});
   const [pendingNav, setPendingNav] = useState<{ type: 'tab' | 'section', payload: any, source: string } | null>(null);
@@ -393,6 +400,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   };
 
   const saveBrandingForm = async () => {
+     if (isCurrentDesignLocked) return false;
      const fd = new FormData();
      fd.set('headerDesign', headerDesign);
      fd.set('themeColor', themeColorPreview);
@@ -437,6 +445,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const onBrandingSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isCurrentDesignLocked) return;
     clearDirty('branding');
     setIsDirtyLogo(false); 
     showToast("Branding updated!"); 
@@ -596,17 +605,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const handlePrevDesign = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
-    const idx = designs.indexOf(headerDesign);
-    setHeaderDesign(designs[(idx - 1 + designs.length) % designs.length]);
+    const idx = allDesigns.indexOf(headerDesign);
+    setHeaderDesign(allDesigns[(idx - 1 + allDesigns.length) % allDesigns.length]);
     markDirty('branding');
   };
 
   const handleNextDesign = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const designs = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
-    const idx = designs.indexOf(headerDesign);
-    setHeaderDesign(designs[(idx + 1) % designs.length]);
+    const idx = allDesigns.indexOf(headerDesign);
+    setHeaderDesign(allDesigns[(idx + 1) % allDesigns.length]);
     markDirty('branding');
   };
 
@@ -956,41 +963,67 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                     const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                     return (
-                    <div key={item.id} className="bg-white rounded-3xl p-3.5 sm:p-5 shadow-sm border border-gray-100 flex flex-col h-full group hover:shadow-md transition-shadow">
-                      <div className="relative w-full aspect-square mb-4 shrink-0 overflow-hidden rounded-[20px] bg-gray-50 border border-gray-100/50">
-                        <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end z-10">
-                          {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">Hot</span>}
-                          {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">-{effectiveDiscount}%</span>}
-                        </div>
-                        <img src={getValidImage(item.image)} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
-                      </div>
+                    <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full group hover:shadow-md transition-all overflow-hidden cursor-pointer" onClick={() => setEditingProduct(item)}>
                       
-                      <div className="flex flex-col flex-1">
-                        <h3 className="font-extrabold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1">{item.name}</h3>
-                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4 line-clamp-1">{item.category?.name} • {item.time}</p>
+                      {/* Badges */}
+                      <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10 pointer-events-none">
+                        {item.isPopular && (
+                           <span className="bg-orange-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+                             Hot
+                           </span>
+                        )}
+                        {effectiveDiscount > 0 && (
+                           <span className="bg-red-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+                             -{effectiveDiscount}%
+                           </span>
+                        )}
+                      </div>
+
+                      {/* Image Container */}
+                      <div className="relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden pointer-events-none">
+                        <img 
+                          src={getValidImage(item.image)} 
+                          alt={item.name} 
+                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex flex-col flex-1 p-4 sm:p-5 pointer-events-none">
+                        <h3 className="font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5">
+                          {item.name} 
+                        </h3>
                         
-                        <div className="mt-auto border-t border-gray-100 pt-3 flex items-center justify-between">
+                        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-2 mb-4">
+                          <span className="font-medium">{item.category?.name}</span>
+                          <span className="font-medium">•</span>
+                          <span className="font-medium">{item.time}</span>
+                        </div>
+
+                        {/* Footer: Price & Actions */}
+                        <div className="mt-auto pt-2 flex items-center justify-between pointer-events-auto">
                           <div className="pr-2 truncate">
                             {effectiveDiscount > 0 ? (
                               <div className="flex flex-col">
-                                <span className="font-black text-lg sm:text-xl text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
-                                <span className="font-medium text-[11px] text-gray-400 line-through mt-0.5">${item.price.toFixed(2)}</span>
+                                <span className="font-extrabold text-lg sm:text-xl text-red-500 leading-none">
+                                  ${discountedPrice.toFixed(2)}
+                               </span>
+                                <span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1">
+                                  ${item.price.toFixed(2)}
+                                </span>
                               </div>
                             ) : (
-                              <span className="font-black text-lg sm:text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
+                              <span className="font-extrabold text-lg sm:text-xl text-gray-900 leading-none">
+                                ${item.price.toFixed(2)}
+                              </span>
                             )}
                           </div>
                           
-                          <div className="flex gap-2 shrink-0 relative z-10">
-                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0"><Pencil size={18} /></button>
-                            <form action={(fd) => { 
-                                confirmDelete('product', item.id, item.name, fd);
-                            }}>
-                              <input type="hidden" name="id" value={item.id} />
-                              <button type="submit" onClick={(e) => e.stopPropagation()} className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 transition-colors active:scale-95 shrink-0">
-                                <Trash2 size={18} />
-                              </button>
-                            </form>
+                          <div className="flex shrink-0 relative z-10">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0">
+                              <MoreVertical size={16} />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1011,9 +1044,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                           const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                           return (
-                          <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                          <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group cursor-pointer" onClick={() => setEditingProduct(item)}>
                             <td className="p-4 flex items-center gap-4">
-                              <div className="w-14 h-14 rounded-2xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex flex-col">
                                 <span className="font-bold text-gray-900 text-base">{item.name}</span>
                                 <div className="flex items-center gap-2 mt-1">
@@ -1035,16 +1068,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             </td>
                             <td className="p-4 text-sm text-gray-500 font-medium">{item.time}</td>
                             <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button onClick={() => setEditingProduct(item)} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={18} /></button>
-                                <form action={(fd) => { 
-                                  confirmDelete('product', item.id, item.name, fd);
-                                }}>
-                                  <input type="hidden" name="id" value={item.id} />
-                                  <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 transition-colors active:scale-95">
-                                    <Trash2 size={18} />
-                                  </button>
-                                </form>
+                              <div className="flex items-center justify-end gap-2 relative z-10">
+                                <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95">
+                                  <MoreVertical size={18} />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1062,22 +1089,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                        const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                        return(
-                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col cursor-default">
+                        <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer" onClick={() => setEditingProduct(item)}>
                            <div className="flex items-start gap-4 mb-3">
-                              <div className="w-[72px] h-[72px] bg-gray-50 rounded-[20px] overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex-1 pt-1">
                                 <h4 className="font-extrabold text-gray-900 text-base leading-tight mb-1.5 line-clamp-2">
                                   {item.name}
                                 </h4>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-2 py-1 rounded-md">{item.category?.name} • {item.time}</p>
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{item.category?.name} • {item.time}</p>
                                   {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-50 px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider">Hot</span>}
                                 </div>
                               </div>
                            </div>
                            
-                           <div className="flex items-center justify-between border-t border-gray-50 pt-3">
-                             <div className="pl-1">
+                           <div className="flex items-center justify-between border-t border-gray-50 pt-3 relative z-10">
+                             <div className="pl-1 pointer-events-none">
                                {effectiveDiscount > 0 ? (
                                   <div className="flex items-baseline gap-1.5 flex-wrap">
                                     <span className="font-black text-xl text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
@@ -1089,15 +1116,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                              </div>
                              
                              <div className="flex items-center gap-2 shrink-0">
-                                <button onClick={() => setEditingProduct(item)} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={18} /></button>
-                                <form action={(fd) => { 
-                                    confirmDelete('product', item.id, item.name, fd);
-                                }}>
-                                  <input type="hidden" name="id" value={item.id} />
-                                  <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 active:scale-95 transition-all">
-                                    <Trash2 size={18} />
-                                  </button>
-                                </form>
+                                <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all">
+                                  <MoreVertical size={18} />
+                                </button>
                               </div>
                            </div>
                         </div>
@@ -1337,26 +1358,73 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          </span>
                       </div>
 
-                      <div className={`w-full relative z-0 overflow-hidden rounded-2xl border border-gray-200 shadow-sm group ${!canUsePremiumThemes ? 'opacity-60 grayscale' : ''}`}>
-                         <button type="button" disabled={!canUsePremiumThemes} onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95 disabled:hidden">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {allDesigns.map((designKey, idx) => {
+                          const isLocked = isFreePlan && idx > 3 && designKey !== safeLimits.overrideHeaderStyle;
+                          const isSelected = headerDesign === designKey;
+                          
+                          return (
+                            <div 
+                              key={designKey}
+                              onClick={() => {
+                                if (!isLocked) {
+                                  setHeaderDesign(designKey);
+                                  markDirty('branding');
+                                }
+                              }}
+                              className={`
+                                relative h-20 rounded-xl border-2 flex items-center justify-center overflow-hidden transition-all
+                                ${isSelected ? 'border-gray-900 shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}
+                                ${isLocked ? 'cursor-not-allowed opacity-70 bg-gray-50' : 'cursor-pointer bg-white'}
+                              `}
+                            >
+                              <span className="text-xs font-semibold text-gray-500 relative z-10">{designKey.replace('design', 'Style ')}</span>
+                              
+                              {isLocked && (
+                                <div className="absolute top-1.5 right-1.5 bg-gray-900/60 backdrop-blur-md text-white rounded-full p-1 shadow-sm z-20">
+                                  <Lock size={10} />
+                                </div>
+                              )}
+                              
+                              {isSelected && !isLocked && (
+                                <div className="absolute top-1 right-1 bg-gray-900 text-white rounded-full p-0.5">
+                                  <Check size={10} strokeWidth={4} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className={`w-full relative z-0 overflow-hidden rounded-2xl border ${isCurrentDesignLocked ? 'border-gray-300' : 'border-gray-200'} shadow-sm group`}>
+                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
                            <ChevronLeft size={18}/>
                          </button>
                          
-                         <button type="button" disabled={!canUsePremiumThemes} onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95 disabled:hidden">
+                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95">
                            <ChevronRight size={18}/>
                          </button>
 
-                         {canUsePremiumThemes && (
-                         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-pulse">
-                           <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm border border-white/10">
-                             Tap to change layout
+                         {!isCurrentDesignLocked && (
+                         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex justify-center w-max">
+                           <span className="bg-black/40 backdrop-blur-md text-white text-[11px] font-medium tracking-wide px-4 py-1.5 rounded-full shadow-sm border border-white/20 block whitespace-nowrap font-sans">
+                             Tap arrows to change layout
                            </span>
                          </div>
                          )}
 
+                         {isCurrentDesignLocked && (
+                           <div className="absolute top-3 right-3 z-40 pointer-events-none">
+                             <div className="bg-gray-900/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-white/10">
+                               <Lock size={12} className="text-amber-400" />
+                               <span className="text-[10px] font-bold tracking-wider uppercase">Locked</span>
+                             </div>
+                           </div>
+                         )}
+
                          <header 
-                           onClick={canUsePremiumThemes ? handleNextDesign : undefined}
-                           className={`relative overflow-hidden transition-colors duration-300 min-h-[140px] ${canUsePremiumThemes ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                           onClick={handleNextDesign}
+                           className={`relative overflow-hidden transition-colors duration-300 min-h-[140px] cursor-pointer`}
                            style={{ background: themeColorPreview }}
                          >
                             <div className="absolute inset-0 bg-black/10 z-0 pointer-events-none" />
@@ -1467,9 +1535,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    </div>
 
                    <div className="flex justify-end pt-4">
-                       <button type="submit" disabled={!dirtySections['branding']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
+                       <button type="submit" disabled={!dirtySections['branding'] || isCurrentDesignLocked} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto">
                          <CheckCircle size={16}/> 
-                         {dirtySections['branding'] ? 'Save Design' : 'Saved'}
+                         {isCurrentDesignLocked ? 'Locked' : (dirtySections['branding'] ? 'Save Design' : 'Saved')}
                        </button>
                    </div>
                 </form>
@@ -1951,9 +2019,27 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     )}
                   </div>
 
-                  <button type="submit" className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-all flex items-center justify-center gap-2 active:scale-[0.98] mt-4 text-sm">
-                    {editingProduct ? 'Update Product' : 'Save Product'}
-                  </button>
+                  <div className="flex flex-col gap-3 mt-6">
+                    <button type="submit" className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-sm">
+                      {editingProduct ? 'Update Product' : 'Save Product'}
+                    </button>
+
+                    {editingProduct && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const fd = new FormData();
+                          fd.append('id', editingProduct.id);
+                          setIsFormOpen(false);
+                          setEditingProduct(null);
+                          confirmDelete('product', editingProduct.id, editingProduct.name, fd);
+                        }}
+                        className="w-full bg-red-50 text-red-600 border border-red-100 py-3.5 rounded-xl font-bold shadow-sm hover:bg-red-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98] text-sm"
+                      >
+                        <Trash2 size={18} /> Delete Product
+                      </button>
+                    )}
+                  </div>
                </form>
             </div>
          </div>

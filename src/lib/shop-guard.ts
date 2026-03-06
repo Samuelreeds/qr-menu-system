@@ -47,6 +47,7 @@ export const getShopPlanState = cache(async (shopId: string) => {
       overrideMaxProducts: true,
       overrideMaxCategories: true,
       overrideMaxBanners: true,
+      overrideHeaderStyle: true,
     }
   });
 
@@ -92,6 +93,7 @@ export const getShopLimitsAndFeatures = cache(async (shopId: string) => {
     maxProducts,
     maxCategories,
     maxBanners,
+    overrideHeaderStyle: state.overrideHeaderStyle,
     premiumThemes,
     customSocials,
     // Database Toggles
