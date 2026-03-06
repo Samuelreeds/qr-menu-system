@@ -36,24 +36,27 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
   const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
 
   return (
-    <div onClick={onClick} className="bg-white p-3 sm:p-4 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group cursor-pointer active:scale-[0.98]">
+    <div 
+      onClick={onClick} 
+      className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group cursor-pointer active:scale-[0.98] overflow-hidden"
+    >
       
       {/* Badges */}
-      <div className="absolute top-5 right-5 flex flex-col gap-1.5 items-end z-10">
+      <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10">
         {item.isPopular && (
-           <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+           <span className="bg-orange-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
              Hot
            </span>
         )}
         {effectiveDiscount > 0 && (
-           <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">
+           <span className="bg-red-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
              -{effectiveDiscount}%
            </span>
         )}
       </div>
 
       {/* Image Container */}
-      <div className="relative w-full aspect-square mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
+      <div className="relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden">
         <img 
           src={item.image} 
           alt={displayName} 
@@ -63,30 +66,30 @@ export default function FoodCard({ item, onClick }: FoodCardProps) {
       </div>
 
       {/* Content */}
-      <div className="flex flex-col flex-1 space-y-1">
-        <h3 className="font-bold text-gray-900 text-lg sm:text-xl leading-tight line-clamp-2">
+      <div className="flex flex-col flex-1 p-4 sm:p-5">
+        <h3 className="font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5">
           {displayName} 
         </h3>
         
-        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-2">
-          {item.time && <span>{item.time}</span>}
+        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-3 mb-4">
+          {item.time && <span className="font-medium">{item.time}</span>}
           {item.rating && (
-            <div className="flex items-center gap-0.5">
-              <Star size={12} className="text-yellow-400 fill-yellow-400" />
-              <span>{item.rating}</span>
+            <div className="flex items-center gap-1">
+              <Star size={14} className="text-yellow-400 fill-yellow-400" />
+              <span className="font-medium">{item.rating}</span>
             </div>
           )}
         </div>
 
         {/* Footer: Price */}
-        <div className="mt-auto pt-3 flex items-center justify-between">
+        <div className="mt-auto flex items-center justify-between">
           <div>
             {effectiveDiscount > 0 ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-extrabold text-lg sm:text-xl text-red-500">
                   ${discountedPrice.toFixed(2)}
                 </span>
-                <span className="font-medium text-xs sm:text-sm text-gray-400 line-through">
+                <span className="font-semibold text-xs sm:text-sm text-gray-400 line-through">
                   ${item.price.toFixed(2)}
                 </span>
               </div>

@@ -78,6 +78,17 @@ type OptimisticBannerAction =
   | { type: 'delete'; payload: string }
   | { type: 'set'; payload: Banner[] };
 
+interface PendingDelete {
+  productId: string;
+  productSnapshot: Product;
+  name: string;
+  actionFormData: FormData;
+  timeoutId: NodeJS.Timeout;
+  intervalId: NodeJS.Timeout;
+  expiresAt: number;
+  timeLeft: number;
+}
+
 export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [], shopPlan, planLimits }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
@@ -102,6 +113,25 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   
   const [address, setAddress] = useState(settings?.address || '');
   const [phone, setPhone] = useState(settings?.phone || '');
+
+  // Delete Confirmation State
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    type: 'product' | 'category' | null;
+    id: string | null;
+    name: string | null;
+    actionFormData: FormData | null;
+  }>({
+    isOpen: false,
+    type: null,
+    id: null,
+    name: null,
+    actionFormData: null
+  });
+
+  // Pending Delete State for Undo feature
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const pendingDeleteRef = useRef<PendingDelete | null>(null);
 
   // Parse existing opening hours safely or set defaults
   const getInitialHours = () => {
@@ -220,7 +250,17 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     setOrigin(window.location.origin);
     const afterPrint = () => setPrintFormat(null);
     window.addEventListener('afterprint', afterPrint);
-    return () => window.removeEventListener('afterprint', afterPrint);
+    
+    // Cleanup pending deletes on unmount
+    return () => {
+      window.removeEventListener('afterprint', afterPrint);
+      if (pendingDeleteRef.current) {
+        clearTimeout(pendingDeleteRef.current.timeoutId);
+        clearInterval(pendingDeleteRef.current.intervalId);
+        const fd = pendingDeleteRef.current.actionFormData;
+        deleteProduct(fd).catch(() => {});
+      }
+    };
   }, []);
 
   useEffect(() => { setLogoPreview(settings?.logo || ''); setIsDirtyLogo(false); }, [settings?.logo]);
@@ -571,9 +611,97 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   };
 
   const filteredProducts = optProducts.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) &&
+    p.id !== pendingDelete?.productId
   );
+
+  const confirmDelete = (type: 'product' | 'category', id: string, name: string, fd: FormData) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      type,
+      id,
+      name,
+      actionFormData: fd
+    });
+  };
+
+  const handleConfirmDeleteAction = () => {
+    if (!deleteConfirmation.actionFormData || !deleteConfirmation.type || !deleteConfirmation.id) return;
+    
+    const fd = deleteConfirmation.actionFormData;
+    const type = deleteConfirmation.type;
+    const id = deleteConfirmation.id;
+    const name = deleteConfirmation.name || 'Item';
+
+    if (type === 'product') {
+      // Finalize existing if any
+      if (pendingDeleteRef.current) {
+        const prev = pendingDeleteRef.current;
+        clearTimeout(prev.timeoutId);
+        clearInterval(prev.intervalId);
+        startTransition(() => dispatchOptProducts({ type: 'delete', payload: prev.productId }));
+        startTransition(async () => {
+          await deleteProduct(prev.actionFormData);
+        });
+      }
+
+      const snapshot = optProducts.find(p => p.id === id);
+      if (!snapshot) return;
+
+      const expiresAt = Date.now() + 5000;
+      
+      const intervalId = setInterval(() => {
+         setPendingDelete(curr => {
+           if (!curr) return null;
+           const left = Math.ceil((curr.expiresAt - Date.now()) / 1000);
+           if (left <= 0) {
+              clearInterval(curr.intervalId);
+           }
+           return { ...curr, timeLeft: left };
+         });
+      }, 1000);
+
+      const timeoutId = setTimeout(() => {
+         // Execute permanent delete
+         if (pendingDeleteRef.current?.productId === id) {
+            clearInterval(pendingDeleteRef.current.intervalId);
+            
+            // Permanent removal
+            startTransition(() => dispatchOptProducts({ type: 'delete', payload: id }));
+            startTransition(async () => {
+              await deleteProduct(fd);
+            });
+            
+            setPendingDelete(null);
+            pendingDeleteRef.current = null;
+         }
+      }, 5000);
+
+      const newPending: PendingDelete = {
+        productId: id,
+        productSnapshot: snapshot,
+        name,
+        actionFormData: fd,
+        timeoutId,
+        intervalId,
+        expiresAt,
+        timeLeft: 5
+      };
+      setPendingDelete(newPending);
+      pendingDeleteRef.current = newPending;
+
+    } else if (type === 'category') {
+      startTransition(() => dispatchOptCategories({ type: 'delete', payload: id })); 
+      startTransition(async () => {
+        await deleteCategory(fd); 
+        showToast("Category deleted"); 
+      });
+    }
+
+    setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
+  };
+
 
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => {
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(origin ? `${origin}/${shopSlug}` : `https://scandine.xyz/${shopSlug}`)}`;
@@ -651,6 +779,33 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   return (
     <div className="flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative" style={{ '--theme-color': settings?.themeColor || '#000000' } as React.CSSProperties}>
+      
+      {/* Pending Delete Undo Toast */}
+      {pendingDelete && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] w-[90vw] max-w-sm bg-gray-900 shadow-2xl p-2 rounded-2xl flex flex-row items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className="flex items-center flex-1 overflow-hidden pl-2">
+            <span className="text-sm text-gray-300 truncate w-full flex items-center gap-2">
+               <span>Deleted <span className="font-bold text-white">"{pendingDelete.name}"</span></span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 pr-1">
+             <span className="text-xs font-bold px-2 py-1 bg-white/10 text-white rounded-lg">{pendingDelete.timeLeft}s</span>
+             <button 
+               type="button"
+               onClick={() => {
+                 clearTimeout(pendingDelete.timeoutId);
+                 clearInterval(pendingDelete.intervalId);
+                 setPendingDelete(null);
+                 pendingDeleteRef.current = null;
+               }} 
+               className="text-gray-900 font-bold text-sm bg-white px-4 py-2 rounded-xl hover:bg-gray-100 active:scale-95 transition-transform"
+             >
+               Undo
+             </button>
+          </div>
+        </div>
+      )}
+
       <div className={`fixed top-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
         <div className="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
           <div className="bg-green-500 rounded-full p-1"><Check size={14} strokeWidth={3} className="text-white" /></div>
@@ -658,16 +813,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
         </div>
       </div>
 
-      <div className="md:hidden fixed top-0 left-0 w-full bg-[#F9FAFB] z-20 p-4 flex items-center justify-between gap-4 border-b border-gray-100">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
+      <div className="md:hidden fixed top-0 left-0 w-full bg-white z-20 px-4 py-3 flex items-center justify-between gap-4 border-b border-gray-100 shadow-sm">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-xl active:scale-95 transition-transform shrink-0">
             <Menu size={22} className="text-gray-700" />
           </button>
-          <h1 className="font-bold text-xl tracking-tight text-gray-900 truncate font-sans">
+          <h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">
             {getShopNamePreview() || 'AdminPanel'}
           </h1>
         </div>
-        <button onClick={() => handleTabClick('settings')} className="p-2 bg-white rounded-xl shadow-sm border border-gray-100 text-gray-700 active:scale-95 transition-transform">
+        <button onClick={() => handleTabClick('settings')} className="p-2 bg-gray-50 rounded-xl text-gray-700 active:scale-95 transition-transform shrink-0">
           <Settings size={20} />
         </button>
       </div>
@@ -691,21 +846,21 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      <main className="flex-1 p-4 pt-24 md:p-8 pb-24 md:pb-8 overflow-y-auto w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <main className="flex-1 p-4 pt-20 md:p-8 pb-28 md:pb-8 overflow-y-auto w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
-        <header className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 items-start sm:items-center gap-3">
+        <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4">
            <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
-           <div className="flex gap-2 w-full sm:w-auto">
+           <div className="flex w-full sm:w-auto gap-3">
              <a 
                href={`/${shopSlug}`} 
                target="_blank" 
                rel="noopener noreferrer"
-               className="flex-1 sm:flex-none flex justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all shadow-sm active:scale-95 items-center"
+               className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3.5 sm:py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-all shadow-sm active:scale-95"
              >
-               <ExternalLink size={14} /> View Live Menu
+               <ExternalLink size={16} /> View Live Menu
              </a>
-             <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-transparent border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95 items-center">
-               <QrCode size={14} /> Get QR
+             <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3.5 sm:py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95">
+               <QrCode size={16} className="text-gray-500"/> Get QR
              </button>
            </div>
         </header>
@@ -751,29 +906,27 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
-             <div className="flex flex-col md:flex-row items-center justify-between gap-3 mb-6">
-                <div className="relative w-full md:flex-1 md:max-w-md">
+             <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
+                <div className="relative flex-1">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
                   <input 
                     placeholder="Search menu..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl border-none bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-gray-200 bg-white shadow-sm text-sm outline-none focus:ring-2 focus:ring-gray-900"
                   />
                 </div>
-                <div className="flex w-full md:w-auto items-center justify-between md:justify-end gap-3 flex-wrap">
-                  <div className="flex bg-gray-200/50 p-1 rounded-xl">
-                    <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
-                    <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-colors active:scale-95 ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
-                  </div>
-                  <button 
-                    onClick={() => setIsFormOpen(true)} 
-                    disabled={optProducts.length >= safeLimits.maxProducts}
-                    className={`hidden md:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-4 sm:px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}
-                  >
-                    <Plus size={18} strokeWidth={3}/> {optProducts.length >= safeLimits.maxProducts ? 'Limit Reached' : 'Add New'}
-                  </button>
+                <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 border border-gray-200">
+                  <button onClick={() => setViewMode('list')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
+                  <button onClick={() => setViewMode('grid')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
                 </div>
+                <button 
+                  onClick={() => setIsFormOpen(true)} 
+                  disabled={optProducts.length >= safeLimits.maxProducts}
+                  className={`hidden md:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}
+                >
+                  <Plus size={18} strokeWidth={3}/> {optProducts.length >= safeLimits.maxProducts ? 'Limit Reached' : 'Add Product'}
+                </button>
              </div>
              
              {optProducts.length === 0 && searchQuery === '' ? (
@@ -797,48 +950,45 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                    </div>
                 </div>
              ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {filteredProducts.map(item => {
                     const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
                     const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                     const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                     return (
-                    <div key={item.id} className="bg-white p-3 sm:p-4 rounded-3xl shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group">
-                      <div className="absolute top-5 right-5 flex flex-col gap-1.5 items-end z-10">
-                        {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
-                        {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{effectiveDiscount}%</span>}
-                      </div>
-                      <div className="relative w-full aspect-square mb-3 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
+                    <div key={item.id} className="bg-white rounded-3xl p-3.5 sm:p-5 shadow-sm border border-gray-100 flex flex-col h-full group hover:shadow-md transition-shadow">
+                      <div className="relative w-full aspect-square mb-4 shrink-0 overflow-hidden rounded-[20px] bg-gray-50 border border-gray-100/50">
+                        <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end z-10">
+                          {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">Hot</span>}
+                          {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">-{effectiveDiscount}%</span>}
+                        </div>
                         <img src={getValidImage(item.image)} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
                       </div>
-                      <div className="flex flex-col flex-1 space-y-1">
-                        <h3 className="font-bold text-gray-900 text-lg sm:text-xl leading-tight line-clamp-2">{item.name}</h3>
-                        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-2">
-                           <span className="truncate uppercase tracking-wider">{item.category?.name}</span> • <span>{item.time}</span>
-                        </div>
-                        <div className="mt-auto pt-3 flex items-center justify-between">
-                          <div>
+                      
+                      <div className="flex flex-col flex-1">
+                        <h3 className="font-extrabold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1">{item.name}</h3>
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4 line-clamp-1">{item.category?.name} • {item.time}</p>
+                        
+                        <div className="mt-auto border-t border-gray-100 pt-3 flex items-center justify-between">
+                          <div className="pr-2 truncate">
                             {effectiveDiscount > 0 ? (
-                              <div className="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-2 flex-wrap">
-                                <span className="font-extrabold text-lg sm:text-xl text-red-500">${discountedPrice.toFixed(2)}</span>
-                                <span className="font-medium text-xs sm:text-sm text-gray-400 line-through">${item.price.toFixed(2)}</span>
+                              <div className="flex flex-col">
+                                <span className="font-black text-lg sm:text-xl text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
+                                <span className="font-medium text-[11px] text-gray-400 line-through mt-0.5">${item.price.toFixed(2)}</span>
                               </div>
                             ) : (
-                              <span className="font-extrabold text-lg sm:text-xl text-gray-900">${item.price.toFixed(2)}</span>
+                              <span className="font-black text-lg sm:text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
                             )}
                           </div>
-                          <div className="flex gap-1.5 shrink-0 z-10 relative">
-                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={16} /></button>
+                          
+                          <div className="flex gap-2 shrink-0 relative z-10">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0"><Pencil size={18} /></button>
                             <form action={(fd) => { 
-                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                startTransition(async () => {
-                                  await deleteProduct(fd); 
-                                  showToast("Product deleted"); 
-                                });
+                                confirmDelete('product', item.id, item.name, fd);
                             }}>
                               <input type="hidden" name="id" value={item.id} />
-                              <button type="submit" onClick={(e) => e.stopPropagation()} className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 transition-colors active:scale-95">
-                                <Trash2 size={16} />
+                              <button type="submit" onClick={(e) => e.stopPropagation()} className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 transition-colors active:scale-95 shrink-0">
+                                <Trash2 size={18} />
                               </button>
                             </form>
                           </div>
@@ -847,7 +997,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     </div>
                   )})}
                   {filteredProducts.length === 0 && searchQuery !== '' && (
-                    <div className="col-span-full py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
+                    <div className="col-span-full py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No products found matching "{searchQuery}"</div>
                   )}
                 </div>
              ) : (
@@ -862,92 +1012,94 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                           return (
                           <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
-                            <td className="p-4 flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
-                              <span className="font-bold text-gray-900 flex items-center gap-2">
-                                {item.name}
-                                {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
-                                {effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}
-                              </span>
+                            <td className="p-4 flex items-center gap-4">
+                              <div className="w-14 h-14 rounded-2xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-gray-900 text-base">{item.name}</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
+                                  {effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}
+                                </div>
+                              </div>
                             </td>
-                            <td className="p-4 text-xs text-gray-400 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1 rounded-full">{item.category?.name}</span></td>
+                            <td className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1.5 rounded-lg">{item.category?.name}</span></td>
                             <td className="p-4 font-black text-xl text-gray-900">
                                {effectiveDiscount > 0 ? (
                                  <div className="flex flex-col">
                                    <span className="text-red-500">${discountedPrice.toFixed(2)}</span>
-                                   <span className="text-xs text-gray-400 line-through font-normal">${item.price.toFixed(2)}</span>
+                                   <span className="text-xs text-gray-400 line-through font-medium mt-0.5">${item.price.toFixed(2)}</span>
                                  </div>
                               ) : (
                                  `$${item.price.toFixed(2)}`
                               )}
                             </td>
-                            <td className="p-4 text-xs text-gray-400 font-medium">{item.time}</td>
-                            <td className="p-4 text-right flex items-center justify-end gap-2">
-                              <button onClick={() => setEditingProduct(item)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
-                              <form action={(fd) => { 
-                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                startTransition(async () => {
-                                  await deleteProduct(fd); 
-                                  showToast("Product deleted"); 
-                                });
-                              }}>
-                                <input type="hidden" name="id" value={item.id} />
-                                <button type="submit" className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95">
-                                  <Trash2 size={18} />
-                                </button>
-                              </form>
+                            <td className="p-4 text-sm text-gray-500 font-medium">{item.time}</td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button onClick={() => setEditingProduct(item)} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><Pencil size={18} /></button>
+                                <form action={(fd) => { 
+                                  confirmDelete('product', item.id, item.name, fd);
+                                }}>
+                                  <input type="hidden" name="id" value={item.id} />
+                                  <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 transition-colors active:scale-95">
+                                    <Trash2 size={18} />
+                                  </button>
+                                </form>
+                              </div>
                             </td>
                           </tr>
                         )})}
                       </tbody>
                     </table>
                     {filteredProducts.length === 0 && searchQuery !== '' && (
-                      <div className="py-12 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
+                      <div className="py-16 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>
                     )}
                   </div>
                   
-                  <div className="md:hidden space-y-3">
+                  <div className="md:hidden space-y-4">
                      {filteredProducts.map((item) => {
                        const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
                        const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                        const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                        return(
-                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-[0.98] transition-transform cursor-default">
-                           <div className="flex items-center gap-4">
-                              <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
-                              <div>
-                                <h4 className="font-bold text-gray-900 text-base leading-tight mb-1 flex items-center gap-2">
+                        <div key={item.id} className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col cursor-default">
+                           <div className="flex items-start gap-4 mb-3">
+                              <div className="w-[72px] h-[72px] bg-gray-50 rounded-[20px] overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className="flex-1 pt-1">
+                                <h4 className="font-extrabold text-gray-900 text-base leading-tight mb-1.5 line-clamp-2">
                                   {item.name}
-                                  {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
                                 </h4>
-                                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{item.category?.name} • <span className="font-medium">{item.time}</span></p>
-                                <div className="flex flex-col">
-                                   {effectiveDiscount > 0 ? (
-                                      <div className="flex items-baseline gap-1.5 flex-wrap">
-                                        <span className="font-black text-lg text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
-                                        <span className="text-xs text-gray-400 line-through">${item.price.toFixed(2)}</span>
-                                      </div>
-                                    ) : (
-                                      <span className="font-black text-lg text-gray-900 leading-none">${item.price.toFixed(2)}</span>
-                                    )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-2 py-1 rounded-md">{item.category?.name} • {item.time}</p>
+                                  {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-50 px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider">Hot</span>}
                                 </div>
                               </div>
                            </div>
-                           <div className="flex flex-col gap-2 shrink-0">
-                            <button onClick={() => setEditingProduct(item)} className="p-2 text-gray-400 bg-gray-50 rounded-xl hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={16} /></button>
-                            <form action={(fd) => { 
-                                startTransition(() => dispatchOptProducts({ type: 'delete', payload: item.id })); 
-                                startTransition(async () => {
-                                  await deleteProduct(fd); 
-                                  showToast("Product deleted"); 
-                                });
-                            }}>
-                              <input type="hidden" name="id" value={item.id} />
-                              <button type="submit" className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-xl hover:bg-red-50 active:scale-95 transition-all">
-                                <Trash2 size={16} />
-                              </button>
-                            </form>
-                          </div>
+                           
+                           <div className="flex items-center justify-between border-t border-gray-50 pt-3">
+                             <div className="pl-1">
+                               {effectiveDiscount > 0 ? (
+                                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                                    <span className="font-black text-xl text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
+                                    <span className="text-xs font-medium text-gray-400 line-through">${item.price.toFixed(2)}</span>
+                                  </div>
+                                ) : (
+                                  <span className="font-black text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
+                                )}
+                             </div>
+                             
+                             <div className="flex items-center gap-2 shrink-0">
+                                <button onClick={() => setEditingProduct(item)} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><Pencil size={18} /></button>
+                                <form action={(fd) => { 
+                                    confirmDelete('product', item.id, item.name, fd);
+                                }}>
+                                  <input type="hidden" name="id" value={item.id} />
+                                  <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-full hover:bg-red-100 active:scale-95 transition-all">
+                                    <Trash2 size={18} />
+                                  </button>
+                                </form>
+                              </div>
+                           </div>
                         </div>
                      )})}
                      {filteredProducts.length === 0 && searchQuery !== '' && (
@@ -993,20 +1145,18 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <td className="p-4 font-bold text-gray-700">{cat.name}</td>
                       <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
                       <td className="p-4 text-sm text-gray-500">{cat.discount ? `${cat.discount}%` : '-'}</td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
-                        <button onClick={() => setEditingCategory(cat)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-xl transition active:scale-95"><Pencil size={18} /></button>
-                        <form action={(fd) => { 
-                          startTransition(() => dispatchOptCategories({ type: 'delete', payload: cat.id })); 
-                          startTransition(async () => {
-                            await deleteCategory(fd); 
-                            showToast("Category deleted"); 
-                          });
-                        }}>
-                          <input type="hidden" name="id" value={cat.id} />
-                          <button type="submit" className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition active:scale-95">
-                            <Trash2 size={18} />
-                          </button>
-                        </form>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => setEditingCategory(cat)} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95"><Pencil size={18} /></button>
+                          <form action={(fd) => { 
+                            confirmDelete('category', cat.id, cat.name, fd);
+                          }}>
+                            <input type="hidden" name="id" value={cat.id} />
+                            <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95">
+                              <Trash2 size={18} />
+                            </button>
+                          </form>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1502,6 +1652,33 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 className="flex-1 py-3.5 px-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center text-sm"
               >
                 {isSaving ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- DELETE CONFIRMATION MODAL --- */}
+      {deleteConfirmation.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-5">
+               <Trash2 size={24} className="text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Delete {deleteConfirmation.type === 'product' ? 'Product' : 'Category'}?</h3>
+            <p className="text-gray-500 text-sm mb-8 leading-relaxed">Are you sure you want to delete <span className="font-semibold text-gray-700">"{deleteConfirmation.name}"</span>? This action cannot be undone after confirmation.</p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null })}
+                className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDeleteAction}
+                className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-sm"
+              >
+                Confirm
               </button>
             </div>
           </div>
