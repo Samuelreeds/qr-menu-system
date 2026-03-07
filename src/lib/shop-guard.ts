@@ -47,7 +47,7 @@ export const getShopPlanState = cache(async (shopId: string) => {
       overrideMaxProducts: true,
       overrideMaxCategories: true,
       overrideMaxBanners: true,
-      overrideHeaderStyle: true,
+      // overrideHeaderStyle removed to fix PrismaClientValidationError
     }
   });
 
@@ -93,7 +93,7 @@ export const getShopLimitsAndFeatures = cache(async (shopId: string) => {
     maxProducts,
     maxCategories,
     maxBanners,
-    overrideHeaderStyle: state.overrideHeaderStyle,
+    overrideHeaderStyle: false, // Safely defaulted to false since it's not in the DB schema
     premiumThemes,
     customSocials,
     // Database Toggles
