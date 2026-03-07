@@ -15,6 +15,7 @@ interface MenuItem {
   discount?: number;
   category?: string | { name: string, discount?: number };
   isPopular?: boolean;
+  isSoldOut?: boolean;
 }
 
 interface FoodCardProps {
@@ -27,7 +28,7 @@ interface FoodCardProps {
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
-export default function FoodCard({ item, onClick, adminActions }: FoodCardProps) {
+export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions }: FoodCardProps) {
   const { lang } = useLanguage(); 
 
   const displayName = 
@@ -41,37 +42,43 @@ export default function FoodCard({ item, onClick, adminActions }: FoodCardProps)
 
   return (
     <div 
-      onClick={onClick} 
-      className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full hover:shadow-md transition-all group cursor-pointer active:scale-[0.98] overflow-hidden"
+      onClick={item.isSoldOut ? undefined : onClick}
+      className={`bg-white rounded-2xl shadow-sm border border-gray-100 relative flex flex-col h-full group overflow-hidden ${
+        item.isSoldOut ? 'opacity-75 cursor-not-allowed' : 'hover:shadow-md cursor-pointer transition-all'
+      }`}
     >
-      
       {/* Badges */}
-      <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10">
+      <div className="absolute top-3 right-3 flex flex-col gap-2 items-end z-10 pointer-events-none">
         {item.isPopular && (
-           <span className="bg-orange-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
-             Hot
-           </span>
+          <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">
+            Hot
+          </span>
         )}
         {effectiveDiscount > 0 && (
-           <span className="bg-red-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">
-             -{effectiveDiscount}%
-           </span>
+          <span className="bg-red-500 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">
+            -{effectiveDiscount}%
+          </span>
+        )}
+        {item.isSoldOut && (
+          <span className="bg-gray-900 text-white text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wide shadow-sm">
+            Sold Out
+          </span>
         )}
       </div>
 
-      {/* Image Container */}
-      <div className="relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden">
+      {/* Image */}
+      <div className={`relative w-full aspect-[4/3] bg-gray-50 overflow-hidden shrink-0 ${item.isSoldOut ? 'grayscale' : ''}`}>
         <img 
           src={getValidImage(item.image)} 
           alt={displayName} 
-          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+          className={`w-full h-full object-cover ${item.isSoldOut ? '' : 'group-hover:scale-105'} transition-transform duration-300`}
           loading="lazy"
         />
       </div>
 
       {/* Content */}
-      <div className="flex flex-col flex-1 p-4 sm:p-5">
-        <h3 className="font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5">
+      <div className="flex flex-col flex-1 p-4">
+        <h3 className={`font-bold text-gray-900 text-sm sm:text-base leading-tight line-clamp-2 mb-1.5 ${item.isSoldOut ? 'text-gray-500' : ''}`}>
           {displayName} 
         </h3>
         
@@ -90,7 +97,7 @@ export default function FoodCard({ item, onClick, adminActions }: FoodCardProps)
           <div>
             {effectiveDiscount > 0 ? (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-extrabold text-lg sm:text-xl text-red-500">
+                <span className={`font-extrabold text-lg sm:text-xl ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>
                   ${discountedPrice.toFixed(2)}
                 </span>
                 <span className="font-semibold text-xs sm:text-sm text-gray-400 line-through">
@@ -98,14 +105,14 @@ export default function FoodCard({ item, onClick, adminActions }: FoodCardProps)
                 </span>
               </div>
             ) : (
-              <span className="font-extrabold text-lg sm:text-xl text-gray-900">
+              <span className={`font-extrabold text-lg sm:text-xl ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>
                 ${item.price.toFixed(2)}
               </span>
             )}
           </div>
 
           {adminActions && (
-            <div className="flex gap-1.5 shrink-0 z-10 relative">
+            <div className="relative z-20" onClick={e => e.stopPropagation()}>
               {adminActions}
             </div>
           )}

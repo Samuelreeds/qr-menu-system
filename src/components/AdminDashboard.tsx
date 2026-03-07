@@ -8,10 +8,10 @@ import {
   createProduct, deleteProduct, updateProduct, 
   createCategory, updateCategory, deleteCategory,
   updateShopIdentity, updateShopBranding, updateShopSocials, 
-  addBanner, deleteBanner, reorderBanners
+  addBanner, deleteBanner, reorderBanners, toggleProductSoldOut
 } from '@/lib/actions';
 import { 
-  Plus, X, Trash2, UploadCloud, CheckCircle, 
+  Plus, X, Trash2, UploadCloud, CheckCircle, XCircle,
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
@@ -56,6 +56,7 @@ interface Product {
   category: { name: string, discount?: number }; 
   time: string;
   isPopular?: boolean; 
+  isSoldOut?: boolean;
   discount?: number;
 }
 
@@ -91,6 +92,32 @@ interface PendingDelete {
 }
 
 const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
+
+const StockSwitchButton = ({ checked, onToggle, fullWidth }: { checked: boolean; onToggle: (e?: React.MouseEvent) => void; fullWidth?: boolean }) => {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(e);
+      }}
+      className={`flex items-center justify-between px-4 py-2.5 rounded-2xl font-bold transition-all duration-200 active:scale-[0.98] border shadow-sm ${
+        fullWidth ? 'w-full mt-3' : 'w-auto gap-4'
+      } ${
+        checked
+          ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300'
+          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
+      }`}
+    >
+      <span className="uppercase tracking-wide text-xs">
+        {checked ? 'Sold Out' : 'Available'}
+      </span>
+      <div className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${checked ? 'bg-rose-500' : 'bg-emerald-500'}`}>
+        <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </div>
+    </button>
+  );
+};
 
 export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [], shopPlan, planLimits }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
@@ -152,6 +179,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [prepTime, setPrepTime] = useState('15');
   const [isHotSale, setIsHotSale] = useState(false);
+  const [isSoldOutState, setIsSoldOutState] = useState(false);
 
   // Used strictly for modal "Unsaved Changes" blocking overlay now
   const [isSaving, setIsSaving] = useState(false);
@@ -289,12 +317,14 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' });
       setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15');
       setIsHotSale(editingProduct.isPopular || false);
+      setIsSoldOutState(editingProduct.isSoldOut || false);
     } else if (isFormOpen) {
       setProductPreview('');
       setProductFileBlob(null);
       setProdName({ en: '', kh: '', zh: '' }); 
       setPrepTime('15');
       setIsHotSale(false);
+      setIsSoldOutState(false);
     }
   }, [editingProduct, isFormOpen]);
 
@@ -309,6 +339,20 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 3000);
+  };
+
+  const handleToggleSoldOut = (item: Product) => {
+    const newState = !item.isSoldOut;
+    startTransition(() => {
+      dispatchOptProducts({ type: 'update', payload: { ...item, isSoldOut: newState } });
+    });
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.append('id', item.id);
+      fd.append('isSoldOut', String(newState));
+      await toggleProductSoldOut(fd);
+      showToast(newState ? 'Marked as Sold Out' : 'Marked as Available');
+    });
   };
 
   const handleGeneratePDF = (format: 'portrait' | 'landscape') => {
@@ -992,7 +1036,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       </div>
 
                       {/* Image Container */}
-                      <div className="relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden pointer-events-none">
+                      <div className={`relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden pointer-events-none ${item.isSoldOut ? 'opacity-50 grayscale' : ''}`}>
                         <img 
                           src={getValidImage(item.image)} 
                           alt={item.name} 
@@ -1003,7 +1047,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                       {/* Content */}
                       <div className="flex flex-col flex-1 p-4 sm:p-5 pointer-events-none">
-                        <h3 className="font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5">
+                        <h3 className={`font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5 ${item.isSoldOut ? 'text-gray-500' : ''}`}>
                           {item.name} 
                         </h3>
                         
@@ -1014,28 +1058,30 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         </div>
 
                         {/* Footer: Price & Actions */}
-                        <div className="mt-auto pt-2 flex items-center justify-between pointer-events-auto">
-                          <div className="pr-2 truncate">
-                            {effectiveDiscount > 0 ? (
-                              <div className="flex flex-col">
-                                <span className="font-extrabold text-lg sm:text-xl text-red-500 leading-none">
-                                  ${discountedPrice.toFixed(2)}
-                               </span>
-                                <span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1">
+                        <div className="mt-auto pt-3 flex flex-col pointer-events-auto border-t border-gray-50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0 pr-2">
+                              {effectiveDiscount > 0 ? (
+                                <div className="flex flex-col">
+                                  <span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>
+                                    ${discountedPrice.toFixed(2)}
+                                  </span>
+                                  <span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1 truncate block">
+                                    ${item.price.toFixed(2)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>
                                   ${item.price.toFixed(2)}
                                 </span>
-                              </div>
-                            ) : (
-                              <span className="font-extrabold text-lg sm:text-xl text-gray-900 leading-none">
-                                ${item.price.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                          
-                          <div className="flex shrink-0 relative z-10">
-                            <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0">
-                              <MoreVertical size={16} />
-                            </button>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center shrink-0 relative z-10" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0">
+                                <MoreVertical size={16} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1056,11 +1102,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                           const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                           return (
-                          <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group cursor-pointer" onClick={() => setEditingProduct(item)}>
+                          <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${item.isSoldOut ? 'opacity-70' : ''}`} onClick={() => setEditingProduct(item)}>
                             <td className="p-4 flex items-center gap-4">
-                              <div className="w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className={`w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100 ${item.isSoldOut ? 'grayscale' : ''}`}><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex flex-col">
-                                <span className="font-bold text-gray-900 text-base">{item.name}</span>
+                                <span className={`font-bold text-base ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</span>
                                 <div className="flex items-center gap-2 mt-1">
                                   {item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}
                                   {effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}
@@ -1068,10 +1114,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               </div>
                             </td>
                             <td className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1.5 rounded-lg">{item.category?.name}</span></td>
-                            <td className="p-4 font-black text-xl text-gray-900">
+                            <td className={`p-4 font-black text-xl ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>
                                {effectiveDiscount > 0 ? (
                                  <div className="flex flex-col">
-                                   <span className="text-red-500">${discountedPrice.toFixed(2)}</span>
+                                   <span className={item.isSoldOut ? 'text-gray-500' : 'text-red-500'}>${discountedPrice.toFixed(2)}</span>
                                    <span className="text-xs text-gray-400 line-through font-medium mt-0.5">${item.price.toFixed(2)}</span>
                                  </div>
                               ) : (
@@ -1080,7 +1126,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                             </td>
                             <td className="p-4 text-sm text-gray-500 font-medium">{item.time}</td>
                             <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2 relative z-10">
+                              <div className="flex items-center justify-end gap-3 relative z-10" onClick={(e) => e.stopPropagation()}>
                                 <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95">
                                   <MoreVertical size={18} />
                                 </button>
@@ -1101,11 +1147,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
                        const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                        return(
-                        <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer" onClick={() => setEditingProduct(item)}>
+                        <div key={item.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer ${item.isSoldOut ? 'opacity-75' : ''}`} onClick={() => setEditingProduct(item)}>
                            <div className="flex items-start gap-4 mb-3">
-                              <div className="w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100"><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className={`w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100 ${item.isSoldOut ? 'grayscale' : ''}`}><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex-1 pt-1">
-                                <h4 className="font-extrabold text-gray-900 text-base leading-tight mb-1.5 line-clamp-2">
+                                <h4 className={`font-extrabold text-base leading-tight mb-1.5 line-clamp-2 ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>
                                   {item.name}
                                 </h4>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1115,23 +1161,25 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               </div>
                            </div>
                            
-                           <div className="flex items-center justify-between border-t border-gray-50 pt-3 relative z-10">
-                             <div className="pl-1 pointer-events-none">
-                               {effectiveDiscount > 0 ? (
-                                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                                    <span className="font-black text-xl text-red-500 leading-none">${discountedPrice.toFixed(2)}</span>
-                                    <span className="text-xs font-medium text-gray-400 line-through">${item.price.toFixed(2)}</span>
-                                  </div>
-                                ) : (
-                                  <span className="font-black text-xl text-gray-900 leading-none">${item.price.toFixed(2)}</span>
-                                )}
+                           <div className="flex flex-col border-t border-gray-50 pt-3 relative z-10 mt-auto">
+                             <div className="flex items-center justify-between">
+                               <div className="flex-1 min-w-0 pr-2 pointer-events-none">
+                                 {effectiveDiscount > 0 ? (
+                                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                                      <span className={`font-black text-xl leading-none truncate ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span>
+                                      <span className="text-xs font-medium text-gray-400 line-through truncate">${item.price.toFixed(2)}</span>
+                                    </div>
+                                  ) : (
+                                    <span className={`font-black text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${item.price.toFixed(2)}</span>
+                                  )}
+                               </div>
+                               
+                               <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all">
+                                    <MoreVertical size={16} />
+                                  </button>
+                                </div>
                              </div>
-                             
-                             <div className="flex items-center gap-2 shrink-0">
-                                <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all">
-                                  <MoreVertical size={18} />
-                                </button>
-                              </div>
                            </div>
                         </div>
                      )})}
@@ -1993,6 +2041,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      category: { name: catNameStr },
                      time: fd.get('time') as string || '15min',
                      isPopular: isHotSale, 
+                     isSoldOut: isSoldOutState, // Includes sold out state
                    };
 
                    startTransition(() => {
@@ -2010,6 +2059,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                      fd.set('name_kh', prodName.kh);
                      fd.set('name_zh', prodName.zh);
                      fd.set('isPopular', isHotSale ? 'on' : 'off');
+                     fd.set('isSoldOut', isSoldOutState ? 'true' : 'false');
                      
                      try {
                        if (isEdit) await updateProduct(fd);
@@ -2095,6 +2145,15 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                         </span>
                       </div>
                     )}
+                  </div>
+
+                  <div className="mt-2">
+                    <StockSwitchButton 
+                      checked={isSoldOutState} 
+                      onToggle={() => setIsSoldOutState(!isSoldOutState)} 
+                      fullWidth={true} 
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1.5 ml-1">Toggle to mark item as currently unavailable.</p>
                   </div>
 
                   <div className="flex flex-col gap-3 mt-6">

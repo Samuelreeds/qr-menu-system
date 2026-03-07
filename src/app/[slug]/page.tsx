@@ -108,6 +108,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
       discount: product.category?.discount || 0
     },
     isPopular: product.isPopular || false,
+    isSoldOut: product.isSoldOut || false,
     discount: product.discount || 0,
   }));
 

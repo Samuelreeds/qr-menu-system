@@ -42,6 +42,7 @@ interface Product {
   category: { name: string, discount?: number } | string;
   discount?: number;
   isPopular?: boolean;
+  isSoldOut?: boolean;
 }
 
 interface Banner {
@@ -344,7 +345,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           {searchQuery ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {getProductsBySearch(initialProducts).map((item) => (
-                <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={() => setSelectedItem(item)} />
+                <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
               ))}
             </div>
           ) : (
@@ -357,7 +358,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                   </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {initialProducts.filter(p => p.isPopular).map((item) => (
-                      <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={() => setSelectedItem(item)} />
+                      <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
                     ))}
                   </div>
                 </section>
@@ -378,7 +379,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                       {catProducts.map((item) => (
-                        <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={() => setSelectedItem(item)} />
+                        <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
                       ))}
                     </div>
                   </section>

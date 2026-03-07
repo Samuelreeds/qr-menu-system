@@ -1,8 +1,8 @@
+// prisma/schema.prisma
 // IMPORTANT: AFTER SAVING THIS FILE, YOU MUST RUN IN YOUR TERMINAL:
 // 1. npx prisma db push
 // 2. npx prisma generate
 // 3. Restart your Next.js development server
-// 4.   
 
 generator client {
   provider = "prisma-client-js"
@@ -24,7 +24,7 @@ model User {
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
   isSuperAdmin     Boolean   @default(false)
-  role             String    @default("USER") // Added for role-based authorization (e.g., USER, SUPERADMIN)
+  role             String    @default("USER")
   shopUsers        ShopUser[]
 }
 
@@ -47,7 +47,7 @@ model Shop {
   
   createdAt   DateTime  @default(now())
   deletedAt   DateTime?
-
+  
   shopUsers   ShopUser[]
   categories  Category[]
   products    Product[]
@@ -105,6 +105,7 @@ model Product {
   rating      Float    @default(0)
   description String?
   isPopular   Boolean  @default(false) 
+  isSoldOut   Boolean  @default(false) // Added this field
   discount    Float    @default(0) 
 
   categoryId  String
@@ -120,9 +121,10 @@ model Product {
 model Banner {
   id        String   @id @default(cuid())
   image     String
+ 
   sortOrder Int      @default(0)
   deletedAt DateTime?
-
+  
   shopId    String
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   

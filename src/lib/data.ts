@@ -6,6 +6,7 @@ export interface MenuItem {
   time: string;
   image: string;
   category: string;
+  isSoldOut?: boolean;
 }
 
 export const MENU_ITEMS: MenuItem[] = [

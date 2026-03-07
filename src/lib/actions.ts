@@ -321,12 +321,13 @@ export async function createProduct(formData: FormData) {
   const categoryId = formData.get('categoryId') as string
   const time = formData.get('time') as string || '15min'
   const imageFile = formData.get('image') as File
+  const isSoldOut = formData.get('isSoldOut') === 'on'
   
   let imagePath = await uploadToSupabase(imageFile, 'products');
   if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
   await prisma.product.create({
-    data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', shopId }
+    data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', isSoldOut, shopId }
   })
   await revalidateActiveShop();
 }
@@ -341,6 +342,7 @@ export async function updateProduct(formData: FormData) {
   const categoryId = formData.get('categoryId') as string;
   const time = formData.get('time') as string || '15min';
   const imageFile = formData.get('image') as File;
+  const isSoldOut = formData.get('isSoldOut') === 'on';
 
   const newImagePath = await uploadToSupabase(imageFile, 'products');
 
@@ -351,9 +353,20 @@ export async function updateProduct(formData: FormData) {
 
   await prisma.product.update({
     where: { id },
-    data: { name, name_kh, name_zh, price, discount, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on' }
+    data: { name, name_kh, name_zh, price, discount, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on', isSoldOut }
   });
   await revalidateActiveShop();
+}
+
+export async function toggleProductSoldOut(formData: FormData) {
+  const id = formData.get('id') as string;
+  const isSoldOut = formData.get('isSoldOut') === 'true';
+  try {
+    await prisma.product.update({ where: { id }, data: { isSoldOut } });
+    await revalidateActiveShop();
+  } catch (e) {
+    console.error("Failed to toggle sold out status", e);
+  }
 }
 
 export async function deleteProduct(formData: FormData) {
