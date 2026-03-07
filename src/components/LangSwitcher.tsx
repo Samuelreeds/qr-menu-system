@@ -18,7 +18,6 @@ export default function LangSwitcher() {
     ? ALL_LANGUAGES 
     : ALL_LANGUAGES.filter(l => l.code !== 'zh');
 
-  // Fallback if current lang is not allowed
   useEffect(() => {
     if (!multiLangEnabled && lang === 'zh') {
       setLang('en');
@@ -38,18 +37,17 @@ export default function LangSwitcher() {
   }, []);
 
   return (
-    <div className="relative z-50 h-full" ref={dropdownRef}>
-      
-      {/* --- MAIN BUTTON --- */}
+    <div className="relative z-50 h-10" ref={dropdownRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-center gap-2 h-full bg-white border border-gray-100 rounded-2xl px-4 shadow-sm hover:bg-gray-50 transition-colors"
+        className="flex items-center justify-center gap-2 h-full bg-white/20 backdrop-blur-md border border-white/30 rounded-xl px-3 shadow-sm hover:bg-white/30 transition-all active:scale-95"
       >
-        <img src={activeLang.flag} alt={activeLang.code} className="w-5 h-5 object-cover rounded-full shadow-sm" />
-        <ChevronDown size={14} className={`text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <div className="w-5 h-5 rounded-full overflow-hidden ring-1 ring-white/20">
+          <img src={activeLang.flag} alt={activeLang.code} className="w-full h-full object-cover" />
+        </div>
+        <ChevronDown size={14} className={`text-white transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* --- DROPDOWN MENU --- */}
       {isOpen && (
         <div className="absolute right-0 mt-2 w-36 bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           <div className="py-1">
@@ -68,7 +66,6 @@ export default function LangSwitcher() {
                     {language.label}
                   </span>
                 </div>
-                
                 {lang === language.code && (
                   <Check size={16} className="text-green-600" />
                 )}

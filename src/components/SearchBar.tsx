@@ -1,39 +1,77 @@
-import { Search } from 'lucide-react';
-import LangSwitcher from './LangSwitcher';
+import { Search, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface SearchBarProps {
   value: string;
   onChange: (val: string) => void;
-  hideSwitcher?: boolean;
 }
 
-export default function SearchBar({ value, onChange, hideSwitcher }: SearchBarProps) {
+export default function SearchBar({ value, onChange }: SearchBarProps) {
   const { lang } = useLanguage();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const placeholderText = {
-    en: "Search your favorite food",
-    kh: "ស្វែងរកអាហារដែលអ្នកចូលចិត្ត",
-    zh: "搜索你最喜欢的食物"
+    en: "Search...",
+    kh: "ស្វែងរក...",
+    zh: "搜索..."
+  };
+
+  useEffect(() => {
+    if (isExpanded && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isExpanded]);
+
+  const handleToggle = () => {
+    if (isExpanded && value === "") {
+      setIsExpanded(false);
+    } else {
+      setIsExpanded(true);
+    }
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange("");
+    setIsExpanded(false);
   };
 
   return (
-    <div className="flex gap-3 mb-2 items-center h-[46px]">
-      <div className="relative flex-1 h-full">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-        <input 
-          type="text" 
-          placeholder={placeholderText[lang]}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full h-full bg-white border border-gray-100 pl-11 pr-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-black/5 shadow-sm text-gray-600 placeholder:text-gray-400"
+    <div 
+      className={`relative flex items-center h-[42px] transition-all duration-300 ease-in-out bg-white border border-gray-100 rounded-full shadow-sm ${
+        isExpanded ? 'w-full sm:w-64 px-3 ring-2 ring-black/5' : 'w-[42px] justify-center hover:bg-gray-50 cursor-pointer'
+      }`}
+      onClick={() => !isExpanded && setIsExpanded(true)}
+    >
+      <div className={`shrink-0 flex items-center justify-center ${isExpanded ? 'mr-2' : ''}`}>
+        <Search 
+          size={18} 
+          className={`transition-colors ${isExpanded ? 'text-gray-400' : 'text-gray-700'}`} 
+          strokeWidth={2.5}
         />
       </div>
-      
-      {!hideSwitcher && (
-        <div className="shrink-0 h-full">
-          <LangSwitcher />
-        </div>
+
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={placeholderText[lang]}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none transition-all duration-300 ${
+          isExpanded ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'
+        }`}
+        onBlur={() => value === "" && setIsExpanded(false)}
+      />
+
+      {isExpanded && value !== "" && (
+        <button 
+          onClick={handleClear}
+          className="shrink-0 ml-1 p-1 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <X size={14} className="text-gray-400" />
+        </button>
       )}
     </div>
   );
