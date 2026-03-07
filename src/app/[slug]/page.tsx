@@ -40,7 +40,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
   const planLimits = await getShopLimitsAndFeatures(shop.id);
   
   const effectiveMaxBanners = (planLimits as any)?.maxBanners || 1;
-  const effectivePremiumThemes = (planLimits as any)?.premiumThemes || false;
   const effectiveCustomSocials = (planLimits as any)?.customSocials || false;
   const multiLanguageEnabled = !!(planLimits as any)?.featMultipleLanguage;
 
@@ -54,6 +53,7 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     themeColor: '#000000',
     headerDesign: 'design1',
     logo: '', 
+    logoType: 'withBackground',
     facebook: '',
     showFacebook: false,
     instagram: '',
@@ -72,9 +72,10 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     address: safeSettings.address || '',
     phone: safeSettings.phone || '',
     openingHours: safeSettings.openingHours || '',
-    themeColor: effectivePremiumThemes ? (safeSettings.themeColor || '#000000') : '#000000',
-    headerDesign: effectivePremiumThemes ? (safeSettings.headerDesign || 'design1') : 'design1',
+    themeColor: safeSettings.themeColor || '#000000', 
+    headerDesign: safeSettings.headerDesign || 'design1', 
     logo: safeSettings.logo || '', 
+    logoType: safeSettings.logoType || 'withBackground', 
     facebook: safeSettings.facebook || '',
     showFacebook: safeSettings.showFacebook || false,
     instagram: safeSettings.instagram || '',

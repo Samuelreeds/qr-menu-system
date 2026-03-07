@@ -119,6 +119,7 @@ export async function getShopSettings() {
       themeColor: "#000000",
       headerDesign: "design1",
       logo: null, 
+      logoType: "withBackground",
       socials: "[]"
     };
   }
@@ -403,16 +404,21 @@ export async function updateShopBranding(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
-  const canUseThemes = await canUseFeature(shopId, 'premiumThemes');
   const logoFile = formData.get('logo') as File;
+  const logoType = formData.get('logoType') as string || 'withBackground';
   const newLogoPath = await uploadToSupabase(logoFile, 'branding');
 
   const dataToUpdate: any = {};
   
-  if (canUseThemes) {
-    dataToUpdate.themeColor = formData.get('themeColor') as string || '#000000';
-    dataToUpdate.headerDesign = formData.get('headerDesign') as string || 'design1';
-  }
+  // FIX: Theme color and header design are accessible to all plans. 
+  // We unconditionally save them because the Admin UI handles the plan enforcement visually.
+  const headerDesign = formData.get('headerDesign') as string;
+  if (headerDesign) dataToUpdate.headerDesign = headerDesign;
+  
+  const themeColor = formData.get('themeColor') as string;
+  if (themeColor) dataToUpdate.themeColor = themeColor;
+  
+  dataToUpdate.logoType = logoType;
 
   if (newLogoPath) {
     const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { logo: true } });
@@ -427,8 +433,9 @@ export async function updateShopBranding(formData: FormData) {
       shopId, 
       name: 'Scandine', 
       logo: newLogoPath || null,
-      themeColor: canUseThemes ? (formData.get('themeColor') as string || '#000000') : '#000000',
-      headerDesign: canUseThemes ? (formData.get('headerDesign') as string || 'design1') : 'design1'
+      logoType,
+      themeColor: themeColor || '#000000',
+      headerDesign: headerDesign || 'design1'
     }
   });
   await revalidateActiveShop();

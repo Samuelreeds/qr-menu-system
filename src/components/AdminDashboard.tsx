@@ -34,6 +34,7 @@ interface ShopSettings {
   themeColor: string; 
   headerDesign: string; 
   logo: string | null; 
+  logoType?: string | null;
   socials: string; 
 }
 interface Banner { id: string; image: string; sortOrder: number; }
@@ -162,6 +163,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [dismissGuide, setDismissGuide] = useState(false);
 
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
+  
+  const [touchStart, setTouchStart] = useState(0);
+  const [touchEnd, setTouchEnd] = useState(0);
 
   // Safely assign properties with fallback limits based on the current plan state
   const safeLimits = planLimits || {
@@ -235,6 +239,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState(settings?.logo || '');
+  const [logoType, setLogoType] = useState(settings?.logoType || 'withBackground');
   const [isDirtyLogo, setIsDirtyLogo] = useState(false);
   const [logoFileBlob, setLogoFileBlob] = useState<Blob | null>(null);
 
@@ -252,6 +257,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const hasProduct = optProducts.length > 0;
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
+  const isNoBg = logoType === 'withoutBackground';
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -270,7 +276,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     };
   }, []);
 
-  useEffect(() => { setLogoPreview(settings?.logo || ''); setIsDirtyLogo(false); }, [settings?.logo]);
+  useEffect(() => { 
+    setLogoPreview(settings?.logo || ''); 
+    setLogoType(settings?.logoType || 'withBackground');
+    setIsDirtyLogo(false); 
+  }, [settings?.logo, settings?.logoType]);
 
   useEffect(() => {
     if (editingProduct) {
@@ -370,6 +380,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       setHeaderDesign(settings?.headerDesign || 'design1');
       setThemeColorPreview(settings?.themeColor || '#000000');
       setLogoPreview(settings?.logo || '');
+      setLogoType(settings?.logoType || 'withBackground');
       setIsDirtyLogo(false);
       setLogoFileBlob(null);
     } else if (source === 'socials') {
@@ -404,6 +415,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
      const fd = new FormData();
      fd.set('headerDesign', headerDesign);
      fd.set('themeColor', themeColorPreview);
+     fd.set('logoType', logoType);
      if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp');
      try {
        await updateShopBranding(fd);
@@ -588,7 +600,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     } catch (e) { console.error(e); }
   };
 
-  const cancelLogoChange = () => { setLogoPreview(settings?.logo || ''); setIsDirtyLogo(false); setLogoFileBlob(null); };
+  const cancelLogoChange = () => { setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); };
 
   const addSocialLink = () => { setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]); markDirty('socials'); };
   const removeSocialLink = (id: string) => { setSocialLinks(socialLinks.filter(l => l.id !== id)); markDirty('socials'); };
@@ -1445,26 +1457,26 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 w-full">{getShopNamePreview()}</h1>
                                   ) : headerDesign === 'design3' ? (
                                     <div className="flex flex-col items-center gap-3 max-w-full">
-                                      <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16' : 'rounded-2xl overflow-hidden bg-white w-16 h-16 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                                        <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
                                     </div>
                                   ) : headerDesign === 'design4' ? (
                                     <div className="flex items-center justify-center gap-3 max-w-full">
-                                      <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-14 h-14 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-14 h-14' : 'rounded-full overflow-hidden bg-white w-14 h-14 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                        <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-left text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words flex-1">{getShopNamePreview()}</h1>
                                     </div>
                                   ) : headerDesign === 'design5' ? (
                                     <div className="flex flex-col items-center justify-center w-full max-w-full">
                                       {(logoPreview || settings?.logo) ? (
-                                        <div className="rounded-2xl overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-[14px]" />
-                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-[14px]"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                                          <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                         </div>
                                       ) : (
                                         <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>
@@ -1473,9 +1485,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                   ) : headerDesign === 'design7' ? (
                                     <div className="flex flex-col items-center justify-center w-full max-w-full">
                                       {(logoPreview || settings?.logo) ? (
-                                        <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-20 h-20 shadow-xl p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
-                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                          <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                         </div>
                                       ) : (
                                         <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>
@@ -1483,13 +1495,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     </div>
                                   ) : headerDesign === 'design6' ? (
                                     <div className="flex items-center justify-between w-full max-w-full gap-3 mt-[-20px]">
-                                      <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-10 h-10 shadow-sm p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg && (logoPreview || settings?.logo) ? 'w-10 h-10' : 'rounded-full overflow-hidden bg-white w-10 h-10 shadow-sm p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
                                         {(logoPreview || settings?.logo) ? (
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
                                         ) : (
                                           <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xs">{getShopNamePreview().charAt(0).toUpperCase()}</div>
                                         )}
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[8px] font-bold">Edit</span></div>
+                                        <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[8px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-center text-lg font-bold drop-shadow-sm font-sans leading-relaxed line-clamp-1 flex-1 break-words">{getShopNamePreview()}</h1>
                                       <div className="p-1.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white shadow-sm flex items-center justify-center">
@@ -1498,9 +1510,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     </div>
                                   ) : (
                                     <div className="flex flex-col items-center gap-2 max-w-full">
-                                      <div className="rounded-full overflow-hidden flex-shrink-0 bg-white w-16 h-16 shadow-lg p-0.5 cursor-pointer relative group/logo pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className="w-full h-full object-cover rounded-full" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity rounded-full"><span className="text-white text-[10px] font-bold">Edit</span></div>
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                        <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
                                     </div>
@@ -1521,15 +1533,81 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          </div>
                       </div>
                       <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
+
+                      {/* --- LOGO STYLE SELECTION --- */}
+                      {logoFileBlob && (
+                        <div className="mt-8 border-t border-gray-100 pt-6 animate-in fade-in slide-in-from-bottom-4">
+                           <div className="mb-4">
+                              <h4 className="text-sm font-bold text-gray-900">Logo Style</h4>
+                              <p className="text-xs text-gray-500 mt-1">Not sure? Choose "Without background" if your logo does not have a box or colored background behind it.</p>
+                           </div>
+                           
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                              <button 
+                                type="button"
+                                onClick={() => { setLogoType('withBackground'); markDirty('branding'); }}
+                                className={`p-4 rounded-2xl border-2 text-left transition-all ${logoType === 'withBackground' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                              >
+                                 <div className="flex items-center justify-between mb-2">
+                                   <span className={`font-bold text-sm ${logoType === 'withBackground' ? 'text-gray-900' : 'text-gray-700'}`}>With background</span>
+                                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${logoType === 'withBackground' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>
+                                      {logoType === 'withBackground' && <Check size={10} strokeWidth={4} className="text-white" />}
+                                   </div>
+                                 </div>
+                                 <p className="text-xs text-gray-500">Best for QR, print, and strong visibility</p>
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={() => { setLogoType('withoutBackground'); markDirty('branding'); }}
+                                className={`p-4 rounded-2xl border-2 text-left transition-all ${logoType === 'withoutBackground' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                              >
+                                 <div className="flex items-center justify-between mb-2">
+                                   <span className={`font-bold text-sm ${logoType === 'withoutBackground' ? 'text-gray-900' : 'text-gray-700'}`}>Without background</span>
+                                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${logoType === 'withoutBackground' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>
+                                      {logoType === 'withoutBackground' && <Check size={10} strokeWidth={4} className="text-white" />}
+                                   </div>
+                                 </div>
+                                 <p className="text-xs text-gray-500">Best for website headers and flexible layouts</p>
+                              </button>
+                           </div>
+
+                           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                              <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Live Preview</h5>
+                              <div className="flex flex-col sm:flex-row gap-4">
+                                 <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center h-28 shadow-sm relative overflow-hidden">
+                                    <span className="absolute top-2 left-2 text-[10px] font-bold text-gray-400 uppercase">Light</span>
+                                    <div className={`flex items-center justify-center ${logoType === 'withoutBackground' ? 'w-16 h-16' : 'w-16 h-16 bg-white rounded-xl shadow-md border border-gray-100 p-0.5'}`}>
+                                       <img 
+                                         src={logoPreview || fallbackLogo} 
+                                         className={`w-full h-full ${logoType === 'withoutBackground' ? 'object-contain' : 'object-cover rounded-[10px]'}`} 
+                                         alt="Light preview" 
+                                       />
+                                    </div>
+                                 </div>
+                                 <div className="flex-1 bg-gray-900 rounded-xl p-4 flex flex-col items-center justify-center h-28 shadow-sm relative overflow-hidden">
+                                    <span className="absolute top-2 left-2 text-[10px] font-bold text-gray-500 uppercase">Dark</span>
+                                    <div className={`flex items-center justify-center ${logoType === 'withoutBackground' ? 'w-16 h-16' : 'w-16 h-16 bg-white rounded-xl shadow-md p-0.5'}`}>
+                                       <img 
+                                         src={logoPreview || fallbackLogo} 
+                                         className={`w-full h-full ${logoType === 'withoutBackground' ? 'object-contain' : 'object-cover rounded-[10px]'}`} 
+                                         alt="Dark preview" 
+                                       />
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                      )}
+                      {/* --- END LOGO STYLE SELECTION --- */}
                    </div>
 
-                   <div className={`space-y-2 ${!canUsePremiumThemes ? 'opacity-50' : ''}`}>
+                   <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <label className="block text-sm font-semibold text-gray-800">Theme Color</label>
-                        {!canUsePremiumThemes && <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100"><Lock size={10}/> PRO</span>}
                       </div>
                       <div className="flex items-center gap-4">
-                        <input name="themeColor" type="color" disabled={!canUsePremiumThemes} value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className={`h-12 w-16 rounded-xl bg-white p-1 border border-gray-300 shadow-sm ${canUsePremiumThemes ? 'cursor-pointer' : 'cursor-not-allowed'}`}/>
+                        <input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className="h-12 w-16 rounded-xl bg-white p-1 border border-gray-300 shadow-sm cursor-pointer"/>
                         <span className="text-sm font-mono text-gray-500 uppercase">{themeColorPreview}</span>
                       </div>
                    </div>

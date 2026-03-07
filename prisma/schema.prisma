@@ -140,6 +140,7 @@ model ShopSettings {
   themeColor    String  @default("#000000")
   headerDesign  String  @default("design1")
   logo          String?
+  logoType      String  @default("withBackground")
   socials       String  @default("[]")
   facebook      String?
   showFacebook  Boolean @default(false)
