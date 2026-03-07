@@ -5,6 +5,7 @@ import { useLanguage } from '@/context/LanguageContext';
 interface SearchBarProps {
   value: string;
   onChange: (val: string) => void;
+  hideSwitcher?: boolean;
 }
 
 export default function SearchBar({ value, onChange }: SearchBarProps) {
@@ -23,14 +24,6 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
       inputRef.current.focus();
     }
   }, [isExpanded]);
-
-  const handleToggle = () => {
-    if (isExpanded && value === "") {
-      setIsExpanded(false);
-    } else {
-      setIsExpanded(true);
-    }
-  };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
