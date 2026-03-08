@@ -19,6 +19,38 @@ import {
   Info, Loader2, Clock, AlertTriangle, Star, Lock, MoreVertical
 } from 'lucide-react';
 
+const LazyImage = ({ src, alt, className, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  
+  useEffect(() => {
+    if (imgRef.current?.complete) setLoaded(true);
+  }, [src]);
+  
+  return (
+    <>
+      {!loaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+      <img
+        {...props}
+        ref={imgRef}
+        src={src}
+        alt={alt || ""}
+        loading="lazy"
+        decoding="async"
+        className={`${className || ''} transition-opacity duration-500 ease-in-out ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={(e) => {
+          setLoaded(true);
+          if (props.onLoad) props.onLoad(e);
+        }}
+        onError={(e) => {
+          setLoaded(true);
+          if (props.onError) props.onError(e);
+        }}
+      />
+    </>
+  );
+};
+
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
@@ -803,7 +835,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               <p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p>
             </div>
             <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
-              <img src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" />
+              <div className="relative w-[400px] h-[400px] overflow-hidden">
+                <LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" />
+              </div>
             </div>
           </>
         ) : (
@@ -815,7 +849,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               <p className="text-[3rem] text-gray-500 font-light">scan to view menu !</p>
             </div>
             <div className="flex justify-center items-center flex-1 w-full my-6">
-              <img src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
+              <div className="relative w-[450px] h-[450px] overflow-hidden">
+                <LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" />
+              </div>
             </div>
             <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4">
               <div className="flex items-center w-full justify-center gap-4 mb-8">
@@ -1037,11 +1073,10 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
                       {/* Image Container */}
                       <div className={`relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden pointer-events-none ${item.isSoldOut ? 'opacity-50 grayscale' : ''}`}>
-                        <img 
+                        <LazyImage 
                           src={getValidImage(item.image)} 
                           alt={item.name} 
                           className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
                         />
                       </div>
 
@@ -1104,7 +1139,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                           return (
                           <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${item.isSoldOut ? 'opacity-70' : ''}`} onClick={() => setEditingProduct(item)}>
                             <td className="p-4 flex items-center gap-4">
-                              <div className={`w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100 ${item.isSoldOut ? 'grayscale' : ''}`}><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className={`w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex flex-col">
                                 <span className={`font-bold text-base ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</span>
                                 <div className="flex items-center gap-2 mt-1">
@@ -1149,7 +1184,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                        return(
                         <div key={item.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer ${item.isSoldOut ? 'opacity-75' : ''}`} onClick={() => setEditingProduct(item)}>
                            <div className="flex items-start gap-4 mb-3">
-                              <div className={`w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100 ${item.isSoldOut ? 'grayscale' : ''}`}><img src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
+                              <div className={`w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div>
                               <div className="flex-1 pt-1">
                                 <h4 className={`font-extrabold text-base leading-tight mb-1.5 line-clamp-2 ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>
                                   {item.name}
@@ -1505,16 +1540,16 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 w-full">{getShopNamePreview()}</h1>
                                   ) : headerDesign === 'design3' ? (
                                     <div className="flex flex-col items-center gap-3 max-w-full">
-                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16' : 'rounded-2xl overflow-hidden bg-white w-16 h-16 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16 overflow-hidden rounded-2xl' : 'rounded-2xl overflow-hidden bg-white w-16 h-16 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
                                         <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
                                     </div>
                                   ) : headerDesign === 'design4' ? (
                                     <div className="flex items-center justify-center gap-3 max-w-full">
-                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-14 h-14' : 'rounded-full overflow-hidden bg-white w-14 h-14 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-14 h-14 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-14 h-14 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
                                         <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-left text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words flex-1">{getShopNamePreview()}</h1>
@@ -1522,8 +1557,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                   ) : headerDesign === 'design5' ? (
                                     <div className="flex flex-col items-center justify-center w-full max-w-full">
                                       {(logoPreview || settings?.logo) ? (
-                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20 overflow-hidden rounded-2xl' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                          <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
                                           <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                         </div>
                                       ) : (
@@ -1533,8 +1568,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                   ) : headerDesign === 'design7' ? (
                                     <div className="flex flex-col items-center justify-center w-full max-w-full">
                                       {(logoPreview || settings?.logo) ? (
-                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                        <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                          <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
                                           <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                         </div>
                                       ) : (
@@ -1543,9 +1578,9 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     </div>
                                   ) : headerDesign === 'design6' ? (
                                     <div className="flex items-center justify-between w-full max-w-full gap-3 mt-[-20px]">
-                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg && (logoPreview || settings?.logo) ? 'w-10 h-10' : 'rounded-full overflow-hidden bg-white w-10 h-10 shadow-sm p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg && (logoPreview || settings?.logo) ? 'w-10 h-10 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-10 h-10 shadow-sm p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
                                         {(logoPreview || settings?.logo) ? (
-                                          <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                          <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
                                         ) : (
                                           <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xs">{getShopNamePreview().charAt(0).toUpperCase()}</div>
                                         )}
@@ -1558,8 +1593,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                     </div>
                                   ) : (
                                     <div className="flex flex-col items-center gap-2 max-w-full">
-                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
-                                        <img src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                                      <div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>
+                                        <LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
                                         <div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div>
                                       </div>
                                       <h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1>
@@ -1625,8 +1660,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                               <div className="flex flex-col sm:flex-row gap-4">
                                  <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center h-28 shadow-sm relative overflow-hidden">
                                     <span className="absolute top-2 left-2 text-[10px] font-bold text-gray-400 uppercase">Light</span>
-                                    <div className={`flex items-center justify-center ${logoType === 'withoutBackground' ? 'w-16 h-16' : 'w-16 h-16 bg-white rounded-xl shadow-md border border-gray-100 p-0.5'}`}>
-                                       <img 
+                                    <div className={`flex items-center justify-center relative overflow-hidden ${logoType === 'withoutBackground' ? 'w-16 h-16 rounded-[10px]' : 'w-16 h-16 bg-white rounded-xl shadow-md border border-gray-100 p-0.5'}`}>
+                                       <LazyImage 
                                          src={logoPreview || fallbackLogo} 
                                          className={`w-full h-full ${logoType === 'withoutBackground' ? 'object-contain' : 'object-cover rounded-[10px]'}`} 
                                          alt="Light preview" 
@@ -1635,8 +1670,8 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                                  </div>
                                  <div className="flex-1 bg-gray-900 rounded-xl p-4 flex flex-col items-center justify-center h-28 shadow-sm relative overflow-hidden">
                                     <span className="absolute top-2 left-2 text-[10px] font-bold text-gray-500 uppercase">Dark</span>
-                                    <div className={`flex items-center justify-center ${logoType === 'withoutBackground' ? 'w-16 h-16' : 'w-16 h-16 bg-white rounded-xl shadow-md p-0.5'}`}>
-                                       <img 
+                                    <div className={`flex items-center justify-center relative overflow-hidden ${logoType === 'withoutBackground' ? 'w-16 h-16 rounded-[10px]' : 'w-16 h-16 bg-white rounded-xl shadow-md p-0.5'}`}>
+                                       <LazyImage 
                                          src={logoPreview || fallbackLogo} 
                                          className={`w-full h-full ${logoType === 'withoutBackground' ? 'object-contain' : 'object-cover rounded-[10px]'}`} 
                                          alt="Dark preview" 
@@ -1697,7 +1732,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                          onDrop={(e) => handleDrop(e, index)}
                          className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-200'} shadow-sm group bg-gray-50 flex items-center justify-center cursor-move`}
                        >
-                         <img src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
+                         <LazyImage src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                          
                          <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             <button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button>
@@ -2081,7 +2116,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                     className="relative w-full h-48 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-gray-900 transition-colors"
                   >
                      {productPreview ? (
-                       <><img src={productPreview} className="w-full h-full object-cover" alt="Preview" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">Change Image</p></div></>
+                       <><LazyImage src={productPreview} className="w-full h-full object-cover" alt="Preview" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">Change Image</p></div></>
                      ) : (
                        <div className="text-center text-gray-400"><UploadCloud size={32} className="mx-auto mb-2 text-gray-300"/><span className="text-sm font-medium">Tap to upload image</span></div>
                      )}

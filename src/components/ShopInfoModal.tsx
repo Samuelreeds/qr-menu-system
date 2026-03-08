@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { X, MapPin, Phone, Clock, Facebook, Instagram, Send, Globe, Youtube, Twitter, Linkedin, Store } from 'lucide-react';
 
 interface SocialLink {
@@ -28,6 +29,15 @@ interface ShopInfoModalProps {
 }
 
 export default function ShopInfoModal({ isOpen, onClose, settings }: ShopInfoModalProps) {
+  const [logoLoaded, setLogoLoaded] = useState(false);
+  const logoRef = useRef<HTMLImageElement>(null);
+
+  // Safety check for browser-cached images where onLoad doesn't fire
+  useEffect(() => {
+    if (isOpen && logoRef.current?.complete) {
+      setLogoLoaded(true);
+    }
+  }, [isOpen, settings.logo]);
 
   if (!isOpen) return null;
 
@@ -82,8 +92,18 @@ export default function ShopInfoModal({ isOpen, onClose, settings }: ShopInfoMod
         <div className="px-6 pt-10 pb-8 overflow-y-auto no-scrollbar">
            <div className="flex flex-col items-center text-center mb-8">
              {settings.logo ? (
-               <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-md bg-gray-50 border border-gray-100 p-0.5">
-                 <img src={settings.logo} alt={getShopName()} className="w-full h-full object-cover rounded-[14px]" />
+               <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-md bg-gray-50 border border-gray-100 p-0.5 relative">
+                 {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                 <img 
+                   ref={logoRef}
+                   src={settings.logo} 
+                   alt={getShopName()} 
+                   loading="lazy"
+                   decoding="async"
+                   className={`w-full h-full object-cover rounded-[14px] transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`} 
+                   onLoad={() => setLogoLoaded(true)}
+                   onError={() => setLogoLoaded(true)}
+                 />
                </div>
              ) : (
                <div className="w-20 h-20 rounded-2xl bg-gray-100 mb-4 flex items-center justify-center shadow-inner border border-gray-200">

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { Star } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext'; 
 
@@ -30,6 +31,15 @@ const getValidImage = (img?: string | null) => (!img || img === 'https://images.
 
 export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions }: FoodCardProps) {
   const { lang } = useLanguage(); 
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Safety check for browser-cached images where onLoad doesn't fire
+  useEffect(() => {
+    if (imgRef.current?.complete) {
+      setImgLoaded(true);
+    }
+  }, [item.image]);
 
   const displayName = 
     lang === 'kh' ? (item.name_kh || item.name) : 
@@ -68,11 +78,16 @@ export default function FoodCard({ item, themeColor = '#000000', onClick, adminA
 
       {/* Image */}
       <div className={`relative w-full aspect-[4/3] bg-gray-50 overflow-hidden shrink-0 ${item.isSoldOut ? 'grayscale' : ''}`}>
+        {!imgLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
         <img 
+          ref={imgRef}
           src={getValidImage(item.image)} 
           alt={displayName} 
-          className={`w-full h-full object-cover ${item.isSoldOut ? '' : 'group-hover:scale-105'} transition-transform duration-300`}
+          className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'} ${item.isSoldOut ? '' : 'group-hover:scale-105'}`}
           loading="lazy"
+          decoding="async"
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgLoaded(true)}
         />
       </div>
 

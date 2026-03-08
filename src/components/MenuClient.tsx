@@ -66,6 +66,31 @@ interface MenuClientProps {
   multiLanguageEnabled?: boolean;
 }
 
+const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBanner: number }) => {
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  
+  useEffect(() => {
+    if (imgRef.current?.complete) setLoaded(true);
+  }, [b.image]);
+  
+  return (
+    <div className={`absolute inset-0 w-full h-full transition-opacity duration-500 ${i === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
+      {!loaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+      <img 
+        ref={imgRef}
+        src={b.image} 
+        loading={i === 0 ? "eager" : "lazy"}
+        decoding="async"
+        className={`w-full h-full object-contain transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`} 
+        alt={`Banner ${i + 1}`} 
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+      />
+    </div>
+  );
+};
+
 export default function MenuClient({ initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false }: MenuClientProps) {
   const hasPopularProducts = initialProducts.some(p => p.isPopular);
   
@@ -81,9 +106,15 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   
+  const [logoLoaded, setLogoLoaded] = useState(false);
+  const [selectedImgLoaded, setSelectedImgLoaded] = useState(false);
+
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
   const categoryNavRef = useRef<HTMLDivElement>(null);
   const isManualScrolling = useRef(false);
+  
+  const logoRef = useRef<HTMLImageElement>(null);
+  const selectedImgRef = useRef<HTMLImageElement>(null);
 
   const { lang, setMultiLangEnabled } = useLanguage(); 
 
@@ -92,6 +123,17 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       setMultiLangEnabled(multiLanguageEnabled);
     }
   }, [multiLanguageEnabled, setMultiLangEnabled]);
+
+  // Safety checks for browser-cached images where onLoad doesn't fire
+  useEffect(() => {
+    if (logoRef.current?.complete) setLogoLoaded(true);
+  }, [shopSettings?.logo, shopSettings?.headerDesign]);
+
+  useEffect(() => {
+    if (selectedItem && selectedImgRef.current?.complete) {
+      setSelectedImgLoaded(true);
+    }
+  }, [selectedItem]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -208,23 +250,26 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm w-full">{displayShopName}</h1>
             ) : headerDesign === 'design3' ? (
               <div className="flex flex-col items-center gap-3">
-                <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg ? 'w-20 h-20' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`}>
-                   <img src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-20 h-20 overflow-hidden rounded-[14px]' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`}>
+                   {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                   <img ref={logoRef} src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
                 </div>
                 <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
               </div>
             ) : headerDesign === 'design4' ? (
               <div className="flex items-center gap-4 w-full max-w-sm mx-auto justify-center">
-                <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg ? 'w-16 h-16' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`}>
-                   <img src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-16 h-16 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`}>
+                   {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                   <img ref={logoRef} src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
                 </div>
                 <h1 className="text-white tracking-wide text-left text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
               </div>
             ) : headerDesign === 'design5' ? (
               <div className="flex flex-col items-center w-full">
                 {logoUrl ? (
-                  <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg ? 'w-24 h-24' : 'rounded-2xl overflow-hidden bg-white w-24 h-24 shadow-xl p-0.5'}`}>
-                     <img src={logoUrl} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} />
+                  <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-24 h-24 overflow-hidden rounded-[14px]' : 'rounded-2xl overflow-hidden bg-white w-24 h-24 shadow-xl p-0.5'}`}>
+                     {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                     <img ref={logoRef} src={logoUrl} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
                   </div>
                 ) : (
                   <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">{displayShopName}</h1>
@@ -233,8 +278,9 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
             ) : headerDesign === 'design7' ? (
               <div className="flex flex-col items-center w-full">
                 {logoUrl ? (
-                  <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg ? 'w-24 h-24' : 'rounded-full overflow-hidden bg-white w-24 h-24 shadow-xl p-0.5'}`}>
-                     <img src={logoUrl} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                  <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-24 h-24 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-24 h-24 shadow-xl p-0.5'}`}>
+                     {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                     <img ref={logoRef} src={logoUrl} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
                   </div>
                 ) : (
                   <h1 className="text-white tracking-wide text-center text-3xl sm:text-4xl font-bold drop-shadow-sm">{displayShopName}</h1>
@@ -242,9 +288,12 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               </div>
             ) : headerDesign === 'design6' ? (
               <div className="flex items-center justify-between w-full max-w-sm mx-auto gap-3 pt-2">
-                <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg && logoUrl ? 'w-12 h-12' : 'rounded-full overflow-hidden bg-white w-12 h-12 shadow-sm p-0.5'}`}>
+                <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg && logoUrl ? 'w-12 h-12 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-12 h-12 shadow-sm p-0.5'}`}>
                   {logoUrl ? (
-                    <img src={logoUrl} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                    <>
+                      {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                      <img ref={logoRef} src={logoUrl} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
+                    </>
                   ) : (
                     <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xl">{displayShopName.charAt(0).toUpperCase()}</div>
                   )}
@@ -254,8 +303,9 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
             ) : (
               // Default design1
               <div className="flex flex-col items-center gap-2">
-                <div className={`flex-shrink-0 flex items-center justify-center ${isNoBg ? 'w-20 h-20 mb-3' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5 mb-3'}`}>
-                   <img src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />
+                <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-20 h-20 mb-3 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5 mb-3'}`}>
+                   {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+                   <img ref={logoRef} src={logoUrl || PLACEHOLDER_IMAGE} alt={displayShopName} decoding="async" className={`w-full h-full transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'} ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(true)} />
                 </div>
                 <h1 className="text-white text-2xl font-bold drop-shadow-sm">{displayShopName}</h1>
               </div>
@@ -329,7 +379,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
             }}
           >
             {banners.map((b, i) => (
-              <img key={b.id} src={b.image} className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${i === currentBanner ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} alt={`Banner ${i + 1}`} />
+              <BannerImage key={b.id} b={b} i={i} currentBanner={currentBanner} />
             ))}
             {banners.length > 1 && (
               <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-30 pb-1">
@@ -345,7 +395,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           {searchQuery ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {getProductsBySearch(initialProducts).map((item) => (
-                <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
+                <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
               ))}
             </div>
           ) : (
@@ -358,7 +408,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                   </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {initialProducts.filter(p => p.isPopular).map((item) => (
-                      <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
+                      <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
                     ))}
                   </div>
                 </section>
@@ -379,7 +429,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                       {catProducts.map((item) => (
-                        <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => setSelectedItem(item)} />
+                        <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
                       ))}
                     </div>
                   </section>
@@ -394,8 +444,18 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedItem(null)}>
           <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedItem(null)} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-10 hover:bg-black/60 transition-all"><X size={20} /></button>
-            <div className="w-full aspect-square bg-gray-100">
-              <img src={getValidImage(selectedItem.image)} alt={selectedItem.name} className="w-full h-full object-cover" />
+            <div className="w-full aspect-square bg-gray-100 relative overflow-hidden">
+              {!selectedImgLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
+              <img 
+                ref={selectedImgRef}
+                src={getValidImage(selectedItem.image)} 
+                alt={selectedItem.name} 
+                loading="lazy"
+                decoding="async"
+                className={`w-full h-full object-cover transition-opacity duration-500 ${selectedImgLoaded ? 'opacity-100' : 'opacity-0'}`} 
+                onLoad={() => setSelectedImgLoaded(true)}
+                onError={() => setSelectedImgLoaded(true)}
+              />
             </div>
             <div className="p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
