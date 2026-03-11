@@ -8,46 +8,67 @@ import {
 export default function HomePage() {
   const tiers = [
     {
-      name: "Free",
+      name: "Starter Pack",
       price: "$0",
-      description: "Perfect for a simple digital presence.",
+      period: "",
+      yearlyPrice: null,
+      note: "Perfect for getting started",
       features: [
-        "Digital menu (Menu only)",
-        "Standard QR code",
-        "Community support"
+        "Up to 60 menu items",
+        "2 QR menu themes",
+        "Preparation time",
+        "Upload image menu",
+        "7-day admin dashboard trial"
       ],
       button: "Start for Free",
-      link: "/auth/register",
+      link: "/auth/register?plan=FREE",
       highlight: false
     },
     {
-      name: "Starter",
-      price: "$9",
-      description: "Complete control for small businesses.",
+      name: "Basic Pack",
+      price: "$6.99",
+      period: "/mo",
+      yearlyPrice: "$69 / year",
+      note: "7-day free trial included",
       features: [
-        "Up to 100 products", 
-        "Full control (Admin Dashboard)", 
-        "Custom branding", 
-        "Standard QR code",
-        "Community support"
+        "Up to 100 menu items", 
+        "Preparation time", 
+        "Campaign", 
+        "Cover Banner",
+        "Smart Categories",
+        "2 QR menu themes",
+        "Upload image menu",
+        "Telegram staff alerts",
+        "Dedicated Support"
       ],
-      button: "Choose Starter",
-      link: "/auth/register",
+      button: "Start 7-Day Free Trial",
+      link: "/auth/register?plan=BASIC",
       highlight: true
     },
     {
-      name: "Premium",
-      price: "$29",
-      description: "The ultimate brand experience.",
+      name: "Exclusive Pack",
+      price: "$16.99",
+      period: "/mo",
+      yearlyPrice: "$169 / year",
+      note: "Hardware excluded",
       features: [
-        "Unlimited products",
-        "Custom branding",
-        "Custom domain", 
-        "Direct support from team",
-        "Full control (Admin Dashboard)"
+        "Unlimited menu items",
+        "Preparation time",
+        "Campaign", 
+        "POS",
+        "Cover Banner",
+        "Smart Categories",
+        "2 QR menu themes",
+        "Upload image menu / Token",
+        "AI Upload Image Menu",
+        "Order from table",
+        "Telegram staff alerts",
+        "Multiple languages",
+        "Custom domain",
+        "Dedicated Support"
       ],
-      button: "Go Premium",
-      link: "/auth/register",
+      button: "Start Exclusive",
+      link: "/auth/register?plan=EXCLUSIVE",
       highlight: false
     }
   ];
@@ -99,14 +120,14 @@ export default function HomePage() {
         <section className="py-8 sm:py-12">
           <div className="text-center mb-10 sm:mb-16">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 mb-3 sm:mb-4 tracking-tight">Simple Pricing</h2>
-            <p className="text-gray-500 font-medium text-base sm:text-lg px-4">Everything you need to run your digital menu efficiently.</p>
+            <p className="text-gray-500 font-medium text-base sm:text-lg px-4">Everything you need to run your QR menu business.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto items-start">
             {tiers.map((tier, idx) => (
               <div 
                 key={idx} 
-                className={`relative p-6 sm:p-8 rounded-3xl border transition-all duration-300 flex flex-col ${
+                className={`relative p-6 sm:p-8 rounded-3xl border transition-all duration-300 flex flex-col h-full ${
                   tier.highlight 
                   ? 'border-orange-500 shadow-2xl shadow-orange-100 sm:scale-105 z-10 bg-white' 
                   : 'border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200'
@@ -119,35 +140,47 @@ export default function HomePage() {
                 )}
                 
                 <div className="text-left mb-6 sm:mb-8">
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">{tier.name}</h3>
-                  <div className="flex items-baseline gap-1 mb-2">
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">{tier.name}</h3>
+                  <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-3xl sm:text-4xl font-black text-gray-900">{tier.price}</span>
-                    <span className="text-gray-400 font-bold text-xs sm:text-sm">/mo</span>
+                    {tier.period && <span className="text-gray-400 font-bold text-xs sm:text-sm">{tier.period}</span>}
                   </div>
-                  <p className="text-gray-500 text-xs font-medium leading-relaxed">{tier.description}</p>
+                  
+                  {/* Min height ensures alignment across cards regardless of subtext presence */}
+                  <div className="min-h-[44px] flex flex-col justify-start">
+                    {tier.yearlyPrice && (
+                      <p className="text-orange-500 font-bold text-sm mb-1">{tier.yearlyPrice}</p>
+                    )}
+                    {tier.note && (
+                      <p className="text-gray-400 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">{tier.note}</p>
+                    )}
+                  </div>
                 </div>
                 
-                <ul className="space-y-3 sm:space-y-4 mb-8 sm:mb-10 flex-1 text-left">
+                {/* Tighter spacing (space-y-2.5) to accommodate the larger feature list beautifully */}
+                <ul className="space-y-2.5 sm:space-y-3 mb-8 sm:mb-10 flex-1 text-left">
                   {tier.features.map((feature, fIdx) => (
                     <li key={fIdx} className="flex items-start gap-2.5 sm:gap-3 text-xs sm:text-sm font-bold text-gray-700">
-                      <div className={`mt-0.5 p-0.5 rounded-full ${tier.highlight ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-500'}`}>
+                      <div className={`mt-0.5 p-0.5 rounded-full shrink-0 ${tier.highlight ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-500'}`}>
                         <Check size={10} className="sm:w-3 sm:h-3" strokeWidth={4} />
                       </div>
-                      {feature}
+                      <span className="leading-snug">{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                <Link 
-                  href={tier.link} 
-                  className={`w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                    tier.highlight 
-                    ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-200' 
-                    : 'bg-white border-2 border-gray-100 text-gray-900 hover:border-gray-200'
-                  }`}
-                >
-                  {tier.button} <ArrowRight size={16} />
-                </Link>
+                <div className="mt-auto">
+                  <Link 
+                    href={tier.link} 
+                    className={`w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                      tier.highlight 
+                      ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-200' 
+                      : 'bg-white border-2 border-gray-100 text-gray-900 hover:border-gray-200'
+                    }`}
+                  >
+                    {tier.button} <ArrowRight size={16} />
+                  </Link>
+                </div>
               </div>
             ))}
           </div>

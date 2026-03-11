@@ -1,13 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft, Store, Mail, MessageCircle, Phone, Lock, Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { useState, Suspense } from 'react';
+import { ArrowLeft, Store, Mail, MessageCircle, Phone, Lock, Loader2, Eye, EyeOff, CheckCircle2, Zap, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { registerPublicShop } from '@/lib/actions';
 
-export default function RegisterRequestPage() {
+function RegisterContent() {
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get('plan')?.toUpperCase() || 'FREE';
+  const plan = ['FREE', 'BASIC', 'EXCLUSIVE'].includes(planParam) ? planParam : 'FREE';
+
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -80,6 +84,8 @@ export default function RegisterRequestPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    formData.append('plan', plan); // Append selected plan intent
+
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
@@ -115,8 +121,30 @@ export default function RegisterRequestPage() {
           <div className="flex items-center justify-center w-12 h-12 bg-white rounded-2xl mb-4 border border-gray-100 shadow-sm">
             <Store className="text-gray-900" size={20} />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">Register Shop</h1>
-          <p className="text-gray-500 mt-2 font-medium text-xs sm:text-sm">Create your owner account to get started.</p>
+          
+          {/* Dynamic Plan Badge */}
+          {plan === 'BASIC' && (
+            <span className="bg-blue-50 border border-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1">
+              <Zap size={12} fill="currentColor" /> 7-Day Free Trial
+            </span>
+          )}
+          {plan === 'EXCLUSIVE' && (
+            <span className="bg-orange-50 border border-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1">
+              <Star size={12} fill="currentColor" /> Exclusive Pack
+            </span>
+          )}
+          {plan === 'FREE' && (
+            <span className="bg-gray-100 border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-3">
+              Starter Pack
+            </span>
+          )}
+
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+            {plan === 'BASIC' ? 'Start Your Trial' : plan === 'EXCLUSIVE' ? 'Go Premium' : 'Register Shop'}
+          </h1>
+          <p className="text-gray-500 mt-2 font-medium text-xs sm:text-sm">
+            {plan === 'BASIC' ? 'Create your owner account to start your free trial.' : plan === 'EXCLUSIVE' ? 'Create your premium owner account.' : 'Create your owner account to get started.'}
+          </p>
         </div>
 
         {serverError && (
@@ -325,5 +353,17 @@ export default function RegisterRequestPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function RegisterRequestPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
+        <Loader2 className="animate-spin text-gray-400" size={32} />
+      </div>
+    }>
+      <RegisterContent />
+    </Suspense>
   );
 }

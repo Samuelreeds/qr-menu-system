@@ -1289,11 +1289,23 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
   const password = formData.get('password') as string;
   const telegram = formData.get('telegram') as string;
   const phone = formData.get('phone') as string;
+  const requestedPlan = (formData.get('plan') as string)?.toUpperCase() || 'FREE';
   
   const shopName = email.split('@')[0] + "'s Shop";
 
   if (!email || !password) {
     return { success: false, error: "Email and password are required" };
+  }
+
+  // Strictly validate the plan intent
+  const validPlans = ['FREE', 'BASIC', 'EXCLUSIVE'];
+  const plan = validPlans.includes(requestedPlan) ? requestedPlan : 'FREE';
+
+  // Apply trial logic strictly for the Basic plan
+  let trialEndsAt: Date | undefined = undefined;
+  if (plan === 'BASIC') {
+    trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 7);
   }
 
   // Use an exact match slug to ensure consistency
@@ -1304,7 +1316,13 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
   try {
     return await prisma.$transaction(async (tx) => {
       const shop = await tx.shop.create({
-        data: { name: shopName, slug, plan: "FREE", status: "ACTIVE" }
+        data: { 
+          name: shopName, 
+          slug, 
+          plan, 
+          status: "ACTIVE",
+          trialEndsAt 
+        }
       });
 
       const user = await tx.user.create({
