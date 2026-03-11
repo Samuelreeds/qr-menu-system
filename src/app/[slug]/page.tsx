@@ -1,13 +1,24 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import MenuClient from '@/components/MenuClient';
+import CustomerEntryGate from '@/components/CustomerEntryGate';
 import { getShopLimitsAndFeatures } from '@/lib/shop-guard';
 
 export const revalidate = 0; 
 
-export default async function ShopMenuPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ShopMenuPage({ 
+  params,
+  searchParams, 
+}: { 
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   
   const resolvedParams = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  
+  const rawTableId = resolvedSearchParams.tableId;
+  const tableId = Array.isArray(rawTableId) ? rawTableId[0] : rawTableId;
 
   // Use findFirst with OR to support both the new slug and legacy shop IDs
   const shop: any = await (prisma as any).shop.findFirst({
@@ -36,12 +47,42 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
+  // ==========================================
+  // TABLE VALIDATION LOGIC
+  // ==========================================
+  let tableContext = {
+    isValid: false,
+    tableId: null as string | null,
+    tableLabel: null as string | null,
+  };
+
+  if (tableId) {
+    const tableRecord = await (prisma as any).table.findUnique({
+      where: { id: tableId },
+    });
+
+    if (tableRecord && tableRecord.shopId === shop.id && tableRecord.isActive) {
+      tableContext = {
+        isValid: true,
+        tableId: tableRecord.id,
+        tableLabel: tableRecord.label,
+      };
+    }
+  }
+
   // ENFORCEMENT: Fetch the effective capabilities for this shop to apply downgrade logic
   const planLimits = await getShopLimitsAndFeatures(shop.id);
   
   const effectiveMaxBanners = (planLimits as any)?.maxBanners || 1;
   const effectiveCustomSocials = (planLimits as any)?.customSocials || false;
   const multiLanguageEnabled = !!(planLimits as any)?.featMultipleLanguage;
+  
+  // SUPERADMIN FEATURE GATES
+  const canUseCampaign = !!(planLimits as any)?.featCampaign;
+  const canUseTelegram = !!(planLimits as any)?.featAlertBarista;
+
+  // DETERMINE IF CALL STAFF IS FULLY ACTIVE
+  const isStaffCallActive = canUseTelegram && shop.telegramNotificationsEnabled !== false && shop.callStaffEnabled && !!shop.telegramChatId;
 
   const safeSettings = shop.settings || {
     name: shop.name,
@@ -63,8 +104,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     socials: '[]', 
   };
 
-  // DATA SYNC: Read visual configurations directly from the database value.
-  // Enforcement happens during the save/update action in the admin dashboard.
   const formattedSettings = {
     name: safeSettings.name || shop.name,
     name_kh: safeSettings.name_kh || '',
@@ -112,7 +151,6 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     discount: product.discount || 0,
   }));
 
-  // ENFORCEMENT: Slice banners array if shop exceeds its allowed limit after downgrade.
   const formattedBanners = (shop.banners || [])
     .slice(0, effectiveMaxBanners)
     .map((b: any) => ({
@@ -122,12 +160,26 @@ export default async function ShopMenuPage({ params }: { params: Promise<{ slug:
     }));
 
   return (
-    <MenuClient
-      initialProducts={formattedProducts}
-      categories={formattedCategories}
-      shopSettings={formattedSettings}
-      banners={formattedBanners}
-      multiLanguageEnabled={multiLanguageEnabled}
-    />
+    <main className="relative min-h-screen">
+      <CustomerEntryGate 
+        shopId={shop.id}
+        shopSlug={shop.slug}
+        shopName={formattedSettings.name} 
+        tableContext={tableContext} 
+        isStaffCallActive={isStaffCallActive}
+      />
+      <MenuClient
+        initialProducts={formattedProducts}
+        categories={formattedCategories}
+        shopSettings={formattedSettings}
+        banners={formattedBanners}
+        multiLanguageEnabled={multiLanguageEnabled}
+        featCampaign={canUseCampaign}
+        isStaffCallActive={isStaffCallActive}
+        tableContext={tableContext}
+        shopId={shop.id}
+        shopSlug={shop.slug}
+      />
+    </main>
   );
 }

@@ -1,4 +1,5 @@
 'use client';
+import TableManager from "@/components/TableManager";
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
 import { signOut } from "next-auth/react"; 
@@ -10,13 +11,14 @@ import {
   updateShopIdentity, updateShopBranding, updateShopSocials, 
   addBanner, deleteBanner, reorderBanners, toggleProductSoldOut
 } from '@/lib/actions';
+import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { 
   Plus, X, Trash2, UploadCloud, CheckCircle, XCircle,
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, AlertTriangle, Star, Lock, MoreVertical
+  Info, Loader2, Clock, AlertTriangle, Star, Lock, MoreVertical, MessageCircle, Hash
 } from 'lucide-react';
 
 const LazyImage = ({ src, alt, className, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
@@ -93,6 +95,7 @@ interface Product {
 }
 
 interface AdminDashboardProps { 
+  shopId: string;
   categories: Category[]; 
   products: Product[]; 
   settings: ShopSettings; 
@@ -100,6 +103,12 @@ interface AdminDashboardProps {
   banners?: Banner[];
   shopPlan?: string;
   planLimits?: any;
+  callStaffEnabled?: boolean;
+  telegramChatId?: string | null;
+  staffCallTopicId?: string | null;
+  newOrderTopicId?: string | null;
+  telegramNotificationsEnabled?: boolean;
+  featCampaign?: boolean; // Controls Campaign/Discount locks
 }
 
 type OptimisticAction<T> = 
@@ -151,8 +160,12 @@ const StockSwitchButton = ({ checked, onToggle, fullWidth }: { checked: boolean;
   );
 };
 
-export default function AdminDashboard({ categories, products, settings, shopSlug, banners = [], shopPlan, planLimits }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'settings'>('menu');
+export default function AdminDashboard({ 
+  shopId, categories, products, settings, shopSlug, banners = [], shopPlan, planLimits, 
+  callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false,
+  featCampaign = false
+}: AdminDashboardProps) {
+  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'settings'>('menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -175,6 +188,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   
   const [address, setAddress] = useState(settings?.address || '');
   const [phone, setPhone] = useState(settings?.phone || '');
+
+  // Notifications State
+  const [isStaffEnabled, setIsStaffEnabled] = useState(callStaffEnabled);
+  const [tgChatId, setTgChatId] = useState(telegramChatId || '');
+  const [tgStaffCallTopicId, setTgStaffCallTopicId] = useState(staffCallTopicId || '');
+  const [tgNewOrderTopicId, setTgNewOrderTopicId] = useState(newOrderTopicId || '');
+  const [isTestingTg, setIsTestingTg] = useState(false);
 
   // Delete Confirmation State
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -213,7 +233,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
   const [isHotSale, setIsHotSale] = useState(false);
   const [isSoldOutState, setIsSoldOutState] = useState(false);
 
-  // Used strictly for modal "Unsaved Changes" blocking overlay now
   const [isSaving, setIsSaving] = useState(false);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -224,9 +243,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
 
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
   
-  const [touchStart, setTouchStart] = useState(0);
-  const [touchEnd, setTouchEnd] = useState(0);
-
   // Safely assign properties with fallback limits based on the current plan state
   const safeLimits = planLimits || {
     maxProducts: 0,
@@ -235,11 +251,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     overrideHeaderStyle: null,
     premiumThemes: false,
     customSocials: false,
-    featMultipleLanguage: false
+    featMultipleLanguage: false,
+    featAlertBarista: false
   };
   const canUsePremiumThemes = safeLimits.premiumThemes;
   const canUseCustomSocials = safeLimits.customSocials;
   const multiLanguageEnabled = !!safeLimits.featMultipleLanguage;
+  const canUseTelegram = !!safeLimits.featAlertBarista;
   const isFreePlan = shopPlan === 'FREE' || shopPlan === 'STARTER'; 
 
   const [headerDesign, setHeaderDesign] = useState(settings?.headerDesign || 'design1');
@@ -324,7 +342,6 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     const afterPrint = () => setPrintFormat(null);
     window.addEventListener('afterprint', afterPrint);
     
-    // Cleanup pending deletes on unmount
     return () => {
       window.removeEventListener('afterprint', afterPrint);
       if (pendingDeleteRef.current) {
@@ -461,6 +478,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
       setLogoFileBlob(null);
     } else if (source === 'socials') {
       try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); }
+    } else if (source === 'notifications') {
+      setIsStaffEnabled(callStaffEnabled);
+      setTgChatId(telegramChatId || '');
+      setTgStaffCallTopicId(staffCallTopicId || '');
+      setTgNewOrderTopicId(newOrderTopicId || '');
     }
   };
 
@@ -518,6 +540,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     }
   };
 
+  const saveNotificationsForm = async () => {
+    try {
+      const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId);
+      if (!res.success) { showToast(res.message || "Error saving"); return false; }
+      return true;
+    } catch (e) { return false; }
+  };
+
+  const handleTestTelegram = async (type: 'General' | 'Staff Call' | 'New Order', specificTopicId?: string) => {
+    if (!tgChatId.trim()) { showToast("Please enter a Chat ID first."); return; }
+    setIsTestingTg(true);
+    const res = await sendTestTelegramNotification(shopId, tgChatId, settings?.name || 'Your Shop', specificTopicId, type);
+    showToast(res.message || (res.success ? "Test message sent!" : "Failed to send message."));
+    setIsTestingTg(false);
+  };
+
   const onIdentitySubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!previewNameEn.trim() && !previewNameKh.trim()) {
@@ -550,6 +588,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
     startTransition(async () => {
       await saveSocialsForm();
     });
+  };
+
+  const onNotificationsSubmit = (e?: React.FormEvent) => { 
+    if (e) e.preventDefault(); 
+    clearDirty('notifications'); 
+    showToast("Notification settings saved!"); 
+    startTransition(async () => { await saveNotificationsForm(); }); 
   };
 
   const handleMoveBanner = async (index: number, direction: number) => {
@@ -935,6 +980,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
             <button onClick={() => handleTabClick('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
+            <button onClick={() => handleTabClick('tables')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'tables' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><QrCode size={20}/> Tables & QR</button>
             <button onClick={() => handleTabClick('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
           </nav>
           <div className="pt-6 border-t border-gray-50 mt-auto shrink-0">
@@ -959,7 +1005,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                <ExternalLink size={16} /> View Live Menu
              </a>
              <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3.5 sm:py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95">
-               <QrCode size={16} className="text-gray-500"/> Get QR
+               <QrCode size={16} className="text-gray-500"/> Get Shop QR
              </button>
            </div>
         </header>
@@ -1003,6 +1049,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
           </div>
         )}
 
+        {/* --- MENU TAB --- */}
         {activeTab === 'menu' && (
            <div className="animate-in fade-in duration-300">
              <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
@@ -1052,7 +1099,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   {filteredProducts.map(item => {
                     const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                    const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                    
+                    // FRONTEND UI ENFORCEMENT
+                    const rawItemDiscount = item.discount || 0;
+                    const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
+                    
                     const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                     return (
                     <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full group hover:shadow-md transition-all overflow-hidden cursor-pointer" onClick={() => setEditingProduct(item)}>
@@ -1134,7 +1185,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <tbody className="divide-y divide-gray-50">
                         {filteredProducts.map((item) => {
                           const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                          const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                          
+                          // FRONTEND UI ENFORCEMENT
+                          const rawItemDiscount = item.discount || 0;
+                          const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
+
                           const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                           return (
                           <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${item.isSoldOut ? 'opacity-70' : ''}`} onClick={() => setEditingProduct(item)}>
@@ -1179,7 +1234,11 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <div className="md:hidden space-y-4">
                      {filteredProducts.map((item) => {
                        const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                       const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+                       
+                       // FRONTEND UI ENFORCEMENT
+                       const rawItemDiscount = item.discount || 0;
+                       const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
+
                        const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
                        return(
                         <div key={item.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer ${item.isSoldOut ? 'opacity-75' : ''}`} onClick={() => setEditingProduct(item)}>
@@ -1293,6 +1352,13 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
             >
               <Plus size={24} strokeWidth={3} />
             </button>
+           </div>
+        )}
+
+        {/* --- TABLES & QR TAB --- */}
+        {activeTab === 'tables' && (
+           <div className="animate-in fade-in duration-300 pb-12">
+             <TableManager shopId={shopId} shopSlug={shopSlug} />
            </div>
         )}
 
@@ -1836,6 +1902,158 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
               </div>
             </div>
 
+            {/* ================================================== */}
+            {/* SUPERADMIN-GATED STAFF NOTIFICATIONS               */}
+            {/* ================================================== */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-2">
+              <button onClick={() => handleSectionClick('notifications')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+                 <div className="flex gap-4 items-center">
+                   <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                     <Bell size={20}/>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-gray-900 text-base">Staff Notifications</h3>
+                     <p className="text-xs text-gray-500 mt-0.5">Configure Telegram alerts for table requests</p>
+                   </div>
+                 </div>
+                 {openSection === 'notifications' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
+              </button>
+
+              <div className={openSection === 'notifications' ? 'block' : 'hidden'}>
+                
+                {/* 1. CHECK SUPERADMIN PLAN LIMIT HERE */}
+                {!canUseTelegram ? (
+                  <div className="p-8 text-center bg-gray-50 border-t border-dashed border-gray-200">
+                     <div className="w-14 h-14 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
+                       <Lock size={24}/>
+                     </div>
+                     <p className="text-sm font-bold text-gray-700">Telegram Notifications Locked</p>
+                     <p className="text-xs text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">Alert Barista via Telegram is not included in your current plan. Please upgrade to unlock this feature.</p>
+                  </div>
+                ) : (
+                  <form onSubmit={onNotificationsSubmit} className="p-6 border-t border-gray-100 space-y-6">
+                    
+                    {/* Enable/Disable Feature Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                      <div>
+                        <h4 className="font-bold text-gray-900 text-sm">Enable "Call Staff" Feature</h4>
+                        <p className="text-xs text-gray-500 mt-1">Allow customers to request assistance from their table.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={isStaffEnabled} 
+                          onChange={(e) => { setIsStaffEnabled(e.target.checked); markDirty('notifications'); }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div>
+                      </label>
+                    </div>
+
+                    {/* Main Chat ID */}
+                    <div className="space-y-4">
+                      <label className="block text-sm font-semibold text-gray-800">Main Telegram Chat ID</label>
+                      <div className="bg-blue-50 text-blue-800 p-4 rounded-2xl border border-blue-100 text-sm space-y-2">
+                         <p className="font-bold mb-1 flex items-center gap-2 text-blue-900">
+                           <MessageCircle size={16} /> How to get your Chat ID:
+                         </p>
+                         <ol className="list-decimal list-inside space-y-1.5 ml-1 opacity-90">
+                           <li>Open Telegram and search for <strong>@userinfobot</strong></li>
+                           <li>Send the message <strong>/start</strong></li>
+                           <li>Copy the <strong>Id</strong> number it replies with and paste it below.</li>
+                         </ol>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={tgChatId} 
+                          onChange={e => { setTgChatId(e.target.value); markDirty('notifications'); }} 
+                          placeholder="e.g. 123456789" 
+                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => handleTestTelegram('General')}
+                          disabled={isTestingTg || !tgChatId.trim()}
+                          className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm rounded-xl transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          Test
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Topic Routing */}
+                    <div className="pt-4 border-t border-gray-100">
+                      <div className="mb-4">
+                        <h4 className="font-bold text-gray-900 text-sm mb-1">Topic Routing (Optional)</h4>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          If your Telegram group has "Topics" enabled, you can route specific alerts to specific topics. To find a Topic ID, right-click any message inside the topic and select <strong>Copy Message Link</strong>. The middle number is your Topic ID (e.g. from <code className="bg-gray-100 px-1 rounded text-[10px]">t.me/c/123/45/67</code>, the ID is <strong>45</strong>).
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Staff Call Topic */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-800 mb-1.5 flex items-center gap-1.5"><Hash size={12}/> Staff Call Topic ID</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              value={tgStaffCallTopicId} 
+                              onChange={e => { setTgStaffCallTopicId(e.target.value); markDirty('notifications'); }} 
+                              placeholder="e.g. 45" 
+                              className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"
+                            />
+                            <button 
+                              type="button" 
+                              onClick={() => handleTestTelegram('Staff Call', tgStaffCallTopicId)}
+                              disabled={isTestingTg || !tgChatId.trim() || !tgStaffCallTopicId.trim()}
+                              className="px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors disabled:opacity-50"
+                              title="Test Staff Call Topic"
+                            >
+                              <Send size={14}/>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* New Order Topic */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-800 mb-1.5 flex items-center gap-1.5"><Hash size={12}/> New Order Topic ID</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              value={tgNewOrderTopicId} 
+                              onChange={e => { setTgNewOrderTopicId(e.target.value); markDirty('notifications'); }} 
+                              placeholder="e.g. 99" 
+                              className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"
+                            />
+                            <button 
+                              type="button" 
+                              onClick={() => handleTestTelegram('New Order', tgNewOrderTopicId)}
+                              disabled={isTestingTg || !tgChatId.trim() || !tgNewOrderTopicId.trim()}
+                              className="px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors disabled:opacity-50"
+                              title="Test New Order Topic"
+                            >
+                              <Send size={14}/>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="flex justify-end pt-4 border-t border-gray-100">
+                       <button type="submit" disabled={!dirtySections['notifications']} className="w-full sm:w-auto bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                         <CheckCircle size={16}/>
+                         {dirtySections['notifications'] ? 'Save Notifications' : 'Saved'}
+                       </button>
+                    </div>
+                  </form>
+                )}
+
+              </div>
+            </div>
+
           </div>
         )}
       </main>
@@ -1868,6 +2086,7 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   if (pendingNav.source === 'identity') success = await saveIdentityForm();
                   else if (pendingNav.source === 'branding') success = await saveBrandingForm();
                   else if (pendingNav.source === 'socials') success = await saveSocialsForm();
+                  else if (pendingNav.source === 'notifications') success = await saveNotificationsForm();
                   setIsSaving(false);
 
                   if (success) {
@@ -2130,10 +2349,23 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                       <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Price ($)</label>
                       <input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required />
                     </div>
-                    <div className="space-y-1">
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
-                      <input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
-                    </div>
+                    
+                    {featCampaign ? (
+                      <div className="space-y-1">
+                        <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
+                        <input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 opacity-70">
+                        <div className="flex items-center justify-between mb-1.5 ml-1 pr-1">
+                          <label className="block text-sm font-semibold text-gray-800">Discount (%)</label>
+                          <Lock size={12} className="text-gray-500" />
+                        </div>
+                        <input disabled type="text" placeholder="Upgrade Plan" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed shadow-sm" />
+                        <input type="hidden" name="discount" value="0" />
+                      </div>
+                    )}
+
                     <div className="space-y-1">
                       <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Category</label>
                       <select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 cursor-pointer shadow-sm" required>
@@ -2267,10 +2499,22 @@ export default function AdminDashboard({ categories, products, settings, shopSlu
                   <LocalizedInput label="Category Name" value={catName.en} valueKh={catName.kh} valueZh={catName.zh} onChange={(lang, val) => setCatName(prev => ({ ...prev, [lang]: val }))} required multiLangEnabled={multiLanguageEnabled} />
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
-                      <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
-                    </div>
+                    {featCampaign ? (
+                      <div className="space-y-1">
+                        <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label>
+                        <input name="discount" type="number" min="0" max="100" placeholder="0" defaultValue={editingCategory?.discount || ''} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" />
+                      </div>
+                    ) : (
+                      <div className="space-y-1 opacity-70">
+                        <div className="flex items-center justify-between mb-1.5 ml-1 pr-1">
+                          <label className="block text-sm font-semibold text-gray-800">Discount (%)</label>
+                          <Lock size={12} className="text-gray-500" />
+                        </div>
+                        <input disabled type="text" placeholder="Upgrade Plan" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed shadow-sm" />
+                        <input type="hidden" name="discount" value="0" />
+                      </div>
+                    )}
+                    
                     {editingCategory && (
                       <div className="space-y-1">
                         <label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Sort Order</label>

@@ -7,7 +7,8 @@ import FoodCard from '@/components/FoodCard';
 import ShopInfoModal from '@/components/ShopInfoModal';
 import CartFloat from '@/components/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
-import { Menu, X, Star } from 'lucide-react';
+import { Menu, X, Star, Bell, Loader2, CheckCircle } from 'lucide-react';
+import { requestStaffAssistance } from "@/lib/staff-actions";
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
@@ -64,6 +65,11 @@ interface MenuClientProps {
   shopSettings: ShopSettings;
   banners?: Banner[];
   multiLanguageEnabled?: boolean;
+  featCampaign?: boolean;
+  isStaffCallActive?: boolean;
+  tableContext?: { isValid: boolean; tableId: string | null; tableLabel: string | null; };
+  shopId?: string;
+  shopSlug?: string;
 }
 
 const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBanner: number }) => {
@@ -91,7 +97,11 @@ const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBan
   );
 };
 
-export default function MenuClient({ initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false }: MenuClientProps) {
+export default function MenuClient({ 
+  initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false,
+  featCampaign = false, isStaffCallActive = false, tableContext, shopId, shopSlug
+}: MenuClientProps) {
+  
   const hasPopularProducts = initialProducts.some(p => p.isPopular);
   
   const [activeCategory, setActiveCategory] = useState(
@@ -103,6 +113,10 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   const [currentBanner, setCurrentBanner] = useState(0);
   
+  // Floating Staff Call State
+  const [callState, setCallState] = useState<'IDLE' | 'CONFIRM' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [callError, setCallError] = useState('');
+
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   
@@ -124,7 +138,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
     }
   }, [multiLanguageEnabled, setMultiLangEnabled]);
 
-  // Safety checks for browser-cached images where onLoad doesn't fire
   useEffect(() => {
     if (logoRef.current?.complete) setLogoLoaded(true);
   }, [shopSettings?.logo, shopSettings?.headerDesign]);
@@ -190,6 +203,28 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
     }
   };
 
+  const handleFloatingCallStaff = async () => {
+    if (!tableContext?.tableId || !shopId || !shopSlug) return;
+    
+    setCallState('LOADING');
+    setCallError('');
+
+    const res = await requestStaffAssistance(
+      shopId,
+      shopSlug,
+      shopSettings.name,
+      tableContext.tableId
+    );
+
+    if (res.success) {
+      setCallState('SUCCESS');
+      setTimeout(() => setCallState('IDLE'), 4000);
+    } else {
+      setCallError(res.message || "Failed to notify staff.");
+      setCallState('ERROR');
+    }
+  };
+
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const headerDesign = shopSettings?.headerDesign || 'design1';
   const logoUrl = shopSettings?.logo || '';
@@ -228,7 +263,6 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
       <header className="relative overflow-hidden min-h-[160px]" style={{ background: themeColor }}>
         <div className="absolute inset-0 bg-black/10 z-0" />
         
-        {/* Optional Noise/Gradient Backgrounds */}
         <div className="absolute inset-0 pointer-events-none z-0 opacity-30" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")` }} />
         <div className="absolute pointer-events-none z-0" style={{ top: -20, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, background: 'radial-gradient(ellipse, rgba(255,255,255,0.2) 0%, transparent 70%)' }} />
 
@@ -395,7 +429,13 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
           {searchQuery ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {getProductsBySearch(initialProducts).map((item) => (
-                <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
+                <FoodCard 
+                  key={item.id} 
+                  item={item as any} 
+                  themeColor={themeColor} 
+                  featCampaign={featCampaign} // PASSED HERE
+                  onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                />
               ))}
             </div>
           ) : (
@@ -408,7 +448,13 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                   </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {initialProducts.filter(p => p.isPopular).map((item) => (
-                      <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
+                      <FoodCard 
+                        key={item.id} 
+                        item={item as any} 
+                        themeColor={themeColor} 
+                        featCampaign={featCampaign} // PASSED HERE
+                        onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                      />
                     ))}
                   </div>
                 </section>
@@ -429,7 +475,13 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                       {catProducts.map((item) => (
-                        <FoodCard key={item.id} item={item as any} themeColor={themeColor} onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} />
+                        <FoodCard 
+                          key={item.id} 
+                          item={item as any} 
+                          themeColor={themeColor} 
+                          featCampaign={featCampaign} // PASSED HERE
+                          onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                        />
                       ))}
                     </div>
                   </section>
@@ -440,6 +492,7 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
         </div>
       </div>
 
+      {/* --- SELECTED ITEM MODAL --- */}
       {selectedItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedItem(null)}>
           <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
@@ -470,6 +523,59 @@ export default function MenuClient({ initialProducts, categories, shopSettings, 
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* --- FLOATING STAFF CALL BUTTON --- */}
+      {isStaffCallActive && tableContext?.isValid && (
+        <div className="fixed bottom-6 left-4 sm:left-6 z-50 flex flex-col items-start gap-2">
+          {callState === 'CONFIRM' && (
+             <div className="bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 w-64 animate-in slide-in-from-bottom-2 origin-bottom-left">
+               <p className="font-extrabold text-gray-900 mb-1">Call Staff?</p>
+               <p className="text-xs text-gray-500 mb-4">Request assistance at <strong className="text-gray-700">Table {tableContext.tableLabel}</strong></p>
+               <div className="flex gap-2">
+                 <button onClick={handleFloatingCallStaff} className="flex-1 bg-black text-white text-xs font-bold py-2.5 rounded-xl hover:bg-gray-800 transition-colors">Yes</button>
+                 <button onClick={() => setCallState('IDLE')} className="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2.5 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+               </div>
+             </div>
+          )}
+
+          {callState === 'ERROR' && (
+             <div className="bg-red-50 p-3.5 rounded-2xl shadow-xl border border-red-100 w-64 animate-in slide-in-from-bottom-2 origin-bottom-left flex items-start gap-3">
+               <X size={18} className="text-red-500 shrink-0 mt-0.5" />
+               <div className="flex-1">
+                 <p className="font-bold text-red-800 text-xs">Could not call staff</p>
+                 <p className="text-[10px] text-red-600 mt-0.5 leading-snug">{callError}</p>
+               </div>
+               <button onClick={() => setCallState('IDLE')} className="text-red-400 hover:text-red-600 p-1 shrink-0"><X size={14}/></button>
+             </div>
+          )}
+
+          {callState === 'SUCCESS' && (
+             <div className="bg-green-50 p-3.5 rounded-2xl shadow-xl border border-green-100 animate-in slide-in-from-bottom-2 origin-bottom-left flex items-center gap-2.5 pr-6">
+               <CheckCircle size={18} className="text-green-600" />
+               <div>
+                 <p className="font-bold text-green-800 text-sm">Staff Notified!</p>
+               </div>
+             </div>
+          )}
+
+          {callState === 'IDLE' && (
+            <button 
+              onClick={() => setCallState('CONFIRM')}
+              className="w-14 h-14 bg-white text-gray-800 rounded-full shadow-2xl flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-all active:scale-95 group relative"
+            >
+              <Bell size={24} className="text-gray-700 group-hover:text-black transition-colors" />
+              {/* Optional tiny notification dot */}
+              <div className="absolute top-3.5 right-4 w-2 h-2 rounded-full border border-white" style={{ backgroundColor: themeColor }}></div>
+            </button>
+          )}
+
+          {callState === 'LOADING' && (
+            <div className="w-14 h-14 bg-white rounded-full shadow-2xl flex items-center justify-center border border-gray-100">
+              <Loader2 size={24} className="animate-spin text-gray-400" />
+            </div>
+          )}
         </div>
       )}
 

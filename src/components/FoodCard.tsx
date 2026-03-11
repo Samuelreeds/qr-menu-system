@@ -24,12 +24,13 @@ interface FoodCardProps {
   themeColor?: string; 
   onClick?: () => void;
   adminActions?: React.ReactNode;
+  featCampaign?: boolean; // ENFORCES CAMPAIGN DISCOUNTS VISUALLY
 }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
-export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions }: FoodCardProps) {
+export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions, featCampaign = false }: FoodCardProps) {
   const { lang } = useLanguage(); 
   const [imgLoaded, setImgLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -47,7 +48,11 @@ export default function FoodCard({ item, themeColor = '#000000', onClick, adminA
     item.name;
 
   const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-  const effectiveDiscount = (item.discount && item.discount > 0) ? item.discount : categoryDiscount;
+  
+  // STRICT FRONTEND ENFORCEMENT: Override to 0 if featCampaign is false.
+  const rawItemDiscount = item.discount || 0;
+  const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
+  
   const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
 
   return (
