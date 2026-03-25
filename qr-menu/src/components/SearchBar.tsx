@@ -33,12 +33,13 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
 
   return (
     <div 
-      className={`relative flex items-center h-[42px] transition-all duration-300 ease-in-out bg-white border border-gray-100 rounded-full shadow-sm ${
-        isExpanded ? 'w-full sm:w-64 px-3 ring-2 ring-black/5' : 'w-[42px] justify-center hover:bg-gray-50 cursor-pointer'
+      className={`relative flex items-center h-[42px] transition-[width] duration-300 ease-out bg-white border border-gray-100 rounded-full shadow-sm overflow-hidden will-change-[width] ${
+        isExpanded ? 'w-[180px] sm:w-[240px] ring-2 ring-black/5' : 'w-[42px] hover:bg-gray-50 cursor-pointer'
       }`}
       onClick={() => !isExpanded && setIsExpanded(true)}
     >
-      <div className={`shrink-0 flex items-center justify-center ${isExpanded ? 'mr-2' : ''}`}>
+      {/* Icon Container - Strictly fixed to 42px to prevent shifting/squishing */}
+      <div className="flex items-center justify-center min-w-[42px] w-[42px] h-[42px] shrink-0">
         <Search 
           size={18} 
           className={`transition-colors ${isExpanded ? 'text-gray-400' : 'text-gray-700'}`} 
@@ -52,20 +53,24 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
         placeholder={placeholderText[lang]}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none transition-all duration-300 ${
-          isExpanded ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'
+        className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none h-full transition-all duration-300 ${
+          isExpanded ? 'flex-1 opacity-100' : 'w-0 flex-none opacity-0 pointer-events-none p-0 m-0'
         }`}
         onBlur={() => value === "" && setIsExpanded(false)}
       />
 
-      {isExpanded && value !== "" && (
+      <div 
+        className={`flex items-center justify-center h-[42px] shrink-0 transition-all duration-300 ${
+          isExpanded && value !== "" ? 'w-[36px] opacity-100' : 'w-0 flex-none opacity-0 pointer-events-none'
+        }`}
+      >
         <button 
           onClick={handleClear}
-          className="shrink-0 ml-1 p-1 hover:bg-gray-100 rounded-full transition-colors"
+          className="p-1.5 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
         >
           <X size={14} className="text-gray-400" />
         </button>
-      )}
+      </div>
     </div>
   );
 }

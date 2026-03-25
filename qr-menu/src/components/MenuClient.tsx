@@ -155,7 +155,12 @@ export default function MenuClient({
       const offset = 140; 
       const scrollPosition = window.scrollY + offset;
 
-      for (const cat of categories) {
+      // Include Hot Sale in the check if it exists
+      const categoriesToCheck = hasPopularProducts 
+        ? [{ id: 'hot-sale', name: 'Hot Sale' }, ...categories] 
+        : categories;
+
+      for (const cat of categoriesToCheck) {
         const section = sectionRefs.current[cat.name];
         if (section) {
           const { top, bottom } = section.getBoundingClientRect();
@@ -179,7 +184,7 @@ export default function MenuClient({
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [categories, searchQuery]);
+  }, [categories, searchQuery, hasPopularProducts]);
 
   const scrollToCategory = (categoryName: string) => {
     const section = sectionRefs.current[categoryName];
@@ -362,6 +367,7 @@ export default function MenuClient({
           >
             {hasPopularProducts && (
               <button 
+                  id="tab-hot-sale"
                   onClick={() => {
                     setActiveCategory('Hot Sale');
                     scrollToCategory('Hot Sale');
