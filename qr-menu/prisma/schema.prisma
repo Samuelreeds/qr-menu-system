@@ -1,0 +1,247 @@
+// prisma/schema.prisma
+// IMPORTANT: AFTER SAVING THIS FILE, YOU MUST RUN IN YOUR TERMINAL:
+// 1. npx prisma format
+// 2. npx prisma generate
+// 3. npx prisma db push
+// 4. Restart your Next.js development server
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum StaffCallStatus {
+  PENDING
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+// --- USER MODEL ---
+model User {
+  id               String     @id @default(cuid())
+  email            String     @unique
+  password         String
+  failedAttempts   Int        @default(0)
+  lockoutUntil     DateTime?
+  resetToken       String?    @unique
+  resetTokenExpiry DateTime?
+  isSuperAdmin     Boolean    @default(false)
+  role             String     @default("USER")
+  shopUsers        ShopUser[]
+}
+
+// --- NEW SAAS MODELS ---
+model Shop {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  plan        String    @default("FREE")
+  planId      String?
+  status      String    @default("ACTIVE")
+  trialEndsAt DateTime?
+  paidUntil   DateTime?
+
+  // LIMIT OVERRIDES
+  overrideMaxProducts   Int?
+  overrideMaxCategories Int?
+  overrideMaxBanners    Int?
+  overrideHeaderStyle   String?
+
+  // STAFF CALL & NOTIFICATIONS
+  telegramNotificationsEnabled Boolean @default(false)
+  callStaffEnabled             Boolean @default(true)
+  telegramChatId               String?
+  staffCallTopicId             String?
+  newOrderTopicId              String?
+
+  staffCalls StaffCallRequest[] @relation("ShopStaffCalls")
+  tables     Table[]            @relation("ShopTables")
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  shopUsers  ShopUser[]
+  categories Category[]
+  products   Product[]
+  settings   ShopSettings?
+  banners    Banner[]
+}
+
+model ShopUser {
+  id        String   @id @default(cuid())
+  userId    String
+  shopId    String
+  role      String   @default("OWNER")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shopId])
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String?
+  shopName  String?
+  slug      String?
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// --- YOUR EXISTING MODELS (SCOPED TO SHOP) ---
+model Category {
+  id        String  @id @default(cuid())
+  name      String
+  name_kh   String?
+  name_zh   String?
+  sortOrder Int     @default(0)
+  discount  Float   @default(0)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  products Product[]
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  name_kh     String?
+  name_zh     String?
+  price       Float
+  image       String
+  time        String?
+  rating      Float   @default(0)
+  description String?
+  isPopular   Boolean @default(false)
+  isSoldOut   Boolean @default(false)
+  discount    Float   @default(0)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// --- PROMOTIONAL BANNER MODEL ---
+model Banner {
+  id        String    @id @default(cuid())
+  image     String
+  sortOrder Int       @default(0)
+  deletedAt DateTime?
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model ShopSettings {
+  id            String  @id @default(cuid())
+  name          String
+  name_kh       String?
+  nameDisplay   String  @default("EN")
+  address       String?
+  phone         String?
+  openingHours  String?
+  themeColor    String  @default("#000000")
+  headerDesign  String  @default("design1")
+  logo          String?
+  logoType      String  @default("withBackground")
+  socials       String  @default("[]")
+  facebook      String?
+  showFacebook  Boolean @default(false)
+  instagram     String?
+  showInstagram Boolean @default(false)
+  telegram      String?
+  showTelegram  Boolean @default(false)
+
+  shopId String @unique
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// --- PLAN MODEL ---
+model Plan {
+  id            String  @id @default(cuid())
+  name          String
+  slug          String  @unique
+  priceMonthly  Float   @default(0)
+  priceYearly   Float   @default(0)
+  status        String  @default("ACTIVE")
+  order         Int     @default(0)
+  allowTrial    Boolean @default(false)
+  trialDays     Int     @default(14)
+  isRecommended Boolean @default(false)
+
+  // LIMITS
+  maxProducts   Int @default(0)
+  maxCategories Int @default(0)
+  maxBanners    Int @default(0)
+  maxQrThemes   Int @default(0)
+  aiUploadLimit Int @default(0)
+
+  // FEATURE TOGGLES
+  featPreparationTime  Boolean @default(false)
+  featCampaign         Boolean @default(false)
+  featCoverBanner      Boolean @default(false)
+  featSmartCategories  Boolean @default(false)
+  featUploadImageMenu  Boolean @default(false)
+  featAlertBarista     Boolean @default(false)
+  featPos              Boolean @default(false)
+  featOrderFromTable   Boolean @default(false)
+  featMultipleLanguage Boolean @default(false)
+  featCustomDomain     Boolean @default(false)
+  featDedicatedSupport Boolean @default(false)
+  featAiUpload         Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Table {
+  id         String             @id @default(cuid())
+  shopId     String
+  shop       Shop               @relation("ShopTables", fields: [shopId], references: [id], onDelete: Cascade)
+  label      String
+  isActive   Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  staffCalls StaffCallRequest[] @relation("TableStaffCalls")
+
+  @@unique([shopId, label])
+  @@index([shopId])
+}
+
+model StaffCallRequest {
+  id         String          @id @default(cuid())
+  shopId     String
+  shop       Shop            @relation("ShopStaffCalls", fields: [shopId], references: [id], onDelete: Cascade)
+  tableId    String
+  table      Table           @relation("TableStaffCalls", fields: [tableId], references: [id], onDelete: Cascade)
+  status     StaffCallStatus @default(PENDING)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  resolvedAt DateTime?
+
+  // TELEGRAM AUTO-DELETE TRACKING
+  telegramMessageId String?
+  telegramChatId    String?
+  telegramSentAt    DateTime?
+
+  @@index([shopId])
+  @@index([tableId])
+  @@index([shopId, tableId, createdAt])
+  @@index([status, createdAt])
+}
