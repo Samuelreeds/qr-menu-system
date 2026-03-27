@@ -22,6 +22,25 @@ enum StaffCallStatus {
   CANCELLED
 }
 
+// --- POS ENUMS ---
+enum OrderType {
+  TABLE
+  TAKEAWAY
+  DELIVERY
+}
+
+enum PaymentMethod {
+  CASH
+  KHQR
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  COMPLETED
+  CANCELLED
+}
+
 // --- USER MODEL ---
 model User {
   id               String     @id @default(cuid())
@@ -71,6 +90,7 @@ model Shop {
   products   Product[]
   settings   ShopSettings?
   banners    Banner[]
+  orders     Order[]
 }
 
 model ShopUser {
@@ -105,6 +125,7 @@ model Category {
   name_zh   String?
   sortOrder Int     @default(0)
   discount  Float   @default(0)
+  isDrink   Boolean @default(false) // <-- ADDED THIS LINE
 
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -133,6 +154,7 @@ model Product {
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+  orderItems OrderItem[]
 }
 
 // --- PROMOTIONAL BANNER MODEL ---
@@ -244,4 +266,60 @@ model StaffCallRequest {
   @@index([tableId])
   @@index([shopId, tableId, createdAt])
   @@index([status, createdAt])
+}
+
+// --- POS ORDER MODELS ---
+model Order {
+  id              String        @id @default(cuid())
+  shopId          String
+  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  // POS Specific Fields
+  orderType       OrderType     @default(TABLE)
+  tableNumber     String?       // "Table 1", "Table 2"
+  deliveryAgent   String?       // "Grab", "Food Panda"
+  
+  // Financials
+  subtotal        Float
+  discount        Float         @default(0)
+  promoCode       String?
+  tax             Float         @default(0)
+  total           Float
+  
+  // Status & Payment
+  paymentMethod   PaymentMethod @default(CASH)
+  status          OrderStatus   @default(PENDING)
+  isPaid          Boolean       @default(false)
+  
+  // Relation to items
+  items           OrderItem[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([shopId])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  
+  name            String   // Storing the name historically in case product name changes later
+  price           Float    // Storing the exact price at the time of purchase
+  quantity        Int
+  
+  // POS Specific Fields
+  notes           String?  @db.Text
+  
+  // Store customizations (mood, size, sugar, ice) as a flexible JSON object
+  customization   Json?    
+  
+  createdAt       DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
 }

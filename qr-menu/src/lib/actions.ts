@@ -1,3 +1,4 @@
+// src/lib/actions.ts
 'use server'
 
 import { revalidatePath } from 'next/cache'
@@ -270,6 +271,7 @@ export async function createCategory(formData: FormData) {
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const discount = parseFloat(formData.get('discount') as string) || 0;
+  const isDrink = formData.get('isDrink') === 'true'; // <--- NEW
 
   const lastCategory = await prisma.category.findFirst({ 
     where: { shopId },
@@ -278,7 +280,7 @@ export async function createCategory(formData: FormData) {
   const nextOrder = (lastCategory?.sortOrder || 0) + 1;
   
   await prisma.category.create({ 
-    data: { name, name_kh, name_zh, sortOrder: nextOrder, discount, shopId } 
+    data: { name, name_kh, name_zh, sortOrder: nextOrder, discount, isDrink, shopId } 
   });
   await revalidateActiveShop();
 }
@@ -290,10 +292,11 @@ export async function updateCategory(formData: FormData) {
   const name_zh = formData.get('name_zh') as string || null;
   const sortOrder = parseInt(formData.get('sortOrder') as string);
   const discount = parseFloat(formData.get('discount') as string) || 0;
+  const isDrink = formData.get('isDrink') === 'true'; // <--- NEW
   
   await prisma.category.update({ 
     where: { id }, 
-    data: { name, name_kh, name_zh, sortOrder, discount } 
+    data: { name, name_kh, name_zh, sortOrder, discount, isDrink } 
   });
   await revalidateActiveShop();
 }
@@ -974,6 +977,7 @@ export async function executeMenuImport(formData: FormData) {
                 name: item.categoryName,
                 sortOrder: maxCatSortOrder,
                 discount: 0,
+                isDrink: false,
                 shopId
              }
           });
@@ -1382,5 +1386,89 @@ export async function createSuperAdminUser(formData: FormData) {
   } catch (error) {
     console.error("Failed to create super admin", error);
     return { success: false, error: "Failed to create SuperAdmin account" };
+  }
+}
+
+// --- POS ACTIONS ---
+export async function createPosOrder(data: {
+  shopId: string;
+  orderType: string;
+  tableNumber?: string;
+  deliveryAgent?: string;
+  discount: number; 
+  promoCode?: string;
+  paymentMethod: string;
+  isTaxEnabled: boolean; 
+  items: any[];
+}) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return { error: "Unauthorized" };
+
+    const activeShopId = await getActiveShopId();
+    if (activeShopId !== data.shopId && !(session as any)?.user?.isSuperAdmin) {
+       return { error: "Unauthorized for this shop" };
+    }
+
+    const productIds = data.items.map(i => i.productId);
+    const realProducts = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, price: true, discount: true, category: { select: { discount: true } } }
+    });
+
+    let secureSubtotal = 0;
+    const orderItemsData = data.items.map(clientItem => {
+      const realProd = realProducts.find(p => p.id === clientItem.productId);
+      if (!realProd) throw new Error(`Product ${clientItem.name} not found in database.`);
+
+      let itemPrice = realProd.price;
+      const effectiveDiscount = realProd.discount > 0 ? realProd.discount : (realProd.category?.discount || 0);
+      if (effectiveDiscount > 0) {
+        itemPrice = itemPrice * (1 - effectiveDiscount / 100);
+      }
+
+      secureSubtotal += (itemPrice * clientItem.qty);
+
+      return {
+        productId: realProd.id,
+        name: clientItem.name,
+        price: itemPrice,     
+        quantity: clientItem.qty,
+        notes: clientItem.notes,
+        customization: clientItem.customization,
+      };
+    });
+
+    const secureDiscount = Math.min(data.discount, secureSubtotal);
+    const afterDiscount = secureSubtotal - secureDiscount;
+    const secureTax = data.isTaxEnabled ? (afterDiscount * 0.1) : 0; 
+    const secureTotal = afterDiscount + secureTax;
+
+    const order = await prisma.order.create({
+      data: {
+        shopId: data.shopId,
+        orderType: data.orderType as any,
+        tableNumber: data.tableNumber,
+        deliveryAgent: data.deliveryAgent,
+        subtotal: secureSubtotal,
+        discount: secureDiscount,
+        promoCode: data.promoCode,
+        tax: secureTax,
+        total: secureTotal,
+        paymentMethod: data.paymentMethod as any,
+        status: 'COMPLETED',
+        isPaid: true,
+        items: {
+          create: orderItemsData,
+        },
+      },
+      include: { items: true } 
+    });
+
+    revalidatePath('/admin');
+    return { success: true, order };
+  } catch (error: any) {
+    console.error("POS_ORDER_ERROR", error);
+    return { error: error.message || "Failed to save order to database." };
   }
 }

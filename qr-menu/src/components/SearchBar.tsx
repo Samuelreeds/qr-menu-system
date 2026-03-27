@@ -53,7 +53,7 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
         placeholder={placeholderText[lang]}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none h-full transition-all duration-300 ${
+        className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none h-full transition-all duration-300 min-w-0 ${
           isExpanded ? 'flex-1 opacity-100' : 'w-0 flex-none opacity-0 pointer-events-none p-0 m-0'
         }`}
         onBlur={() => value === "" && setIsExpanded(false)}
