@@ -15,18 +15,17 @@ import {
 } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { 
-  Plus, X, Trash2, UploadCloud, CheckCircle, XCircle,
+  Plus, X, Trash2, UploadCloud, CheckCircle, AlertTriangle,
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
-  RefreshCw, Save, Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
+  Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, AlertTriangle, Star, Lock, MoreVertical, MessageCircle, Hash, ShoppingCart, ClipboardList, CreditCard, Banknote
+  Info, Loader2, Clock, Lock, MoreVertical, MessageCircle, Hash, ShoppingCart, ClipboardList, CreditCard, Banknote
 } from 'lucide-react';
 
 // --- POS IMPORTS ---
 import { useRouter } from "next/navigation";
 import AppImage from "@/components/ui/AppImage";
-import Icon from "@/components/ui/AppIcon";
 import { useOrder, OrderProvider } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
 import { useToast, ToastProvider } from "@/context/ToastContext";
@@ -214,7 +213,8 @@ export default function AdminDashboard({
   callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false,
   featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = []
 }: AdminDashboardProps) {
-  // SET DEFAULT TAB: Default to POS if available, otherwise safely default to menu
+  
+  // SECURE DEFAULT TAB: Defaults to POS if available, otherwise safely defaults to menu
   const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'orders' | 'settings' | 'pos'>(featPos ? 'pos' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
@@ -2659,7 +2659,7 @@ export default function AdminDashboard({
                           onChange={(e) => setCatIsDrink(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
+                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
                       </label>
                     </div>
                   </div>
@@ -2674,6 +2674,7 @@ export default function AdminDashboard({
     </div>
   );
 }
+
 // ─── INTERNAL COMPONENTS (PASTE AT THE VERY BOTTOM OF AdminDashboard.tsx) ────────────────────────
 
 export function OrderHistoryCard({ order }: { order: any }) {
@@ -3458,7 +3459,6 @@ export function PosCustomizationModal({
     ice: "50%",
   });
   const [notes, setNotes] = useState("");
-
   const isDrink = product.isDrink;
 
   return (
