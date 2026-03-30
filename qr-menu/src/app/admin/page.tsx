@@ -1,3 +1,4 @@
+// src/app/admin/page.tsx
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import AdminDashboard from '@/components/AdminDashboard';
@@ -22,8 +23,25 @@ export default async function AdminPage() {
   const shopId = shop.id;
 
   if (shop.status === 'LOCKED' || (shop as any).deletedAt) {
-    // ... keep your suspended UI ...
-    return <div>Shop Suspended</div>; 
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4 font-sans text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 max-w-md w-full">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-black text-gray-900 mb-2">Shop Suspended</h1>
+          <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+            This shop has been locked or deactivated by the administrator. Please contact support if you believe this is an error.
+          </p>
+          <a href="/login" className="inline-flex w-full justify-center bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-all active:scale-[0.98]">
+            Return to Login
+          </a>
+        </div>
+      </div>
+    );
   }
 
   const [
@@ -34,7 +52,7 @@ export default async function AdminPage() {
     banners,
     dbSettings,
     dbPlan,
-    orders // <-- ADD THIS
+    orders
   ] = await Promise.all([
     getShopPlanState(shopId),
     getShopLimitsAndFeatures(shopId),
@@ -59,7 +77,6 @@ export default async function AdminPage() {
           where: { OR: [{ id: shop.plan }, { slug: shop.plan.toLowerCase() }] }
         }).catch(() => null)
       : Promise.resolve(null),
-    // FETCH RECENT ORDERS
     prisma.order.findMany({
       where: { shopId },
       orderBy: { createdAt: 'desc' },
@@ -69,20 +86,19 @@ export default async function AdminPage() {
   ]);
 
   const rawPlanId = planState?.plan as string;
-  const currentPlanName =
-    dbPlan?.name || (rawPlanId && rawPlanId.length > 15 ? 'PRO' : rawPlanId) || 'FREE';
+  const currentPlanName = dbPlan?.name || (rawPlanId && rawPlanId.length > 15 ? 'PRO' : rawPlanId) || 'FREE';
 
   const canUseCampaign = !!(planLimits as any)?.featCampaign;
   const canUsePos = !!(planLimits as any)?.featPos;
 
-  // ... keep category and product formatting exactly the same ...
   const formattedCategories = categories.map((c) => ({
     id: c.id,
     name: c.name,
     name_kh: c.name_kh,
     name_zh: c.name_zh,
     sortOrder: c.sortOrder,
-    discount: canUseCampaign ? c.discount : 0
+    discount: canUseCampaign ? c.discount : 0,
+    isDrink: (c as any).isDrink || false // MUST HAVE THIS TO WORK
   }));
 
   const formattedProducts = rawProducts.map((p) => ({
@@ -137,7 +153,7 @@ export default async function AdminPage() {
       featPos={canUsePos}
       userEmail={user.email}
       userRole={shopUser.role}
-      orders={orders} // <-- PASS ORDERS PROP
+      orders={orders}
     />
   );
 }

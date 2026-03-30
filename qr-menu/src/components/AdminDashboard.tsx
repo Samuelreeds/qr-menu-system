@@ -214,7 +214,8 @@ export default function AdminDashboard({
   callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false,
   featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = []
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'orders' | 'settings' | 'pos'>('menu');
+  // SET DEFAULT TAB TO POS
+  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'orders' | 'settings' | 'pos'>('pos');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -386,6 +387,9 @@ export default function AdminDashboard({
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
   const isNoBg = logoType === 'withoutBackground';
+
+  // Role-based visibility check
+  const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN';
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -1030,18 +1034,26 @@ export default function AdminDashboard({
             <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${shopPlan === 'STARTER' ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{shopPlan} PLAN</span>
           </div>
           <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
-            <button onClick={() => handleTabClick('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
-            <button onClick={() => handleTabClick('tables')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'tables' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><QrCode size={20}/> Tables & QR</button>
             
+            {/* CASHIER PRIORITIES AT TOP */}
             {featPos && (
               <>
                 <button onClick={() => handleTabClick('pos')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'pos' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><ShoppingCart size={20}/> POS</button>
                 <button onClick={() => handleTabClick('orders')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'orders' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><ClipboardList size={20}/> Orders</button>
               </>
             )}
+            <button onClick={() => handleTabClick('tables')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'tables' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><QrCode size={20}/> Tables & QR</button>
 
-            <button onClick={() => handleTabClick('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
+            {/* ADMIN PRIORITIES AT BOTTOM */}
+            {isAdmin && (
+              <div className="mt-6 pt-4 border-t border-gray-100">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block px-4">Management</span>
+                <button onClick={() => handleTabClick('menu')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'menu' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><LayoutGrid size={20}/> Menu</button>
+                <button onClick={() => handleTabClick('categories')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'categories' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><List size={20}/> Categories</button>
+                <button onClick={() => handleTabClick('settings')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'settings' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><Settings size={20}/> Settings</button>
+              </div>
+            )}
+
           </nav>
           <div className="pt-6 border-t border-gray-50 mt-auto shrink-0">
             <button onClick={() => signOut({ callbackUrl: '/auth/login' })} className="w-full flex gap-3 font-medium text-gray-400 px-4 py-2 hover:text-red-500 transition active:scale-95"><LogOut size={18}/> Log Out</button>
@@ -1154,7 +1166,7 @@ export default function AdminDashboard({
         )}
 
         {/* --- MENU TAB --- */}
-        {activeTab === 'menu' && (
+        {activeTab === 'menu' && isAdmin && (
            <div className="animate-in fade-in duration-300 print:hidden">
              <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
                 <div className="relative flex-1">
@@ -1402,7 +1414,7 @@ export default function AdminDashboard({
         )}
 
         {/* --- CATEGORIES TAB --- */}
-        {activeTab === 'categories' && (
+        {activeTab === 'categories' && isAdmin && (
            <div className="animate-in fade-in duration-300 print:hidden">
              <div className="flex justify-between items-center gap-4 mb-6">
                  <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
@@ -1467,7 +1479,7 @@ export default function AdminDashboard({
         )}
 
         {/* --- SETTINGS TAB --- */}
-        {activeTab === 'settings' && (
+        {activeTab === 'settings' && isAdmin && (
           <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300 pb-12 print:hidden">
             {/* Shop Details Section */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
@@ -2641,7 +2653,7 @@ export default function AdminDashboard({
                           onChange={(e) => setCatIsDrink(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
+                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
                       </label>
                     </div>
                   </div>
@@ -2727,6 +2739,7 @@ export function OrderHistoryCard({ order }: { order: any }) {
                           {item.customization.mood && `, ${item.customization.mood}`}
                           {item.customization.sugar && `, ${item.customization.sugar} sugar`}
                           {item.customization.ice && `, ${item.customization.ice} ice`}
+                          {item.notes && <><br/><span className="italic">Note: {item.notes}</span></>}
                         </p>
                       )}
                     </div>
@@ -2786,6 +2799,146 @@ export function OrderHistoryCard({ order }: { order: any }) {
   );
 }
 
+export function PosCustomizationModal({
+  product,
+  onClose,
+  onAdd
+}: {
+  product: PosProduct;
+  onClose: () => void;
+  onAdd: (product: PosProduct, customization: ProductCustomization, notes: string) => void;
+}) {
+  const [customization, setCustomization] = useState<ProductCustomization>({
+    mood: "hot",
+    size: "M",
+    sugar: "50%",
+    ice: "50%",
+  });
+  const [notes, setNotes] = useState("");
+
+  const isDrink = product.isDrink;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 print:hidden animate-in fade-in duration-200">
+      <div className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-10 sm:zoom-in-95">
+        
+        <div className="relative h-48 bg-gray-100 shrink-0 border-b border-gray-100">
+           {product.img ? (
+             <img src={product.img} alt={product.name} className="w-full h-full object-cover" />
+           ) : (
+             <div className="w-full h-full flex items-center justify-center"><ImageIcon size={40} className="text-gray-300"/></div>
+           )}
+           <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-gray-700 shadow-sm active:scale-95 transition-transform"><X size={16}/></button>
+        </div>
+
+        <div className="p-5 overflow-y-auto no-scrollbar flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+           <h3 className="font-bold text-xl text-gray-900 leading-tight mb-1">{product.name}</h3>
+           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">{product.category}</p>
+           <p className="font-black text-2xl text-gray-900 mb-6">${product.price.toFixed(2)}</p>
+
+           <div className="space-y-5">
+             <div className={`grid ${isDrink ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+               {isDrink && (
+                 <div>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Mood</p>
+                   <div className="flex bg-gray-100 p-1.5 rounded-xl">
+                     <button
+                       className={`flex-1 py-2 rounded-lg text-sm transition-colors ${customization.mood === "hot" ? "bg-white text-red-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
+                       onClick={() => setCustomization((c) => ({ ...c, mood: "hot" }))}
+                     >
+                       Hot
+                     </button>
+                     <button
+                       className={`flex-1 py-2 rounded-lg text-sm transition-colors ${customization.mood === "cold" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
+                       onClick={() => setCustomization((c) => ({ ...c, mood: "cold" }))}
+                     >
+                       Cold
+                     </button>
+                   </div>
+                 </div>
+               )}
+
+               <div>
+                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Size</p>
+                 <div className="flex bg-gray-100 p-1.5 rounded-xl">
+                   {(["S", "M", "L"] as const).map((s) => (
+                     <button
+                       key={s}
+                       className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${customization.size === s ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
+                       onClick={() => setCustomization((c) => ({ ...c, size: s }))}
+                     >
+                       {s}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+             </div>
+
+             {isDrink && (
+               <div className="grid grid-cols-2 gap-3">
+                 <div>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Sugar</p>
+                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                     {(["30%", "50%", "70%"] as const).map((v) => (
+                       <button
+                         key={v}
+                         className={`flex-1 py-2 rounded-lg text-[11px] transition-colors ${customization.sugar === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
+                         onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
+                       >
+                         {v.replace('%', '')}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                 <div>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Ice</p>
+                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                     {(["30%", "50%", "70%"] as const).map((v) => (
+                       <button
+                         key={v}
+                         className={`flex-1 py-2 rounded-lg text-[11px] transition-colors ${customization.ice === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
+                         onClick={() => setCustomization((c) => ({ ...c, ice: v }))}
+                       >
+                         {v.replace('%', '')}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+               </div>
+             )}
+
+             <div>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Special Instructions</p>
+               <textarea 
+                 value={notes} 
+                 onChange={(e) => setNotes(e.target.value)} 
+                 placeholder="e.g. Extra spicy, no onions..." 
+                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm text-gray-900 focus:outline-none focus:border-gray-400 focus:bg-white transition-colors resize-none" 
+                 rows={2}
+               />
+             </div>
+
+           </div>
+        </div>
+
+        <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0">
+           <button 
+             onClick={() => {
+               const finalCust = isDrink ? customization : { mood: "", size: customization.size, sugar: "", ice: "" };
+               onAdd(product, finalCust, notes);
+               onClose();
+             }} 
+             className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-[15px]"
+           >
+             <Plus size={18}/> Add to Order — ${product.price.toFixed(2)}
+           </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string }) {
   const router = useRouter();
   
@@ -2804,6 +2957,7 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
 
   const [menuLoading, setMenuLoading] = useState(true);
   const [latestOrder, setLatestOrder] = useState<any>(null);
+  const [selectedModalProduct, setSelectedModalProduct] = useState<PosProduct | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setMenuLoading(false), 500);
@@ -2811,12 +2965,12 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
   }, []);
 
   const categories = [
-    { id: "all", label: "All", emoji: "📋" },
+    { id: "all", label: "All", emoji: "📋", isDrink: false },
     ...dashboardCategories.map((c) => ({
       id: String(c.name), 
       label: c.name,
       emoji: "🏷️",
-      isDrink: c.isDrink
+      isDrink: c.isDrink || false
     })),
   ];
 
@@ -2852,11 +3006,11 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
     return matchCat && matchSearch;
   });
 
-  const handleAddToBilling = (product: PosProduct, customization: ProductCustomization) => {
+  const handleAddToBilling = (product: PosProduct, customization: ProductCustomization, notes: string) => {
     setBillingItems((prev) => {
-      const existing = prev.find((i) => i.name === product.name);
+      const existing = prev.find((i) => i.name === product.name && i.notes === notes && JSON.stringify(i.customization) === JSON.stringify(customization));
       if (existing) {
-        return prev.map((i) => i.name === product.name ? { ...i, qty: i.qty + 1 } : i);
+        return prev.map((i) => i.id === existing.id ? { ...i, qty: i.qty + 1 } : i);
       }
       return [
         ...prev,
@@ -2866,7 +3020,7 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
           name: product.name,
           price: product.price,
           qty: 1,
-          notes: "",
+          notes: notes,
           img: product.img,
           customization,
         },
@@ -2960,6 +3114,15 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
           </div>
         </>
       )}
+
+      {/* POPUP MODAL */}
+      {selectedModalProduct && (
+        <PosCustomizationModal 
+          product={selectedModalProduct} 
+          onClose={() => setSelectedModalProduct(null)} 
+          onAdd={handleAddToBilling} 
+        />
+      )}
       
       {/* LEFT PANE: ALWAYS SHOW MENU */}
       <div className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
@@ -3006,13 +3169,13 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
           </div>
 
           {menuLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 8 }).map((_, i) => <PosProductCardSkeleton key={i} />)}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              {Array.from({ length: 10 }).map((_, i) => <PosProductCardSkeleton key={i} />)}
             </div>
           ) : filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
               {filteredProducts.map((product) => (
-                <PosProductCard key={product.id} product={product} onAdd={handleAddToBilling} />
+                <PosProductCard key={product.id} product={product} onClick={(p) => setSelectedModalProduct(p)} />
               ))}
             </div>
           ) : (
@@ -3054,7 +3217,7 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
       )}
 
       {/* RIGHT PANE: CART & ORDER CONFIG */}
-      <div className={`fixed inset-0 z-[60] md:static w-full md:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
+      <div className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
         <BillingPanel
           items={billingItems}
           onRemove={handleRemove}
@@ -3076,51 +3239,36 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
 
 export function PosProductCardSkeleton() {
   return (
-    <div className="animate-pulse bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+    <div className="animate-pulse bg-white p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="w-full aspect-[4/3] rounded-xl mb-3 bg-gray-200" />
-      <div className="h-3.5 rounded-full bg-gray-200 mb-2 w-3/4" />
-      <div className="h-2.5 rounded-full bg-gray-100 mb-1 w-full" />
-      <div className="h-2.5 rounded-full bg-gray-100 mb-3 w-2/3" />
-      <div className="h-4 rounded-full bg-gray-200 mb-3 w-1/3" />
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="h-8 rounded-xl bg-gray-100" />
-        <div className="h-8 rounded-xl bg-gray-100" />
+      <div className="h-3 rounded-full bg-gray-200 mb-2 w-3/4" />
+      <div className="h-2 rounded-full bg-gray-100 mb-4 w-1/2" />
+      <div className="flex justify-between items-center">
+        <div className="h-4 rounded-full bg-gray-200 w-1/3" />
+        <div className="w-8 h-8 rounded-full bg-gray-100" />
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="h-8 rounded-xl bg-gray-100" />
-        <div className="h-8 rounded-xl bg-gray-100" />
-      </div>
-      <div className="h-9 rounded-xl bg-gray-200" />
     </div>
   );
 }
 
 export function PosProductCard({
   product,
-  onAdd,
+  onClick,
 }: {
   product: PosProduct;
-  onAdd: (product: PosProduct, customization: ProductCustomization) => void;
+  onClick: (product: PosProduct) => void;
 }) {
-  const [customization, setCustomization] = useState<ProductCustomization>({
-    mood: "hot",
-    size: "M",
-    sugar: "50%",
-    ice: "50%",
-  });
-
-  const isDrink = product.isDrink;
-
   return (
-    <div className="animate-scale-in bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md flex flex-col h-full">
-      <div className="w-full aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-gray-50 flex-shrink-0 border border-gray-100">
+    <div className="animate-scale-in bg-white p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md flex flex-col h-full cursor-pointer group" onClick={() => onClick(product)}>
+      <div className="w-full aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-gray-50 flex-shrink-0 border border-gray-100 relative">
         {product.img ? (
-          <img src={product.img} alt={`${product.name}`} className="w-full h-full object-cover" />
+          <img src={product.img} alt={`${product.name}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
             <ImageIcon size={32} className="text-gray-300" />
           </div>
         )}
+        <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors duration-300" />
       </div>
 
       <div className="flex-1 flex flex-col">
@@ -3129,95 +3277,14 @@ export function PosProductCard({
         </h3>
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">{product.category}</p>
         
-        <p className="text-lg font-black text-gray-900 mb-4">
-          <sup className="text-xs font-semibold text-gray-500 mr-0.5">$</sup>
-          {product.price.toFixed(2)}
-        </p>
-
-        <div className="mt-auto space-y-3">
-          <div className={`grid ${isDrink ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-            
-            {isDrink && (
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Mood</p>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
-                  <button
-                    className={`flex-1 py-1 rounded text-xs transition-colors ${customization.mood === "hot" ? "bg-white text-red-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
-                    onClick={() => setCustomization((c) => ({ ...c, mood: "hot" }))}
-                  >
-                    Hot
-                  </button>
-                  <button
-                    className={`flex-1 py-1 rounded text-xs transition-colors ${customization.mood === "cold" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
-                    onClick={() => setCustomization((c) => ({ ...c, mood: "cold" }))}
-                  >
-                    Cold
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Size</p>
-              <div className="flex bg-gray-100 p-1 rounded-lg">
-                {(["S", "M", "L"] as const).map((s) => (
-                  <button
-                    key={s}
-                    className={`flex-1 py-1 rounded text-xs font-bold transition-colors ${customization.size === s ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
-                    onClick={() => setCustomization((c) => ({ ...c, size: s }))}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {isDrink && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Sugar</p>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
-                  {(["30%", "50%", "70%"] as const).map((v) => (
-                    <button
-                      key={v}
-                      className={`flex-1 py-1 rounded text-[10px] transition-colors ${customization.sugar === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
-                      onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
-                    >
-                      {v.replace('%', '')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Ice</p>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
-                  {(["30%", "50%", "70%"] as const).map((v) => (
-                    <button
-                      key={v}
-                      className={`flex-1 py-1 rounded text-[10px] transition-colors ${customization.ice === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`}
-                      onClick={() => setCustomization((c) => ({ ...c, ice: v }))}
-                    >
-                      {v.replace('%', '')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <button
-            className="w-full py-3 mt-1 rounded-xl bg-gray-900 text-white text-sm font-bold shadow-md hover:bg-black transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-            onClick={() => {
-              const finalCustomization = isDrink 
-                ? customization 
-                : { mood: "", size: customization.size, sugar: "", ice: "" };
-              
-              onAdd(product, finalCustomization);
-            }}
-          >
-            <Plus size={16} /> Add Item
-          </button>
+        <div className="mt-auto flex items-center justify-between pt-2">
+           <p className="text-lg font-black text-gray-900">
+             <sup className="text-xs font-semibold text-gray-500 mr-0.5">$</sup>
+             {product.price.toFixed(2)}
+           </p>
+           <button className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center group-hover:bg-gray-900 group-hover:text-white transition-colors">
+             <Plus size={16} />
+           </button>
         </div>
       </div>
     </div>
@@ -3420,7 +3487,13 @@ export function BillingPanel({
                 </div>
                 <div className="flex-1 min-w-0 pt-0.5">
                   <p className="text-sm font-bold text-gray-900 leading-tight truncate pr-4">{item.name}</p>
-                  <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">{item.customization.size}{item.customization.mood && `, ${item.customization.mood}`}</p>
+                  <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                    {item.customization.size}
+                    {item.customization.mood && `, ${item.customization.mood}`}
+                    {item.customization.sugar && `, ${item.customization.sugar}`}
+                    {item.customization.ice && `, ${item.customization.ice}`}
+                  </p>
+                  {item.notes && <p className="text-[10px] text-gray-500 italic mt-0.5 w-full truncate">Note: {item.notes}</p>}
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg">
                       <button className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium" onClick={() => onQtyChange(item.id, -1)}>−</button>
