@@ -77,7 +77,7 @@ export default async function AdminPage() {
           where: { OR: [{ id: shop.plan }, { slug: shop.plan.toLowerCase() }] }
         }).catch(() => null)
       : Promise.resolve(null),
-    prisma.order.findMany({
+    (prisma as any).order.findMany({
       where: { shopId },
       orderBy: { createdAt: 'desc' },
       take: 50,
