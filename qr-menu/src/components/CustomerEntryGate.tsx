@@ -1,22 +1,29 @@
-"use client";
+// src/components/CustomerEntryGate.tsx
+'use client';
 
-import React, { useState } from "react";
-import { requestStaffAssistance } from "@/lib/staff-actions";
+import { useState, useEffect } from 'react';
+import { Store, ShoppingBag, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import Icon from '@/components/ui/AppIcon';
 
-type ViewState = "OPTIONS" | "CONFIRM_CALL" | "LOADING" | "SUCCESS";
-
-interface TableContext {
-  isValid: boolean;
-  tableId: string | null;
-  tableLabel: string | null;
-}
-
-interface CustomerEntryGateProps {
-  shopId: string;
-  shopSlug: string;
+export interface CustomerEntryGateProps {
+  // Props expected by your page.tsx
+  shopId?: string;
+  shopSlug?: string;
   shopName: string;
-  tableContext: TableContext;
-  isStaffCallActive?: boolean; 
+  tableContext?: { 
+    isValid: boolean; 
+    tableId: string | null; 
+    tableLabel: string | null; 
+  };
+  isStaffCallActive?: boolean;
+
+  // Optional styling and function props
+  logoUrl?: string | null;
+  themeColor?: string;
+  onEnter?: (type: 'menu' | 'table' | 'takeaway') => void;
+  callStaffEnabled?: boolean;
+  orderFromTableEnabled?: boolean;
+  takeawayEnabled?: boolean;
 }
 
 export default function CustomerEntryGate({
@@ -24,187 +31,192 @@ export default function CustomerEntryGate({
   shopSlug,
   shopName,
   tableContext,
-  isStaffCallActive = false,
+  isStaffCallActive,
+  logoUrl,
+  themeColor = '#000000',
+  onEnter,
+  callStaffEnabled,
+  orderFromTableEnabled,
+  takeawayEnabled,
 }: CustomerEntryGateProps) {
-  const [isOpen, setIsOpen] = useState(true);
-  const [view, setView] = useState<ViewState>("OPTIONS");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
+  const [tableNumber, setTableNumber] = useState(tableContext?.tableLabel || '');
+  const [error, setError] = useState(false);
+  const [mode, setMode] = useState<'select' | 'table_input'>('select');
 
-  if (!isOpen) return null;
+  // Determine available options safely using fallbacks to the new props
+  const showDineIn = callStaffEnabled ?? isStaffCallActive ?? true;
+  const showTakeaway = takeawayEnabled ?? true;
+  
+  // If neither Dine In nor Takeaway is enabled, the only option is View Menu.
+  const onlyViewMenuAvailable = !showDineIn && !showTakeaway;
 
-  const handleSeeMenu = () => setIsOpen(false);
-  const handleCallStaff = () => { setErrorMsg(null); setView("CONFIRM_CALL"); };
-  const handleBackToOptions = () => { setErrorMsg(null); setView("OPTIONS"); };
-
-  const handleNotifyStaff = async () => {
-    if (!tableContext.tableId) return;
-    
-    setView("LOADING");
-    setErrorMsg(null);
-
-    const res = await requestStaffAssistance(
-      shopId,
-      shopSlug,
-      shopName,
-      tableContext.tableId
-    );
-
-    if (res.success) {
-      setView("SUCCESS");
-    } else {
-      setErrorMsg(res.message || "Something went wrong.");
-      setView("CONFIRM_CALL");
+  // Helper to handle closing the gate whether controlled by parent or locally
+  const closeGate = (type: 'menu' | 'table' | 'takeaway') => {
+    setIsVisible(false);
+    if (typeof onEnter === 'function') {
+      onEnter(type);
     }
   };
 
-  const getInitials = (name: string) => name.charAt(0).toUpperCase();
+  useEffect(() => {
+    // If they scanned a specific table QR code, auto-bypass!
+    if (tableContext?.isValid && tableContext.tableLabel) {
+      sessionStorage.setItem('scandine_table', tableContext.tableLabel);
+      closeGate('table');
+    }
+    // If only "View Menu" is allowed by the plan, auto-bypass!
+    else if (onlyViewMenuAvailable) {
+      closeGate('menu');
+    }
+  }, [onlyViewMenuAvailable, tableContext]);
+
+  // Hide the component if it has auto-bypassed or been closed
+  if (!isVisible || onlyViewMenuAvailable || tableContext?.isValid) {
+    return null; 
+  }
+
+  const handleDineInClick = () => {
+    setMode('table_input');
+  };
+
+  const handleTableSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tableNumber.trim()) {
+      setError(true);
+      return;
+    }
+    sessionStorage.setItem('scandine_table', tableNumber.trim());
+    closeGate('table');
+  };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 sm:p-6">
-      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
         
-        <div className="pt-8 pb-4 px-6 flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-gray-900 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-sm">
-            {getInitials(shopName)}
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{shopName}</h2>
-          <p className="text-gray-500 text-sm mt-1.5 font-medium">
+        {/* Header */}
+        <div 
+          className="relative px-6 py-8 text-center flex flex-col items-center justify-center overflow-hidden"
+          style={{ backgroundColor: themeColor }}
+        >
+          {logoUrl ? (
+            <div className="w-20 h-20 bg-white p-1 rounded-full shadow-xl relative z-10 mb-4">
+              <img src={logoUrl} alt={shopName} className="w-full h-full object-cover rounded-full" />
+            </div>
+          ) : (
+            <div className="w-20 h-20 bg-white/20 backdrop-blur-md text-white rounded-full shadow-xl relative z-10 mb-4 flex items-center justify-center border border-white/30">
+              <span className="font-bold text-2xl">{shopName.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
+          
+          <h1 className="text-white text-2xl font-black tracking-tight relative z-10 drop-shadow-sm">
+            {shopName}
+          </h1>
+          <p className="text-white/80 text-sm font-medium relative z-10 mt-1">
             Welcome! How can we help you today?
           </p>
-
-          {tableContext.isValid && view === "OPTIONS" && (
-            <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-full border border-green-100">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-              </svg>
-              Table {tableContext.tableLabel} detected
-            </div>
-          )}
         </div>
 
-        <div className="px-6 pb-8 pt-2">
-          
-          {view === "OPTIONS" && (
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={handleSeeMenu}
-                className="group relative flex items-center justify-between p-4 rounded-2xl bg-black text-left transition-transform active:scale-[0.98] shadow-md"
-              >
-                <div>
-                  <span className="block font-bold text-white text-lg">See Menu</span>
-                  <span className="block text-gray-400 text-sm mt-0.5">Browse items and place your order</span>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
-
-              {isStaffCallActive && (
-                <>
-                  <button
-                    onClick={handleCallStaff}
-                    disabled={!tableContext.isValid}
-                    className={`group relative flex items-center justify-between p-4 rounded-2xl border-2 text-left transition-all active:scale-[0.98] ${
-                      tableContext.isValid 
-                        ? 'border-gray-200 bg-white hover:border-gray-900 hover:bg-gray-50 cursor-pointer' 
-                        : 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
-                    }`}
-                  >
-                    <div>
-                      <span className={`block font-bold text-lg ${tableContext.isValid ? 'text-gray-900' : 'text-gray-500'}`}>
-                        Call Staff
-                      </span>
-                      <span className="block text-gray-500 text-sm mt-0.5">Request assistance at your table</span>
-                    </div>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tableContext.isValid ? 'bg-gray-100 text-gray-900' : 'bg-gray-200 text-gray-400'}`}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                      </svg>
-                    </div>
-                  </button>
-
-                  {!tableContext.isValid && (
-                    <div className="mt-2 p-3.5 rounded-2xl bg-amber-50 border border-amber-100 flex gap-3 text-left">
-                      <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="text-sm text-amber-800 leading-snug">
-                        <span className="font-semibold block mb-0.5">Table not detected</span>
-                        Please scan the QR code at your table to request staff assistance.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {view === "CONFIRM_CALL" && (
-            <div className="flex flex-col gap-3">
-              <div className="text-center mb-4 px-2">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                </div>
-                <p className="text-gray-900 font-bold text-lg">Request Assistance?</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  Our staff will be notified to come directly to <span className="font-semibold text-gray-900">Table {tableContext.tableLabel}</span>.
-                </p>
-              </div>
-
-              {errorMsg && (
-                <div className="p-3 mb-2 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600 text-center font-medium animate-in fade-in">
-                  {errorMsg}
-                </div>
-              )}
-
-              <button
-                onClick={handleNotifyStaff}
-                className="w-full py-3.5 px-4 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-transform active:scale-[0.98]"
-              >
-                Yes, Notify Staff
-              </button>
-              <button
-                onClick={handleBackToOptions}
-                className="w-full py-3.5 px-4 bg-gray-50 text-gray-600 rounded-xl font-bold hover:bg-gray-100 transition-transform active:scale-[0.98]"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {view === "LOADING" && (
-            <div className="flex flex-col items-center justify-center py-8">
-              <div className="w-10 h-10 border-4 border-gray-100 border-t-black rounded-full animate-spin mb-5"></div>
-              <p className="text-gray-900 font-semibold">Notifying staff...</p>
-              <p className="text-sm text-gray-500 mt-1">Please hold on a second.</p>
-            </div>
-          )}
-
-          {view === "SUCCESS" && (
-            <div className="flex flex-col gap-4 text-center py-2 animate-in zoom-in-95 duration-300">
-              <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-gray-900 font-bold text-xl">Staff Notified!</p>
-                <p className="text-sm text-gray-500 mt-2 px-4">
-                  Someone will be with you at Table {tableContext.tableLabel} shortly.
-                </p>
-              </div>
+        {/* Content */}
+        <div className="p-6 bg-gray-50">
+          {mode === 'select' ? (
+            <div className="space-y-3">
               
+              {/* Option: Dine In */}
+              {showDineIn && (
+                <button
+                  onClick={handleDineInClick}
+                  className="w-full bg-white border border-gray-200 p-4 rounded-2xl flex items-center gap-4 hover:border-gray-900 hover:shadow-md transition-all active:scale-[0.98] group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <Store className="w-6 h-6" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-bold text-gray-900">Dine In</h3>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">Order to table & call staff</p>
+                  </div>
+                </button>
+              )}
+
+              {/* Option: Takeaway */}
+              {showTakeaway && (
+                <button
+                  onClick={() => {
+                     sessionStorage.removeItem('scandine_table');
+                     closeGate('takeaway');
+                  }}
+                  className="w-full bg-white border border-gray-200 p-4 rounded-2xl flex items-center gap-4 hover:border-gray-900 hover:shadow-md transition-all active:scale-[0.98] group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-green-50 text-green-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-bold text-gray-900">Takeaway</h3>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">Order for pick up</p>
+                  </div>
+                </button>
+              )}
+
+              {/* Option: View Menu Only */}
               <button
-                onClick={handleSeeMenu}
-                className="w-full mt-4 py-3.5 px-4 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-transform active:scale-[0.98]"
+                onClick={() => {
+                  sessionStorage.removeItem('scandine_table');
+                  closeGate('menu');
+                }}
+                className="w-full bg-black text-white p-4 rounded-2xl flex items-center gap-4 hover:bg-gray-800 hover:shadow-md transition-all active:scale-[0.98] group"
               >
-                Continue to Menu
+                <div className="flex-1 text-left pl-2">
+                  <h3 className="font-bold text-lg">See Menu</h3>
+                  <p className="text-xs text-gray-300 font-medium mt-0.5">Browse items and view prices</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                  <ChevronRight className="w-5 h-5" />
+                </div>
               </button>
+
             </div>
+          ) : (
+            /* Table Input Mode */
+            <form onSubmit={handleTableSubmit} className="animate-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <button 
+                  type="button" 
+                  onClick={() => setMode('select')}
+                  className="text-gray-400 hover:text-gray-900 flex items-center gap-1 text-sm font-bold transition-colors"
+                >
+                  <ChevronLeft size={16} /> Back
+                </button>
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Table Setup</span>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                <label className="block text-sm font-bold text-gray-900 mb-2">
+                  What is your table number?
+                </label>
+                <div className="relative">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    value={tableNumber}
+                    onChange={(e) => {
+                      setTableNumber(e.target.value);
+                      setError(false);
+                    }}
+                    placeholder="e.g. 5, A12, Outside 2"
+                    className={`w-full pl-11 pr-4 py-3.5 bg-gray-50 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-900'} rounded-xl outline-none focus:ring-2 focus:bg-white transition-all text-gray-900 font-bold`}
+                    autoFocus
+                  />
+                </div>
+                {error && <p className="text-xs text-red-500 font-bold mt-2">Please enter a table number to continue.</p>}
+                
+                <button
+                  type="submit"
+                  className="w-full mt-4 bg-gray-900 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  Confirm Table <ChevronRight size={16} />
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </div>

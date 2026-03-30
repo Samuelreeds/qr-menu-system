@@ -214,8 +214,8 @@ export default function AdminDashboard({
   callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false,
   featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = []
 }: AdminDashboardProps) {
-  // SET DEFAULT TAB TO POS
-  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'orders' | 'settings' | 'pos'>('pos');
+  // SET DEFAULT TAB: Default to POS if available, otherwise safely default to menu
+  const [activeTab, setActiveTab] = useState<'menu' | 'categories' | 'tables' | 'orders' | 'settings' | 'pos'>(featPos ? 'pos' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -1042,7 +1042,11 @@ export default function AdminDashboard({
                 <button onClick={() => handleTabClick('orders')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'orders' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><ClipboardList size={20}/> Orders</button>
               </>
             )}
-            <button onClick={() => handleTabClick('tables')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'tables' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><QrCode size={20}/> Tables & QR</button>
+            
+            {/* HIDE TABLES & QR FOR FREE PLANS */}
+            {!isFreePlan && (
+               <button onClick={() => handleTabClick('tables')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'tables' ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98] transition-all'}`}><QrCode size={20}/> Tables & QR</button>
+            )}
 
             {/* ADMIN PRIORITIES AT BOTTOM */}
             {isAdmin && (
@@ -1118,6 +1122,8 @@ export default function AdminDashboard({
                >
                  <ExternalLink size={16} /> View Live Menu
                </a>
+               
+               {/* FREE USERS ALSO NEED TO GET THEIR QR CODE */}
                <button onClick={() => setIsQrModalOpen(true)} className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3.5 sm:py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all shadow-sm active:scale-95">
                  <QrCode size={16} className="text-gray-500"/> Get Shop QR
                </button>
@@ -1472,7 +1478,7 @@ export default function AdminDashboard({
         )}
 
         {/* --- TABLES & QR TAB --- */}
-        {activeTab === 'tables' && (
+        {activeTab === 'tables' && !isFreePlan && (
            <div className="animate-in fade-in duration-300 pb-12 print:hidden">
              <TableManager shopId={shopId} shopSlug={shopSlug} />
            </div>
@@ -2653,7 +2659,7 @@ export default function AdminDashboard({
                           onChange={(e) => setCatIsDrink(e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
+                        <div className="w-11 h-6 bg-white border border-gray-200 rounded-full peer peer-checked:bg-blue-500 peer-checked:border-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:bg-white peer-checked:after:border-white shadow-sm"></div>
                       </label>
                     </div>
                   </div>
@@ -2668,18 +2674,15 @@ export default function AdminDashboard({
     </div>
   );
 }
-
-// ─── INTERNAL COMPONENTS ───────────────────────────────────────────────────
+// ─── INTERNAL COMPONENTS (PASTE AT THE VERY BOTTOM) ───────────────────────────────────────────────────
 
 export function OrderHistoryCard({ order }: { order: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Summarize items for the collapsed view
   const itemSummary = order.items?.map((i: any) => `${i.name} ×${i.quantity}`).join(', ') || 'No items';
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
-      {/* Collapsed View (Always Visible Header) */}
       <div 
         className="p-4 flex items-center justify-between cursor-pointer active:bg-gray-50/50"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -2717,12 +2720,9 @@ export function OrderHistoryCard({ order }: { order: any }) {
         </div>
       </div>
 
-      {/* Expanded View */}
       {isExpanded && (
         <div className="border-t border-gray-50 bg-gray-50/30 p-4 sm:p-6 animate-in slide-in-from-top-2 fade-in duration-200">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            
-            {/* Left: Items List */}
             <div>
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4 px-1">Items</p>
               <div className="space-y-3">
@@ -2751,7 +2751,6 @@ export function OrderHistoryCard({ order }: { order: any }) {
               </div>
             </div>
 
-            {/* Right: Summary Block */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4">Summary</p>
               <div className="space-y-2.5 mb-4">
@@ -2791,7 +2790,6 @@ export function OrderHistoryCard({ order }: { order: any }) {
                 </div>
               </div>
             </div>
-            
           </div>
         </div>
       )}
@@ -2815,7 +2813,6 @@ export function PosCustomizationModal({
     ice: "50%",
   });
   const [notes, setNotes] = useState("");
-
   const isDrink = product.isDrink;
 
   return (
@@ -3127,7 +3124,6 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
       {/* LEFT PANE: ALWAYS SHOW MENU */}
       <div className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
-        {/* Header & Search */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0">
           <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
             Select Products
@@ -3144,7 +3140,6 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
           </div>
         </div>
 
-        {/* Categories */}
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0 no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {categories.map((cat) => (
             <button
@@ -3157,7 +3152,6 @@ export function AdminPosSection({ dashboardCategories, dashboardProducts, shopId
           ))}
         </div>
 
-        {/* Product Grid Area (Scrollable) */}
         <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden pb-12" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Poppins, Chenla, Noto_Sans_TC } from "next/font/google"; // 1. Added Noto_Sans_TC
+import { Poppins, Chenla, Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { LanguageProvider } from "@/context/LanguageContext";
@@ -16,11 +16,10 @@ const chenla = Chenla({
   variable: "--font-chenla",
 });
 
-// 2. Configure Noto Sans TC
 const notoTc = Noto_Sans_TC({
   weight: ["400", "500", "700"],
   variable: "--font-noto-tc",
-  preload: false, // Required for large Chinese fonts in Next.js
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -34,9 +33,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      {/* 3. Add the new variable to the className */}
-      <body className={`${poppins.variable} ${chenla.variable} ${notoTc.variable} antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${poppins.variable} ${chenla.variable} ${notoTc.variable} antialiased`} suppressHydrationWarning>
         <LanguageProvider>
           <CartProvider>
             {children}
