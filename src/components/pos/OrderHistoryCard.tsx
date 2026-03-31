@@ -1,3 +1,4 @@
+// src/components/pos/OrderHistoryCard.tsx
 import { useState } from 'react';
 import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard } from 'lucide-react';
 
