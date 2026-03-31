@@ -44,6 +44,10 @@ export default async function AdminPage() {
     );
   }
 
+  const twoDaysAgo = new Date();
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  twoDaysAgo.setHours(0, 0, 0, 0);
+
   const [
     planState,
     planLimits,
@@ -78,9 +82,11 @@ export default async function AdminPage() {
         }).catch(() => null)
       : Promise.resolve(null),
     prisma.order.findMany({
-      where: { shopId },
+      where: { 
+        shopId,
+        createdAt: { gte: twoDaysAgo } 
+      },
       orderBy: { createdAt: 'desc' },
-      take: 50,
       include: { items: true }
     })
   ]);
@@ -98,7 +104,7 @@ export default async function AdminPage() {
     name_zh: c.name_zh,
     sortOrder: c.sortOrder,
     discount: canUseCampaign ? c.discount : 0,
-    isDrink: (c as any).isDrink || false // MUST HAVE THIS TO WORK
+    isDrink: (c as any).isDrink || false 
   }));
 
   const formattedProducts = rawProducts.map((p) => ({

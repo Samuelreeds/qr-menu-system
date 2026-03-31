@@ -85,12 +85,16 @@ model Shop {
   createdAt DateTime  @default(now())
   deletedAt DateTime?
 
-  shopUsers  ShopUser[]
-  categories Category[]
-  products   Product[]
-  settings   ShopSettings?
-  banners    Banner[]
-  orders     Order[]
+  shopUsers   ShopUser[]
+  categories  Category[]
+  products    Product[]
+  settings    ShopSettings?
+  banners     Banner[]
+  orders      Order[]
+  
+  // INVENTORY RELATIONS
+  ingredients Ingredient[]
+  stockLogs   StockLog[]
 }
 
 model ShopUser {
@@ -125,7 +129,7 @@ model Category {
   name_zh   String?
   sortOrder Int     @default(0)
   discount  Float   @default(0)
-  isDrink   Boolean @default(false) // <-- ADDED THIS LINE
+  isDrink   Boolean @default(false)
 
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -322,4 +326,44 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+// --- INVENTORY MODELS ---
+model Ingredient {
+  id            String     @id @default(cuid())
+  shopId        String
+  shop          Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  name          String
+  unit          String     // e.g., "kg", "liters", "pcs"
+  current       Float      @default(0)
+  max           Float      @default(100)
+  lowThreshold  Float      @default(20) // percentage
+  
+  logs          StockLog[]
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([shopId])
+}
+
+model StockLog {
+  id             String     @id @default(cuid())
+  shopId         String
+  shop           Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  ingredientId   String
+  ingredient     Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  
+  change         Float
+  reason         String     // "Restock", "Sold", "Waste", "Manual"
+  staffName      String
+  previousStock  Float
+  newStock       Float
+  
+  timestamp      DateTime   @default(now())
+
+  @@index([shopId])
+  @@index([ingredientId])
 }

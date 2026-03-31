@@ -271,7 +271,7 @@ export async function createCategory(formData: FormData) {
   const name_kh = formData.get('name_kh') as string || null;
   const name_zh = formData.get('name_zh') as string || null;
   const discount = parseFloat(formData.get('discount') as string) || 0;
-  const isDrink = formData.get('isDrink') === 'true'; // <--- NEW
+  const isDrink = formData.get('isDrink') === 'true'; 
 
   const lastCategory = await prisma.category.findFirst({ 
     where: { shopId },
@@ -292,7 +292,7 @@ export async function updateCategory(formData: FormData) {
   const name_zh = formData.get('name_zh') as string || null;
   const sortOrder = parseInt(formData.get('sortOrder') as string);
   const discount = parseFloat(formData.get('discount') as string) || 0;
-  const isDrink = formData.get('isDrink') === 'true'; // <--- NEW
+  const isDrink = formData.get('isDrink') === 'true'; 
   
   await prisma.category.update({ 
     where: { id }, 
@@ -426,8 +426,6 @@ export async function updateShopBranding(formData: FormData) {
 
   const dataToUpdate: any = {};
   
-  // FIX: Theme color and header design are accessible to all plans. 
-  // We unconditionally save them because the Admin UI handles the plan enforcement visually.
   const headerDesign = formData.get('headerDesign') as string;
   if (headerDesign) dataToUpdate.headerDesign = headerDesign;
   
@@ -1470,5 +1468,86 @@ export async function createPosOrder(data: {
   } catch (error: any) {
     console.error("POS_ORDER_ERROR", error);
     return { error: error.message || "Failed to save order to database." };
+  }
+}
+
+// --- INVENTORY ACTIONS ---
+
+export async function getInventory() {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { ingredients: [], logs: [] };
+
+  const ingredients = await prisma.ingredient.findMany({
+    where: { shopId },
+    orderBy: { name: 'asc' }
+  });
+
+  const logs = await prisma.stockLog.findMany({
+    where: { shopId },
+    orderBy: { timestamp: 'desc' },
+    take: 100
+  });
+
+  return { ingredients, logs };
+}
+
+export async function adjustStockAction(ingredientId: string, change: number, reason: string, staffName: string) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "Unauthorized" };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const ingredient = await tx.ingredient.findUnique({ where: { id: ingredientId } });
+      if (!ingredient) throw new Error("Ingredient not found");
+
+      // Calculate new stock (prevent going below 0)
+      const newStock = Math.max(0, ingredient.current + change);
+
+      await tx.ingredient.update({
+        where: { id: ingredientId },
+        data: { current: newStock }
+      });
+
+      await tx.stockLog.create({
+        data: {
+          shopId,
+          ingredientId,
+          change,
+          reason,
+          staffName,
+          previousStock: ingredient.current,
+          newStock
+        }
+      });
+    });
+
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    console.error("Stock adjustment failed:", error);
+    return { success: false, error: "Failed to adjust stock" };
+  }
+}
+
+// Create a new ingredient manually via code/UI (Optional)
+export async function createIngredient(data: { name: string, unit: string, max: number, lowThreshold: number }) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { error: "Unauthorized" };
+
+  try {
+    const ingredient = await prisma.ingredient.create({
+      data: {
+        shopId,
+        name: data.name,
+        unit: data.unit,
+        current: data.max, // starts full
+        max: data.max,
+        lowThreshold: data.lowThreshold
+      }
+    });
+    revalidatePath('/admin');
+    return { success: true, ingredient };
+  } catch (e) {
+    return { success: false, error: "Failed to create ingredient" };
   }
 }
