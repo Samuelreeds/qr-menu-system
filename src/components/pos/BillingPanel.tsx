@@ -1,0 +1,107 @@
+// src/components/pos/BillingPanel.tsx
+'use client';
+
+import { useState } from 'react';
+import { ShoppingCart, X, ChevronLeft, ChevronDown, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { useToast } from "@/context/ToastContext";
+import { BillingItem, OrderType } from './AdminPosSection';
+
+const TAX_RATE = 0.1;
+
+export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
+  const [deliveryAgent, setDeliveryAgent] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
+  const [isTaxEnabled, setIsTaxEnabled] = useState(true);
+
+  const { addSuccessToast, addErrorToast } = useToast();
+
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const discountNum = parseFloat(discountValue) || 0;
+  const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
+  const afterDiscount = subtotal - discountAmount;
+  const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
+  const total = afterDiscount + tax;
+
+  const handlePrint = () => { if (items.length === 0) return; onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled); };
+
+  const cashierName = userEmail ? userEmail.split('@')[0] : 'Unknown';
+  const formattedName = cashierName.charAt(0).toUpperCase() + cashierName.slice(1);
+
+  return (
+    <>
+      <div className="p-4 border-b border-gray-100 shrink-0 bg-white z-20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {onCloseMobile && <button onClick={onCloseMobile} className="md:hidden mr-1 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors active:scale-95"><ChevronLeft size={20} className="text-gray-700" /></button>}
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center font-bold text-gray-500 text-sm">{formattedName.substring(0, 2).toUpperCase()}</div>
+            <div><p className="text-[10px] text-gray-500 font-black uppercase tracking-wider">{userRole || 'Cashier'}</p><p className="text-sm font-extrabold text-gray-900">{formattedName}</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 pt-4 pb-2 border-b border-gray-100 bg-white shrink-0 z-10 shadow-sm relative">
+        <div className="flex bg-gray-50 p-1 rounded-[14px] mb-4 border border-gray-100">
+          <button onClick={() => setOrderType('table')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'table' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Table</button>
+          <button onClick={() => setOrderType('takeaway')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'takeaway' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Takeaway</button>
+          <button onClick={() => setOrderType('delivery')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'delivery' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Delivery</button>
+        </div>
+
+        {orderType === 'table' && (
+           <div className="mb-2 relative">
+             <button onClick={() => setIsTableModalOpen(true)} className={`w-full py-2.5 rounded-xl border flex items-center justify-between px-4 transition-colors ${tableNumber ? 'border-gray-900 bg-gray-900 text-white shadow-md' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><span className="text-sm font-bold">{tableNumber ? tableNumber : 'Select Table'}</span><ChevronDown size={16} className={tableNumber ? 'text-gray-300' : 'text-gray-400'} /></button>
+             {isTableModalOpen && (
+               <><div className="fixed inset-0 bg-transparent z-[100]" onClick={() => setIsTableModalOpen(false)}></div><div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-200 p-3 z-[110] max-h-[300px] overflow-y-auto"><div className="grid grid-cols-4 gap-2">{Array.from({ length: 40 }, (_, i) => i + 1).map((num) => { const tVal = `Table ${num}`; const isSel = tableNumber === tVal; return (<button key={num} onClick={() => { setTableNumber(tVal); setIsTableModalOpen(false); }} className={`py-2 rounded-xl flex items-center justify-center font-bold text-sm transition-all ${isSel ? 'bg-[#111827] text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-200'}`}>{num}</button>); })}</div></div></>
+             )}
+           </div>
+        )}
+        {orderType === 'delivery' && (
+           <select value={deliveryAgent} onChange={(e) => setDeliveryAgent(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-xs font-semibold outline-none border border-gray-200 bg-white focus:border-gray-900 transition-all text-gray-900 cursor-pointer mb-2"><option value="" className="text-gray-500">— Select Agent —</option>{["Grab", "Wownow", "Food Panda", "E-get"].map((agent) => <option key={agent} value={agent}>{agent}</option>)}</select>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden p-4 bg-gray-50/50" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex items-center justify-between mb-4"><h3 className="font-extrabold text-gray-900 text-xs uppercase tracking-widest">Current Order</h3><span className="bg-gray-200 text-gray-700 text-xs font-black px-2 py-0.5 rounded-full">{items.length}</span></div>
+        {items.length === 0 ? (
+          <div className="text-center py-20 flex flex-col items-center opacity-70"><ShoppingCart size={48} strokeWidth={1} className="text-gray-300 mb-4" /><p className="text-sm font-bold text-gray-900">Cart is empty</p><p className="text-xs text-gray-500 mt-1">Tap items on the left to add</p></div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 p-3 bg-white rounded-[16px] border border-gray-100 shadow-sm relative group">
+                <button onClick={() => onRemove(item.id)} className="absolute -top-2 -right-2 w-6 h-6 bg-white hover:bg-gray-100 text-gray-400 hover:text-red-500 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all border border-gray-200 shadow-sm"><X size={12} strokeWidth={3} /></button>
+                <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100">{item.img ? <img src={item.img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon size={16} className="text-gray-300" /></div>}</div>
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <p className="text-sm font-extrabold text-gray-900 leading-tight truncate pr-4">{item.name}</p>
+                  <p className="text-[10px] text-gray-400 font-bold truncate mt-0.5">Size {item.customization.size}</p>
+                  <div className="flex items-center justify-between mt-2"><span className="font-black text-sm text-gray-900">${(item.price * item.qty).toFixed(2)}</span><div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-7"><button className="w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-l-lg" onClick={() => onQtyChange(item.id, -1)}>−</button><span className="w-6 text-center text-xs font-bold text-gray-900 bg-white border-x border-gray-200 h-full flex items-center justify-center">{item.qty}</span><button className="w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-r-lg" onClick={() => onQtyChange(item.id, 1)}>+</button></div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 bg-white shrink-0 z-20">
+        <div className="p-4 space-y-3 border-b border-gray-100">
+          <div className="flex justify-between text-xs"><span className="text-gray-500 font-bold">Subtotal</span><span className="font-black text-gray-900">${subtotal.toFixed(2)}</span></div>
+          <div className="flex justify-between items-center text-xs">
+            <div className="flex items-center gap-2"><span className="text-gray-500 font-bold">Tax (10%)</span><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isTaxEnabled} onChange={(e) => setIsTaxEnabled(e.target.checked)} className="sr-only peer" /><div className="w-7 h-4 bg-gray-300 rounded-full peer peer-checked:bg-[#111827] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div></label></div>
+            <span className={`font-black ${isTaxEnabled ? 'text-gray-900' : 'text-gray-300 line-through'}`}>${(afterDiscount * TAX_RATE).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between pt-2 border-t border-gray-100 mt-2 items-end"><span className="font-black text-gray-900 text-sm">Total</span><span className="font-black text-gray-900 text-2xl leading-none">${total.toFixed(2)}</span></div>
+        </div>
+        <div className="p-4 pt-4 bg-gray-50/50">
+          <div className="flex gap-2 mb-3">
+            <button className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-[14px] font-bold text-xs transition-all active:scale-[0.98] border-2 ${paymentMethod === "cash" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} onClick={() => setPaymentMethod("cash")}><span className="text-lg leading-none">💵</span><span>Cash</span></button>
+            <button className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-[14px] font-bold text-xs transition-all active:scale-[0.98] border-2 ${paymentMethod === "khqr" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} onClick={() => setPaymentMethod("khqr")}><span className="text-lg leading-none">📲</span><span>KHQR</span></button>
+          </div>
+          <button className={`w-full py-4 rounded-[14px] font-bold text-[15px] transition-all flex items-center justify-center gap-2 ${items.length > 0 && !isSavingOrder ? 'bg-[#111827] text-white shadow-lg hover:bg-black active:scale-[0.98]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} onClick={handlePrint} disabled={items.length === 0 || isSavingOrder}>
+            {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}{items.length > 0 && !isSavingOrder ? `Place Order — $${total.toFixed(2)}` : isSavingOrder ? "Processing..." : "Select items to begin"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
