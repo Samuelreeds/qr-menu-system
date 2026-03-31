@@ -2,11 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Store, ShoppingBag, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
+import { Store, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 
 export interface CustomerEntryGateProps {
-  // Props expected by your page.tsx
   shopId?: string;
   shopSlug?: string;
   shopName: string;
@@ -16,19 +14,13 @@ export interface CustomerEntryGateProps {
     tableLabel: string | null; 
   };
   isStaffCallActive?: boolean;
-
-  // Optional styling and function props
   logoUrl?: string | null;
   themeColor?: string;
-  onEnter?: (type: 'menu' | 'table' | 'takeaway') => void;
+  onEnter?: (type: 'menu' | 'table') => void;
   callStaffEnabled?: boolean;
-  orderFromTableEnabled?: boolean;
-  takeawayEnabled?: boolean;
 }
 
 export default function CustomerEntryGate({
-  shopId,
-  shopSlug,
   shopName,
   tableContext,
   isStaffCallActive,
@@ -36,23 +28,20 @@ export default function CustomerEntryGate({
   themeColor = '#000000',
   onEnter,
   callStaffEnabled,
-  orderFromTableEnabled,
-  takeawayEnabled,
 }: CustomerEntryGateProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [tableNumber, setTableNumber] = useState(tableContext?.tableLabel || '');
   const [error, setError] = useState(false);
   const [mode, setMode] = useState<'select' | 'table_input'>('select');
 
-  // Determine available options safely using fallbacks to the new props
+  // "Takeaway" has been removed completely.
+  // Dine In is available if the shop plan allows it.
   const showDineIn = callStaffEnabled ?? isStaffCallActive ?? true;
-  const showTakeaway = takeawayEnabled ?? true;
   
-  // If neither Dine In nor Takeaway is enabled, the only option is View Menu.
-  const onlyViewMenuAvailable = !showDineIn && !showTakeaway;
+  // If Dine In is disabled, only "See Menu" is left.
+  const onlyViewMenuAvailable = !showDineIn;
 
-  // Helper to handle closing the gate whether controlled by parent or locally
-  const closeGate = (type: 'menu' | 'table' | 'takeaway') => {
+  const closeGate = (type: 'menu' | 'table') => {
     setIsVisible(false);
     if (typeof onEnter === 'function') {
       onEnter(type);
@@ -60,25 +49,18 @@ export default function CustomerEntryGate({
   };
 
   useEffect(() => {
-    // If they scanned a specific table QR code, auto-bypass!
     if (tableContext?.isValid && tableContext.tableLabel) {
       sessionStorage.setItem('scandine_table', tableContext.tableLabel);
       closeGate('table');
-    }
-    // If only "View Menu" is allowed by the plan, auto-bypass!
-    else if (onlyViewMenuAvailable) {
+    } else if (onlyViewMenuAvailable) {
+      // Auto-skip the popup entirely if "See Menu" is the only option
       closeGate('menu');
     }
   }, [onlyViewMenuAvailable, tableContext]);
 
-  // Hide the component if it has auto-bypassed or been closed
   if (!isVisible || onlyViewMenuAvailable || tableContext?.isValid) {
     return null; 
   }
-
-  const handleDineInClick = () => {
-    setMode('table_input');
-  };
 
   const handleTableSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,11 +103,9 @@ export default function CustomerEntryGate({
         <div className="p-6 bg-gray-50">
           {mode === 'select' ? (
             <div className="space-y-3">
-              
-              {/* Option: Dine In */}
               {showDineIn && (
                 <button
-                  onClick={handleDineInClick}
+                  onClick={() => setMode('table_input')}
                   className="w-full bg-white border border-gray-200 p-4 rounded-2xl flex items-center gap-4 hover:border-gray-900 hover:shadow-md transition-all active:scale-[0.98] group"
                 >
                   <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -138,26 +118,6 @@ export default function CustomerEntryGate({
                 </button>
               )}
 
-              {/* Option: Takeaway */}
-              {showTakeaway && (
-                <button
-                  onClick={() => {
-                     sessionStorage.removeItem('scandine_table');
-                     closeGate('takeaway');
-                  }}
-                  className="w-full bg-white border border-gray-200 p-4 rounded-2xl flex items-center gap-4 hover:border-gray-900 hover:shadow-md transition-all active:scale-[0.98] group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-green-50 text-green-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                    <ShoppingBag className="w-6 h-6" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-bold text-gray-900">Takeaway</h3>
-                    <p className="text-xs text-gray-500 font-medium mt-0.5">Order for pick up</p>
-                  </div>
-                </button>
-              )}
-
-              {/* Option: View Menu Only */}
               <button
                 onClick={() => {
                   sessionStorage.removeItem('scandine_table');
@@ -173,10 +133,8 @@ export default function CustomerEntryGate({
                   <ChevronRight className="w-5 h-5" />
                 </div>
               </button>
-
             </div>
           ) : (
-            /* Table Input Mode */
             <form onSubmit={handleTableSubmit} className="animate-in slide-in-from-right-4 duration-300">
               <div className="flex items-center justify-between mb-4">
                 <button 
@@ -202,12 +160,12 @@ export default function CustomerEntryGate({
                       setTableNumber(e.target.value);
                       setError(false);
                     }}
-                    placeholder="e.g. 5, A12, Outside 2"
+                    placeholder="e.g. 5, A12, Outside"
                     className={`w-full pl-11 pr-4 py-3.5 bg-gray-50 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 focus:ring-gray-900'} rounded-xl outline-none focus:ring-2 focus:bg-white transition-all text-gray-900 font-bold`}
                     autoFocus
                   />
                 </div>
-                {error && <p className="text-xs text-red-500 font-bold mt-2">Please enter a table number to continue.</p>}
+                {error && <p className="text-xs text-red-500 font-bold mt-2">Please enter a table number.</p>}
                 
                 <button
                   type="submit"
