@@ -44,8 +44,8 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
 
       <div className="px-4 pt-4 pb-2 border-b border-gray-100 bg-white shrink-0 z-10 shadow-sm relative">
         <div className="flex bg-gray-50 p-1 rounded-[14px] mb-4 border border-gray-100">
+          <button onClick={() => setOrderType('walk-in')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'walk-in' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in</button>
           <button onClick={() => setOrderType('table')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'table' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Table</button>
-          <button onClick={() => setOrderType('takeaway')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'takeaway' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Takeaway</button>
           <button onClick={() => setOrderType('delivery')} className={`flex-1 py-1.5 text-xs font-bold rounded-[10px] transition-all ${orderType === 'delivery' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Delivery</button>
         </div>
 

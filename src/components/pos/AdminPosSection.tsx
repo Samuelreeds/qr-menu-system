@@ -20,7 +20,7 @@ export interface Product { id: string; name: string; name_kh?: string | null; na
 export interface ProductCustomization { mood: string; size: string; sugar: string; ice: string; }
 export interface BillingItem { id: string; productId: string; name: string; price: number; qty: number; notes: string; img: string; customization: ProductCustomization; }
 export interface PosProduct { id: string; name: string; description: string; price: number; category: string; img: string; isDrink?: boolean; }
-export type OrderType = "table" | "takeaway" | "delivery";
+export type OrderType = "walk-in" | "table" | "delivery";
 
 const TAX_RATE = 0.1;
 
@@ -79,7 +79,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
   const [billingItems, setBillingItems] = useState<BillingItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [orderType, setOrderType] = useState<OrderType>("table");
+  const [orderType, setOrderType] = useState<OrderType>("walk-in");
   const [tableNumber, setTableNumber] = useState("");
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -181,6 +181,17 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     }
   };
 
+  // ADDED: Special handler for reprinting historical orders
+  const handleReprintOrder = (orderToPrint: any) => {
+    setLatestOrder(orderToPrint);
+    // Give the DOM 300ms to render the receipt before telling the browser to print
+    setTimeout(() => {
+      window.print();
+      // Hide it again after printing
+      setTimeout(() => setLatestOrder(null), 1000);
+    }, 300);
+  };
+
   return (
     <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative">
       
@@ -188,14 +199,35 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       {latestOrder && (
         <>
           <style>{`
-            @media print {
-              @page { margin: 0; size: 80mm auto; }
-              body { background: white !important; margin: 0; padding: 0; }
-              main { padding: 0 !important; margin: 0 !important; overflow: visible !important; height: auto !important; }
-              aside, header, nav, .md\\:hidden { display: none !important; }
+          @media print {
+            @page { 
+              margin: 0 !important; 
+              padding: 0 !important;
             }
-          `}</style>
-          <div id="pos-receipt-print-area" className="hidden print:block absolute top-0 left-0 w-full bg-white z-[99999]">
+            html, body, #__next, main {
+              background: white !important;
+              height: max-content !important; 
+              min-height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+            }
+            /* Hide the dashboard completely */
+            aside, header, nav, #pos-left-pane, #pos-right-pane, #pos-mobile-fab, .md\\:hidden { 
+              display: none !important; 
+            }
+            /* Position receipt naturally */
+            #pos-receipt-print-area, #dashboard-receipt-print-area { 
+              display: block !important; 
+              position: relative !important; 
+              width: 57mm !important; 
+              margin: 0 auto !important; 
+              padding: 0 !important; 
+              page-break-after: always;
+            }
+          }
+        `}</style>
+          <div id="pos-receipt-print-area" className="hidden print:block bg-white z-[99999]">
              <PosReceipt order={latestOrder} shopName={shopName} />
           </div>
         </>
@@ -211,7 +243,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
       
       {/* LEFT PANE: ALWAYS SHOW MENU */}
-      <div className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
+      <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0">
           <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
@@ -276,7 +308,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
       {/* MOBILE VIEW CART FAB */}
       {!isMobileCartOpen && (
-        <div className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 print:hidden animate-in slide-in-from-bottom-10">
+        <div id="pos-mobile-fab" className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 print:hidden animate-in slide-in-from-bottom-10">
           <button 
             onClick={() => setIsMobileCartOpen(true)}
             className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all"
@@ -300,7 +332,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
 
       {/* RIGHT PANE: CART & ORDER CONFIG */}
-      <div className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
+      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
         <BillingPanel
           items={billingItems}
           onRemove={handleRemove}

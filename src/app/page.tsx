@@ -1,11 +1,36 @@
+'use client';
 import Link from 'next/link';
+import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { ensureDemoAccountExists } from '@/lib/actions';
 import { 
   Store, Utensils, ShieldCheck, ArrowRight, 
   Settings, Check, Zap, MessageCircle, Phone, 
-  Instagram, Facebook, Globe 
+  Instagram, Facebook, Globe, Sparkles, Loader2
 } from 'lucide-react';
 
 export default function HomePage() {
+  const router = useRouter();
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [isMenuLoading, setIsMenuLoading] = useState(false);
+
+  const handleDemoLogin = async () => {
+    setIsDemoLoading(true);
+    await ensureDemoAccountExists(); 
+    await signIn('credentials', {
+      email: 'demo@scandine.xyz', 
+      password: 'demo_password_123',
+      callbackUrl: '/admin',
+    });
+  };
+
+  const handleViewDemoMenu = async () => {
+    setIsMenuLoading(true);
+    await ensureDemoAccountExists();
+    router.push('/demo-cafe');
+  };
+
   const tiers = [
     {
       name: "Starter Pack",
@@ -60,7 +85,6 @@ export default function HomePage() {
         "Smart Categories",
         "2 QR menu themes",
         "Upload image menu / Token",
-        "AI Upload Image Menu",
         "Order from table",
         "Telegram staff alerts",
         "Multiple languages",
@@ -116,6 +140,35 @@ export default function HomePage() {
           The smartest way to engage your customers and grow your shop.
         </p>
 
+        {/* DEMO BUTTONS */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+          <Link href="/auth/register" className="bg-[#111827] text-white px-8 py-4 rounded-full font-bold hover:bg-black transition-all shadow-lg active:scale-95 text-lg flex items-center justify-center">
+            Get Started
+          </Link>
+          
+          <button 
+            onClick={handleDemoLogin}
+            disabled={isDemoLoading || isMenuLoading}
+            className="bg-white text-[#111827] border-2 border-gray-200 px-8 py-4 rounded-full font-bold hover:border-[#111827] transition-all flex items-center justify-center gap-2 active:scale-95 text-lg disabled:opacity-70 disabled:cursor-wait"
+          >
+            {isDemoLoading ? (
+              <Loader2 size={20} className="text-orange-500 animate-spin" />
+            ) : (
+              <Sparkles size={20} className="text-orange-500" />
+            )}
+            Live Demo
+          </button>
+        </div>
+        
+        <button 
+          onClick={handleViewDemoMenu}
+          disabled={isMenuLoading || isDemoLoading}
+          className="inline-flex items-center justify-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-600 underline transition-colors mb-8 sm:mb-12 disabled:opacity-70 disabled:cursor-wait"
+        >
+          {isMenuLoading && <Loader2 size={14} className="animate-spin" />}
+          Just want to see the menu? View Customer Preview
+        </button>
+
         {/* PRICING SECTION */}
         <section className="py-8 sm:py-12">
           <div className="text-center mb-10 sm:mb-16">
@@ -146,7 +199,6 @@ export default function HomePage() {
                     {tier.period && <span className="text-gray-400 font-bold text-xs sm:text-sm">{tier.period}</span>}
                   </div>
                   
-                  {/* Min height ensures alignment across cards regardless of subtext presence */}
                   <div className="min-h-[44px] flex flex-col justify-start">
                     {tier.yearlyPrice && (
                       <p className="text-orange-500 font-bold text-sm mb-1">{tier.yearlyPrice}</p>
@@ -157,7 +209,6 @@ export default function HomePage() {
                   </div>
                 </div>
                 
-                {/* Tighter spacing (space-y-2.5) to accommodate the larger feature list beautifully */}
                 <ul className="space-y-2.5 sm:space-y-3 mb-8 sm:mb-10 flex-1 text-left">
                   {tier.features.map((feature, fIdx) => (
                     <li key={fIdx} className="flex items-start gap-2.5 sm:gap-3 text-xs sm:text-sm font-bold text-gray-700">
@@ -192,7 +243,6 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 sm:gap-12 mb-10 sm:mb-12">
             
-            {/* Brand Column */}
             <div className="col-span-1 sm:col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <div className="bg-orange-500 p-1.5 rounded-lg">
@@ -205,7 +255,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Product Column */}
             <div>
               <h4 className="font-bold text-gray-900 mb-4 text-xs sm:text-sm">Product</h4>
               <ul className="space-y-2 text-xs sm:text-sm text-gray-500 font-medium">
@@ -215,7 +264,6 @@ export default function HomePage() {
               </ul>
             </div>
 
-            {/* Support Column */}
             <div>
               <h4 className="font-bold text-gray-900 mb-4 text-xs sm:text-sm">Support</h4>
               <ul className="space-y-2 text-xs sm:text-sm text-gray-500 font-medium">
@@ -225,7 +273,6 @@ export default function HomePage() {
               </ul>
             </div>
 
-            {/* Contact Column */}
             <div>
               <h4 className="font-bold text-gray-900 mb-4 text-xs sm:text-sm">Contact Us</h4>
               <ul className="space-y-3">
@@ -258,7 +305,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Bottom Bar */}
           <div className="border-t border-gray-200 pt-6 sm:pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
             <p className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-widest">
               © {new Date().getFullYear()} Scandine. All rights reserved.

@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import TableManager from "@/components/TableManager";
 import LocalizedInput from "@/components/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
@@ -27,6 +28,7 @@ import AdminPosSection from "./pos/AdminPosSection";
 import OrderHistoryCard from "./pos/OrderHistoryCard";
 import DashboardOverview from "./pos/DashboardOverview";
 import InventoryManager from "./InventoryManager";
+import PosReceipt from "@/components/PosReceipt"; 
 import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
 
@@ -39,14 +41,14 @@ export interface ShopSettings { name: string; name_kh?: string | null; nameDispl
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
-interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; }
+interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; }
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string };
 type OptimisticBannerAction = | { type: 'add'; payload: Banner } | { type: 'delete'; payload: string } | { type: 'set'; payload: Banner[] };
 interface PendingDelete { productId: string; productSnapshot: Product; name: string; actionFormData: FormData; timeoutId: NodeJS.Timeout; intervalId: NodeJS.Timeout; expiresAt: number; timeLeft: number; }
 
 const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
 
-export default function AdminDashboard({ shopId, categories, products, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [] }: AdminDashboardProps) {
+export default function AdminDashboard({ shopId, categories, products, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [], ingredients = [], stockLogs = [] }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos'>(featPos ? 'overview' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
@@ -54,9 +56,13 @@ export default function AdminDashboard({ shopId, categories, products, settings,
   const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
   const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); 
   const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); 
+  
+  const [receiptToPrint, setReceiptToPrint] = useState<any>(null); 
+
   const [paperSize, setPaperSize] = useState<'A4' | 'A5' | '10x15'>('A4');
   const [origin, setOrigin] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [orderFilter, setOrderFilter] = useState('All');
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
@@ -152,6 +158,15 @@ export default function AdminDashboard({ shopId, categories, products, settings,
   const getShopNamePreview = () => { if (previewDisplay === 'KH' && previewNameKh) return previewNameKh; if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`; return previewNameEn || 'Shop Name'; };
 
   const handleGeneratePDF = (format: 'portrait' | 'landscape') => { setPrintFormat(format); setTimeout(() => { window.print(); }, 500); };
+  
+  const handleReprintOrder = (order: any) => {
+    setReceiptToPrint(order);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setReceiptToPrint(null), 1000);
+    }, 300);
+  };
+
   const executeNav = (type: 'tab' | 'section', payload: any) => { if (type === 'tab') { setActiveTab(payload); setIsMobileMenuOpen(false); } else if (type === 'section') { setOpenSection(openSection === payload ? null : payload); } };
   const handleTabClick = (tab: any) => { if (activeTab === tab) return; if (activeTab === 'settings' && openSection && dirtySections[openSection]) { setPendingNav({ type: 'tab', payload: tab, source: openSection }); } else { executeNav('tab', tab); } };
   const handleSectionClick = (section: string) => { if (openSection && dirtySections[openSection]) { setPendingNav({ type: 'section', payload: openSection === section ? null : section, source: openSection }); } else { executeNav('section', section); } };
@@ -207,6 +222,44 @@ export default function AdminDashboard({ shopId, categories, products, settings,
   return (
     <div className={`flex min-h-screen bg-[#F9FAFB] font-sans text-gray-800 relative`} style={{ '--theme-color': settings?.themeColor || '#000000' } as React.CSSProperties}>
       
+      {/* INVISIBLE RECEIPT FOR HISTORICAL PRINTING */}
+      {receiptToPrint && (
+        <>
+          <style>{`
+            @media print {
+              @page { 
+                margin: 0; 
+                size: 57mm auto; 
+              }
+              html, body {
+                background: white !important;
+                height: auto !important;
+                min-height: 0 !important;
+              }
+              .min-h-screen, .h-screen, .h-full {
+                min-height: 0 !important;
+                height: auto !important;
+              }
+              aside, header, nav, main, .md\\:hidden { 
+                display: none !important; 
+              }
+              #dashboard-receipt-print-area { 
+                display: block !important; 
+                position: absolute !important; 
+                top: 0 !important; 
+                left: 0 !important; 
+                width: 57mm !important; 
+                margin: 0 !important; 
+                padding: 0 !important; 
+              }
+            }
+          `}</style>
+          <div id="dashboard-receipt-print-area" className="hidden print:block bg-white z-[99999]">
+             <PosReceipt order={receiptToPrint} shopName={settings?.name || "Shop"} />
+          </div>
+        </>
+      )}
+
       {/* Pending Delete Undo Toast */}
       {pendingDelete && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] w-[90vw] max-w-sm bg-gray-900 shadow-2xl p-2 rounded-2xl flex flex-row items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300 print:hidden">
@@ -270,47 +323,90 @@ export default function AdminDashboard({ shopId, categories, products, settings,
 
       <main className={`flex-1 w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden ${activeTab === 'pos' ? 'flex flex-col h-screen pt-[60px] md:pt-0 overflow-hidden bg-white print:h-auto print:overflow-visible print:pt-0' : 'p-4 pt-20 md:p-8 pb-28 md:pb-8 overflow-y-auto print:overflow-visible'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
-        {activeTab === 'overview' && featPos && (
-          <DashboardOverview orders={orders} products={products} />
+        {/* OVERVIEW */}
+        {featPos && (
+          <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}>
+            <DashboardOverview orders={orders} products={products} />
+          </div>
         )}
 
-        {activeTab === 'pos' && featPos && (
-          <ToastProvider>
-            <OrderProvider>
-              <AdminPosSection dashboardCategories={optCategories} dashboardProducts={optProducts} shopId={shopId} userEmail={userEmail} userRole={userRole} shopName={settings?.name || "Shop"} />
-            </OrderProvider>
-          </ToastProvider>
+        {/* POS */}
+        {featPos && (
+          <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}>
+            <ToastProvider>
+              <OrderProvider>
+                <AdminPosSection dashboardCategories={optCategories} dashboardProducts={optProducts} shopId={shopId} userEmail={userEmail} userRole={userRole} shopName={settings?.name || "Shop"} />
+              </OrderProvider>
+            </ToastProvider>
+          </div>
         )}
 
-        {activeTab === 'orders' && featPos && (
-           <div className="animate-in fade-in duration-300 max-w-5xl mx-auto pb-12 print:hidden">
-              <header className="flex items-center justify-between mb-6">
+        {/* ORDERS */}
+        {featPos && (
+           <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}>
+              <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
                   <p className="text-sm text-gray-500 mt-1">Review past transactions generated from the POS.</p>
                 </div>
+                
+                {/* Quick Filters */}
+                <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 w-full sm:w-auto overflow-x-auto no-scrollbar">
+                  {['All', 'Today', 'Completed', 'Cancelled'].map(f => (
+                    <button 
+                      key={f} 
+                      onClick={() => setOrderFilter(f)} 
+                      className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${orderFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
               </header>
+
               <div className="space-y-4">
-                {orders?.map((order) => (
-                  <OrderHistoryCard key={order.id} order={order} />
+                {orders?.filter(o => {
+                   if (orderFilter === 'Completed') return o.status !== 'CANCELLED';
+                   if (orderFilter === 'Cancelled') return o.status === 'CANCELLED';
+                   if (orderFilter === 'Today') {
+                     const today = new Date().toDateString();
+                     return new Date(o.createdAt).toDateString() === today;
+                   }
+                   return true; 
+                }).map((order) => (
+                  <OrderHistoryCard 
+                    key={order.id} 
+                    order={order} 
+                    onPrint={() => handleReprintOrder(order)} 
+                  />
                 ))}
-                {(!orders || orders.length === 0) && (
+                
+                {(!orders || orders.filter(o => {
+                   if (orderFilter === 'Completed') return o.status !== 'CANCELLED';
+                   if (orderFilter === 'Cancelled') return o.status === 'CANCELLED';
+                   if (orderFilter === 'Today') {
+                     const today = new Date().toDateString();
+                     return new Date(o.createdAt).toDateString() === today;
+                   }
+                   return true; 
+                }).length === 0) && (
                   <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-16 text-center">
                     <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 font-medium">No orders have been recorded yet.</p>
+                    <p className="text-gray-500 font-medium">No orders match this filter.</p>
                   </div>
                 )}
               </div>
            </div>
         )}
 
-        {/* INVENTORY MANAGER TAB (NO WRAPPER) */}
-        {activeTab === 'inventory' && isAdmin && (
-           <div className="animate-in fade-in duration-300 pb-12 print:hidden max-w-5xl mx-auto">
-             <InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} />
+        {/* INVENTORY */}
+        {isAdmin && (
+           <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}>
+             <InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} />
            </div>
         )}
 
+        {/* Shared Header for standard tabs */}
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4 print:hidden">
              <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
@@ -321,6 +417,7 @@ export default function AdminDashboard({ shopId, categories, products, settings,
           </header>
         )}
 
+        {/* Onboarding Guide */}
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && !isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4 print:hidden">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
@@ -337,8 +434,8 @@ export default function AdminDashboard({ shopId, categories, products, settings,
         )}
 
         {/* MENU TAB */}
-        {activeTab === 'menu' && isAdmin && (
-           <div className="animate-in fade-in duration-300 print:hidden">
+        {isAdmin && (
+           <div className={`${activeTab === 'menu' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
                 <div className="relative flex-1">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} style={{ color: 'var(--theme-color)' }}/>
@@ -446,8 +543,8 @@ export default function AdminDashboard({ shopId, categories, products, settings,
         )}
 
         {/* CATEGORIES TAB */}
-        {activeTab === 'categories' && isAdmin && (
-           <div className="animate-in fade-in duration-300 print:hidden">
+        {isAdmin && (
+           <div className={`${activeTab === 'categories' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex justify-between items-center gap-4 mb-6">
                  <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
                 <button onClick={() => setIsCatFormOpen(true)} disabled={optCategories.length >= safeLimits.maxCategories} className={`hidden md:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}>
@@ -483,15 +580,15 @@ export default function AdminDashboard({ shopId, categories, products, settings,
         )}
 
         {/* TABLES & QR TAB */}
-        {activeTab === 'tables' && !isFreePlan && (
-           <div className="animate-in fade-in duration-300 pb-12 print:hidden">
+        {!isFreePlan && (
+           <div className={`${activeTab === 'tables' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden`}>
              <TableManager shopId={shopId} shopSlug={shopSlug} />
            </div>
         )}
 
         {/* SETTINGS TAB */}
-        {activeTab === 'settings' && isAdmin && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300 pb-12 print:hidden">
+        {isAdmin && (
+          <div className={`${activeTab === 'settings' ? 'block animate-in slide-in-from-right-4 duration-300' : 'hidden'} max-w-2xl mx-auto space-y-6 pb-12 print:hidden`}>
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
               <button onClick={() => handleSectionClick('identity')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
                  <div className="flex gap-4 items-center">
@@ -712,6 +809,7 @@ export default function AdminDashboard({ shopId, categories, products, settings,
          </div>
       )}
 
+      {/* INVISIBLE RENDER AREA FOR STANDARD QR PRINTING (Kept separate from receipt) */}
       <div id="print-area" className="hidden items-center justify-center bg-white">{printFormat && renderPrintTemplate(printFormat)}</div>
       {printFormat && <style>{`@media print { @page { size: ${printFormat === 'landscape' ? 'landscape' : 'portrait'}; margin: 0; } body * { visibility: hidden !important; } #print-area, #print-area * { visibility: visible !important; } #print-area { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: flex !important; align-items: center; justify-content: center; background: white; z-index: 99999; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>}
 
@@ -725,9 +823,28 @@ export default function AdminDashboard({ shopId, categories, products, settings,
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
                <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingProduct ? 'Edit Product' : 'New Product'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}><X size={20}/></button></div>
-               <form key={editingProduct ? editingProduct.id : 'new'} onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); const isEdit = !!editingProduct; const tempId = isEdit ? editingProduct!.id : `temp-${Date.now()}`; const catId = fd.get('categoryId') as string; const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown'; const tempProduct: Product = { id: tempId, name: prodName.en, name_kh: prodName.kh, name_zh: prodName.zh, price: parseFloat(fd.get('price') as string), discount: parseFloat(fd.get('discount') as string) || 0, image: productPreview || editingProduct?.image || PLACEHOLDER_IMAGE, category: { name: catNameStr }, time: fd.get('time') as string || '15min', isPopular: isHotSale, isSoldOut: isSoldOutState }; startTransition(() => { dispatchOptProducts({ type: isEdit ? 'update' : 'add', payload: tempProduct }); }); setIsFormOpen(false); setEditingProduct(null); startTransition(async () => { if (productFileBlob) fd.set('image', productFileBlob, 'product.webp'); fd.set('name', prodName.en); fd.set('name_kh', prodName.kh); fd.set('name_zh', prodName.zh); fd.set('isPopular', isHotSale ? 'on' : 'off'); fd.set('isSoldOut', isSoldOutState ? 'true' : 'false'); try { if (isEdit) await updateProduct(fd); else await createProduct(fd); setProductFileBlob(null); showToast("Product saved successfully!"); } catch (err) { showToast("Failed to save product."); } }); }} className="space-y-4">
+               <form key={editingProduct ? editingProduct.id : 'new'} onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); const isEdit = !!editingProduct; const tempId = isEdit ? editingProduct!.id : `temp-${Date.now()}`; const catId = fd.get('categoryId') as string; const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown'; const tempProduct: Product = { id: tempId, name: prodName.en, name_kh: prodName.kh, name_zh: prodName.zh, price: parseFloat(fd.get('price') as string), discount: parseFloat(fd.get('discount') as string) || 0, image: productPreview || editingProduct?.image || PLACEHOLDER_IMAGE, category: { name: catNameStr }, time: fd.get('time') as string || '15min', isPopular: isHotSale, isSoldOut: isSoldOutState }; startTransition(() => { dispatchOptProducts({ type: isEdit ? 'update' : 'add', payload: tempProduct }); }); setIsFormOpen(false); setEditingProduct(null); startTransition(async () => { if (productFileBlob) fd.set('image', productFileBlob, 'product.webp'); else if (productPreview) fd.set('image', productPreview); fd.set('name', prodName.en); fd.set('name_kh', prodName.kh); fd.set('name_zh', prodName.zh); fd.set('isPopular', isHotSale ? 'on' : 'off'); fd.set('isSoldOut', isSoldOutState ? 'true' : 'false'); try { if (isEdit) await updateProduct(fd); else await createProduct(fd); setProductFileBlob(null); showToast("Product saved successfully!"); } catch (err) { showToast("Failed to save product."); } }); }} className="space-y-4">
                   {editingProduct && <input type="hidden" name="id" value={editingProduct.id} />}
-                  <div onClick={() => productInputRef.current?.click()} className="relative w-full h-48 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-gray-900 transition-colors">{productPreview ? (<><LazyImage src={productPreview} className="w-full h-full object-cover" alt="Preview" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">Change Image</p></div></>) : (<div className="text-center text-gray-400"><UploadCloud size={32} className="mx-auto mb-2 text-gray-300"/><span className="text-sm font-medium">Tap to upload image</span></div>)}<input type="file" accept="image/*" ref={productInputRef} onChange={(e) => onFileSelect(e, 'product')} className="hidden" /></div>
+                  
+                  <div className="w-full">
+                    <div onClick={() => productInputRef.current?.click()} className="relative w-full h-48 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-gray-900 transition-colors">
+                      {productPreview ? (
+                        <>
+                          <LazyImage src={productPreview} className="w-full h-full object-cover" alt="Preview" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">Change Image</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center text-gray-400">
+                          <UploadCloud size={32} className="mx-auto mb-2 text-gray-300"/>
+                          <span className="text-sm font-medium">Tap to upload</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" ref={productInputRef} onChange={(e) => onFileSelect(e, 'product')} className="hidden" />
+                    </div>
+                  </div>
+
                   <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required multiLangEnabled={multiLanguageEnabled} />
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1"><label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required /></div>
