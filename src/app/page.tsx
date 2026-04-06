@@ -1,8 +1,9 @@
+// src/app/page.tsx
 'use client';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ensureDemoAccountExists } from '@/lib/actions';
 import { 
   Store, Utensils, ShieldCheck, ArrowRight, 
@@ -14,21 +15,80 @@ export default function HomePage() {
   const router = useRouter();
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [isMenuLoading, setIsMenuLoading] = useState(false);
+  const [demoSlug, setDemoSlug] = useState('');
+
+  // Check if they already have an active demo session in local storage
+  useEffect(() => {
+    const now = new Date().getTime();
+    const demoId = localStorage.getItem('demo_session_id');
+    const demoExpiry = localStorage.getItem('demo_session_expiry');
+
+    if (demoId && demoExpiry && now < parseInt(demoExpiry)) {
+      setDemoSlug(`demo-cafe-${demoId}`);
+    }
+  }, []);
+
+  const getOrCreateDemoSession = () => {
+    const now = new Date().getTime();
+    let demoId = localStorage.getItem('demo_session_id');
+    const demoExpiry = localStorage.getItem('demo_session_expiry');
+
+    // If no session, or session expired (1 hour), generate a new one!
+    if (!demoId || !demoExpiry || now > parseInt(demoExpiry)) {
+      demoId = Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('demo_session_id', demoId);
+      localStorage.setItem('demo_session_expiry', (now + 60 * 60 * 1000).toString()); // 1 Hour Expiry
+      setDemoSlug(`demo-cafe-${demoId}`);
+    }
+    return demoId;
+  };
 
   const handleDemoLogin = async () => {
     setIsDemoLoading(true);
-    await ensureDemoAccountExists(); 
-    await signIn('credentials', {
-      email: 'demo@scandine.xyz', 
-      password: 'demo_password_123',
-      callbackUrl: '/admin',
-    });
+    try {
+      const demoId = getOrCreateDemoSession();
+      
+      // 1. Creates the isolated DB for this specific user
+      const setup = await ensureDemoAccountExists(demoId); 
+      
+      if (!setup.success) {
+        console.error("Failed to setup demo database.");
+        setIsDemoLoading(false);
+        return;
+      }
+      
+      // 2. Logs them in silently WITHOUT automatic redirect
+      const result = await signIn('credentials', {
+        email: `demo_${demoId}@scandine.xyz`, 
+        password: 'demo_password_123',
+        redirect: false, // <-- THIS FIXES THE LOGIN MODAL BUG
+      });
+
+      if (result?.error) {
+        console.error("NextAuth Login Error:", result.error);
+        setIsDemoLoading(false);
+      } else if (result?.ok) {
+        // 3. Force hard navigation so Middleware sees the new cookie
+        window.location.href = '/admin';
+      }
+    } catch (error) {
+      console.error("Demo login process failed:", error);
+      setIsDemoLoading(false);
+    }
   };
 
   const handleViewDemoMenu = async () => {
     setIsMenuLoading(true);
-    await ensureDemoAccountExists();
-    router.push('/demo-cafe');
+    try {
+      const demoId = getOrCreateDemoSession();
+      
+      // Ensures their specific shop exists before routing
+      await ensureDemoAccountExists(demoId);
+      router.push(`/demo-cafe-${demoId}`);
+    } catch (error) {
+      console.error("Failed to load demo menu:", error);
+      setIsMenuLoading(false);
+    }
   };
 
   const tiers = [
@@ -156,7 +216,7 @@ export default function HomePage() {
             ) : (
               <Sparkles size={20} className="text-orange-500" />
             )}
-            Live Demo
+            Live Admin Demo
           </button>
         </div>
         

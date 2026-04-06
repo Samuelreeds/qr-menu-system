@@ -38,12 +38,6 @@ async function getActiveShopId() {
   return user.shopUsers[0].shopId;
 }
 
-// --- DEMO ACCOUNT CHECKER ---
-async function isDemoShop() {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email === 'demo@scandine.xyz';
-}
-
 // --- OPTIMIZATION: TARGETED REVALIDATION HELPER ---
 async function revalidateActiveShop() {
   revalidatePath('/admin');
@@ -185,8 +179,6 @@ async function deleteFromSupabase(fullUrl: string | null) {
 
 // --- BANNER ACTIONS ---
 export async function addBanner(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -212,8 +204,6 @@ export async function addBanner(formData: FormData) {
 }
 
 export async function deleteBanner(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -227,8 +217,6 @@ export async function deleteBanner(formData: FormData) {
 }
 
 export async function softDeleteBanner(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -241,8 +229,6 @@ export async function softDeleteBanner(formData: FormData) {
 }
 
 export async function undoDeleteBanner(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -255,8 +241,6 @@ export async function undoDeleteBanner(formData: FormData) {
 }
 
 export async function reorderBanners(banners: {id: string, sortOrder: number}[]) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -276,8 +260,6 @@ export async function reorderBanners(banners: {id: string, sortOrder: number}[])
 
 // --- CATEGORY ACTIONS ---
 export async function createCategory(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -304,8 +286,6 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function updateCategory(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
@@ -322,8 +302,6 @@ export async function updateCategory(formData: FormData) {
 }
 
 export async function deleteCategory(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   try { await prisma.category.delete({ where: { id } }); } catch (e) {}
   await revalidateActiveShop();
@@ -331,8 +309,6 @@ export async function deleteCategory(formData: FormData) {
 
 // --- PRODUCT ACTIONS ---
 export async function createProduct(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -360,8 +336,6 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
@@ -388,8 +362,6 @@ export async function updateProduct(formData: FormData) {
 }
 
 export async function toggleProductSoldOut(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   const isSoldOut = formData.get('isSoldOut') === 'true';
   try {
@@ -401,8 +373,6 @@ export async function toggleProductSoldOut(formData: FormData) {
 }
 
 export async function deleteProduct(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const id = formData.get('id') as string;
   try { 
     const product = await prisma.product.findUnique({ where: { id }, select: { image: true } });
@@ -414,8 +384,6 @@ export async function deleteProduct(formData: FormData) {
 
 // --- SETTINGS ACTIONS ---
 export async function updateShopIdentity(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
   const nameDisplay = formData.get('nameDisplay') as string || 'EN';
@@ -449,8 +417,6 @@ export async function updateShopIdentity(formData: FormData) {
 }
 
 export async function updateShopBranding(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -490,8 +456,6 @@ export async function updateShopBranding(formData: FormData) {
 }
 
 export async function updateShopSocials(formData: FormData) {
-  if (await isDemoShop()) return { error: "Action disabled in Demo Mode." };
-  
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -1463,64 +1427,25 @@ export async function createPosOrder(data: {
 
     const mappedOrderType = data.orderType.toUpperCase() === 'WALK-IN' ? 'TAKEAWAY' : data.orderType.toUpperCase();
 
-    const order = await prisma.$transaction(async (tx) => {
-      const newOrder = await tx.order.create({
-        data: {
-          shopId: data.shopId,
-          orderType: mappedOrderType as any,
-          tableNumber: data.tableNumber,
-          deliveryAgent: data.deliveryAgent,
-          subtotal: secureSubtotal,
-          discount: secureDiscount,
-          promoCode: data.promoCode,
-          tax: secureTax,
-          total: secureTotal,
-          paymentMethod: data.paymentMethod as any,
-          status: 'COMPLETED',
-          isPaid: true,
-          items: {
-            create: orderItemsData,
-          },
+    const order = await prisma.order.create({
+      data: {
+        shopId: data.shopId,
+        orderType: mappedOrderType as any,
+        tableNumber: data.tableNumber,
+        deliveryAgent: data.deliveryAgent,
+        subtotal: secureSubtotal,
+        discount: secureDiscount,
+        promoCode: data.promoCode,
+        tax: secureTax,
+        total: secureTotal,
+        paymentMethod: data.paymentMethod as any,
+        status: 'COMPLETED',
+        isPaid: true,
+        items: {
+          create: orderItemsData,
         },
-        include: { items: true } 
-      });
-
-      for (const item of orderItemsData) {
-        const productWithRecipe = await (tx.product as any).findUnique({
-          where: { id: item.productId },
-          include: { recipe: true }
-        });
-
-        if (productWithRecipe?.recipe) {
-          for (const recipeItem of productWithRecipe.recipe) {
-             const deduction = recipeItem.quantity * item.quantity;
-             
-             const ingredient = await tx.ingredient.findUnique({ where: { id: recipeItem.ingredientId } });
-             if (ingredient) {
-               const newStock = Math.max(0, ingredient.current - deduction);
-
-               await tx.ingredient.update({
-                 where: { id: recipeItem.ingredientId },
-                 data: { current: newStock }
-               });
-
-               await tx.stockLog.create({
-                 data: {
-                   shopId: data.shopId,
-                   ingredientId: recipeItem.ingredientId,
-                   change: -deduction,
-                   reason: `Sold: ${item.name}`,
-                   staffName: "System POS",
-                   previousStock: ingredient.current,
-                   newStock: newStock
-                 }
-               });
-             }
-          }
-        }
-      }
-
-      return newOrder;
+      },
+      include: { items: true } 
     });
 
     revalidatePath('/admin');
@@ -1649,164 +1574,108 @@ export async function createIngredient(data: { name: string, unit: string, max: 
   }
 }
 
-export async function ensureDemoAccountExists() {
+export async function ensureDemoAccountExists(demoId: string = 'default') {
   try {
-    const demoEmail = 'demo@scandine.xyz';
-    let user = await prisma.user.findUnique({ 
+    const demoEmail = `demo_${demoId}@scandine.xyz`;
+    const slug = `demo-cafe-${demoId}`;
+
+    // 1. FAST CHECK: If demo account exists, instantly return so we don't overwrite changes!
+    const existingUser = await prisma.user.findUnique({ 
       where: { email: demoEmail },
-      include: { shopUsers: { include: { shop: true } } } 
+      select: { id: true } 
     });
 
+    if (existingUser) return { success: true };
+
+    // 2. CREATE NEW DEMO ACCOUNT
     const DEMO_PRODUCT_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2ZmZWRkNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmOTczMTYiPkNhZmU8L3RleHQ+PC9zdmc+";
     const DEMO_LOGO_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y5NzMxNiIgcng9IjEwMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjAiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIj5TPC90ZXh0Pjwvc3ZnPg==";
     
-    let shopId = '';
+    const hashedPassword = await bcrypt.hash('demo_password_123', 10);
+    
+    // Create Plan
+    try {
+        await (prisma as any).plan.create({
+          data: {
+            id: "EXCLUSIVE", name: "Exclusive Pack", slug: "exclusive", status: "ACTIVE",
+            priceMonthly: 16.99, priceYearly: 169, maxProducts: 9999, maxCategories: 9999, maxBanners: 10,
+            featPos: true, featCampaign: true, featOrderFromTable: true, featAlertBarista: true
+          }
+        }).catch(() => {});
+    } catch(e) {}
 
-    if (!user) {
-      const hashedPassword = await bcrypt.hash('demo_password_123', 10);
-      await prisma.$transaction(async (tx) => {
-        // Force create EXCLUSIVE plan if it doesn't exist so features work
-        const existingPlan = await tx.plan.findUnique({ where: { id: "EXCLUSIVE" } });
-        if (!existingPlan) {
-          await tx.plan.create({
-            data: {
-              id: "EXCLUSIVE",
-              name: "Exclusive Pack",
-              slug: "exclusive",
-              status: "ACTIVE",
-              priceMonthly: 16.99,
-              priceYearly: 169,
-              maxProducts: 9999,
-              maxCategories: 9999,
-              maxBanners: 10,
-              featPos: true,
-              featCampaign: true,
-              featOrderFromTable: true,
-              featAlertBarista: true
-            }
-          }).catch(() => {}); // Catch in case of conflict
-        }
+    const shop = await prisma.shop.create({
+      data: { name: "Scandine Demo Shop", slug: slug, plan: "EXCLUSIVE" as any, status: "ACTIVE" as any }
+    });
+    const shopId = shop.id;
+    
+    const newUser = await prisma.user.create({
+      data: { email: demoEmail, password: hashedPassword }
+    });
+    
+    await prisma.shopUser.create({
+      data: { userId: newUser.id, shopId: shopId, role: "OWNER" as any }
+    });
+    
+    await prisma.shopSettings.create({
+      data: { shopId: shopId, name: "Scandine Demo Shop", themeColor: "#f97316", headerDesign: "design1", socials: "[]", logo: DEMO_LOGO_IMAGE }
+    });
 
-        const shop = await tx.shop.create({
-          data: { name: "Scandine Demo Shop", slug: 'demo-cafe', plan: "EXCLUSIVE" as any, status: "ACTIVE" as any }
-        });
-        shopId = shop.id;
-        const newUser = await tx.user.create({
-          data: { email: demoEmail, password: hashedPassword }
-        });
-        await tx.shopUser.create({
-          data: { userId: newUser.id, shopId: shop.id, role: "OWNER" as any }
-        });
-        await tx.shopSettings.create({
-          data: { shopId: shop.id, name: "Scandine Demo Shop", themeColor: "#f97316", headerDesign: "design1", socials: "[]", logo: DEMO_LOGO_IMAGE }
-        });
-      });
-    } else {
-      shopId = user.shopUsers[0]?.shopId;
-      
-      // Ensure EXCLUSIVE plan exists and has featPos = true
-      await prisma.plan.upsert({
-        where: { id: "EXCLUSIVE" },
-        update: { featPos: true, featCampaign: true, featOrderFromTable: true },
-        create: {
-          id: "EXCLUSIVE", name: "Exclusive Pack", slug: "exclusive", status: "ACTIVE" as any,
-          priceMonthly: 16.99, priceYearly: 169, maxProducts: 9999, maxCategories: 9999, maxBanners: 10,
-          featPos: true, featCampaign: true, featOrderFromTable: true, featAlertBarista: true
-        }
-      }).catch(() => {});
+    // Add Data
+    const cat1 = await prisma.category.create({ data: { shopId, name: "Popular 🔥", sortOrder: 1, isDrink: true } });
+    const cat2 = await prisma.category.create({ data: { shopId, name: "Coffee ☕", sortOrder: 2, isDrink: true } });
+    const cat3 = await prisma.category.create({ data: { shopId, name: "Tea & Refreshers 🍹", sortOrder: 3, isDrink: true } });
+    const cat4 = await prisma.category.create({ data: { shopId, name: "Food & Pastries 🥐", sortOrder: 4, isDrink: false } });
 
-      await prisma.shop.update({ where: { id: shopId }, data: { plan: "EXCLUSIVE" as any }});
-      await prisma.shopSettings.updateMany({ where: { shopId }, data: { logo: DEMO_LOGO_IMAGE } });
-      await prisma.order.deleteMany({ where: { shopId } });
-      await prisma.product.deleteMany({ where: { shopId } });
-      await prisma.category.deleteMany({ where: { shopId } });
+    const products = [
+        { shopId, categoryId: cat1.id, name: "Signature Matcha Latte", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Premium grade matcha with creamy oat milk." },
+        { shopId, categoryId: cat1.id, name: "Iced Caramel Macchiato", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Espresso, vanilla syrup, milk, and caramel drizzle." },
+        { shopId, categoryId: cat1.id, name: "Classic Avocado Toast", price: 6.50, time: "10min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Mashed avocado, cherry tomatoes, and feta on sourdough." },
+        { shopId, categoryId: cat1.id, name: "Strawberry Hibiscus Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Refreshing iced tea with real strawberry bits." },
+        { shopId, categoryId: cat2.id, name: "Hot Cafe Latte", price: 3.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso balanced with steamed milk." },
+        { shopId, categoryId: cat2.id, name: "Cold Brew Coffee", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Slow-steeped for 20 hours for a smooth finish." },
+        { shopId, categoryId: cat2.id, name: "Americano", price: 3.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso shots topped with hot water." },
+        { shopId, categoryId: cat2.id, name: "Iced Mocha", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso with mocha sauce, milk and ice." },
+        { shopId, categoryId: cat2.id, name: "Vanilla Sweet Cream Cold Brew", price: 4.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Cold brew topped with house-made vanilla sweet cream." },
+        { shopId, categoryId: cat2.id, name: "Espresso Macchiato", price: 2.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso marked with dollop of steamed milk and foam." },
+        { shopId, categoryId: cat3.id, name: "Peach Iced Tea", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Black tea infused with sweet peach flavor." },
+        { shopId, categoryId: cat3.id, name: "Lemon Passionfruit Tea", price: 4.20, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Tangy passionfruit and fresh lemon slice." },
+        { shopId, categoryId: cat3.id, name: "Thai Iced Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet, creamy, and rich spiced black tea." },
+        { shopId, categoryId: cat3.id, name: "Lychee Soda", price: 3.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sparkling soda with sweet lychee syrup and fruits." },
+        { shopId, categoryId: cat4.id, name: "Butter Croissant", price: 3.00, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Flaky, buttery, and baked fresh daily." },
+        { shopId, categoryId: cat4.id, name: "Chocolate Chip Cookie", price: 2.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Warm, gooey chocolate chip cookie." },
+        { shopId, categoryId: cat4.id, name: "Blueberry Muffin", price: 3.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Moist muffin packed with wild blueberries." },
+        { shopId, categoryId: cat4.id, name: "Almond Danish", price: 3.80, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet pastry filled with almond paste and sliced almonds." },
+        { shopId, categoryId: cat4.id, name: "Spicy Basil Chicken Pasta", price: 7.50, time: "15min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Fusion pasta with a spicy kick." },
+        { shopId, categoryId: cat4.id, name: "Tiramisu Slice", price: 5.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Classic Italian coffee-flavored dessert." }
+    ];
+
+    for (const p of products) {
+        await prisma.product.create({ data: p });
     }
 
-    await prisma.$transaction(async (tx) => {
-        const cat1 = await tx.category.create({ data: { shopId, name: "Popular 🔥", sortOrder: 1, isDrink: true } });
-        const cat2 = await tx.category.create({ data: { shopId, name: "Coffee ☕", sortOrder: 2, isDrink: true } });
-        const cat3 = await tx.category.create({ data: { shopId, name: "Tea & Refreshers 🍹", sortOrder: 3, isDrink: true } });
-        const cat4 = await tx.category.create({ data: { shopId, name: "Food & Pastries 🥐", sortOrder: 4, isDrink: false } });
+    const p1 = await prisma.product.findFirst({ where: { shopId, name: "Signature Matcha Latte" }});
+    const p2 = await prisma.product.findFirst({ where: { shopId, name: "Butter Croissant" }});
+    const p3 = await prisma.product.findFirst({ where: { shopId, name: "Iced Caramel Macchiato" }});
 
-        await tx.product.createMany({
-          data: [
-            { shopId, categoryId: cat1.id, name: "Signature Matcha Latte", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Premium grade matcha with creamy oat milk." },
-            { shopId, categoryId: cat1.id, name: "Iced Caramel Macchiato", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Espresso, vanilla syrup, milk, and caramel drizzle." },
-            { shopId, categoryId: cat1.id, name: "Classic Avocado Toast", price: 6.50, time: "10min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Mashed avocado, cherry tomatoes, and feta on sourdough." },
-            { shopId, categoryId: cat1.id, name: "Strawberry Hibiscus Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Refreshing iced tea with real strawberry bits." },
-
-            { shopId, categoryId: cat2.id, name: "Hot Cafe Latte", price: 3.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso balanced with steamed milk." },
-            { shopId, categoryId: cat2.id, name: "Cold Brew Coffee", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Slow-steeped for 20 hours for a smooth finish." },
-            { shopId, categoryId: cat2.id, name: "Americano", price: 3.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso shots topped with hot water." },
-            { shopId, categoryId: cat2.id, name: "Iced Mocha", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso with mocha sauce, milk and ice." },
-            { shopId, categoryId: cat2.id, name: "Vanilla Sweet Cream Cold Brew", price: 4.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Cold brew topped with house-made vanilla sweet cream." },
-            { shopId, categoryId: cat2.id, name: "Espresso Macchiato", price: 2.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso marked with dollop of steamed milk and foam." },
-
-            { shopId, categoryId: cat3.id, name: "Peach Iced Tea", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Black tea infused with sweet peach flavor." },
-            { shopId, categoryId: cat3.id, name: "Lemon Passionfruit Tea", price: 4.20, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Tangy passionfruit and fresh lemon slice." },
-            { shopId, categoryId: cat3.id, name: "Thai Iced Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet, creamy, and rich spiced black tea." },
-            { shopId, categoryId: cat3.id, name: "Lychee Soda", price: 3.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sparkling soda with sweet lychee syrup and fruits." },
-
-            { shopId, categoryId: cat4.id, name: "Butter Croissant", price: 3.00, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Flaky, buttery, and baked fresh daily." },
-            { shopId, categoryId: cat4.id, name: "Chocolate Chip Cookie", price: 2.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Warm, gooey chocolate chip cookie." },
-            { shopId, categoryId: cat4.id, name: "Blueberry Muffin", price: 3.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Moist muffin packed with wild blueberries." },
-            { shopId, categoryId: cat4.id, name: "Almond Danish", price: 3.80, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet pastry filled with almond paste and sliced almonds." },
-            { shopId, categoryId: cat4.id, name: "Spicy Basil Chicken Pasta", price: 7.50, time: "15min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Fusion pasta with a spicy kick." },
-            { shopId, categoryId: cat4.id, name: "Tiramisu Slice", price: 5.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Classic Italian coffee-flavored dessert." }
-          ]
-        });
-
-        // Seed dummy orders
-        const p1 = await tx.product.findFirst({ where: { shopId, name: "Signature Matcha Latte" }});
-        const p2 = await tx.product.findFirst({ where: { shopId, name: "Butter Croissant" }});
-        const p3 = await tx.product.findFirst({ where: { shopId, name: "Iced Caramel Macchiato" }});
-
-        if (p1 && p2 && p3) {
-          await tx.order.create({
-            data: {
-              shopId,
-              orderType: 'DINE_IN' as any,
-              tableNumber: 'Table 4',
-              subtotal: 7.00,
-              discount: 0,
-              tax: 0.70,
-              total: 7.70,
-              status: 'COMPLETED' as any,
-              isPaid: true,
-              paymentMethod: 'CASH' as any,
-              items: {
-                create: [
-                  { productId: p1.id, name: p1.name, price: 4.00, quantity: 1 },
-                  { productId: p2.id, name: p2.name, price: 3.00, quantity: 1 }
-                ]
-              }
-            }
-          });
-
-          await tx.order.create({
-            data: {
-              shopId,
-              orderType: 'TAKEAWAY' as any,
-              subtotal: 4.50,
-              discount: 0,
-              tax: 0.45,
-              total: 4.95,
-              status: 'PENDING' as any,
-              isPaid: true,
-              paymentMethod: 'BANK_TRANSFER' as any,
-              items: {
-                create: [
-                  { productId: p3.id, name: p3.name, price: 4.50, quantity: 1 }
-                ]
-              }
-            }
-          });
+    if (p1 && p2 && p3) {
+      await prisma.order.create({
+        data: {
+          shopId, orderType: 'DINE_IN' as any, tableNumber: 'Table 4', subtotal: 7.00, discount: 0, tax: 0.70, total: 7.70, status: 'COMPLETED' as any, isPaid: true, paymentMethod: 'CASH' as any,
+          items: { create: [ { productId: p1.id, name: p1.name, price: 4.00, quantity: 1 }, { productId: p2.id, name: p2.name, price: 3.00, quantity: 1 } ] }
         }
-    });
+      });
+      await prisma.order.create({
+        data: {
+          shopId, orderType: 'TAKEAWAY' as any, subtotal: 4.50, discount: 0, tax: 0.45, total: 4.95, status: 'PENDING' as any, isPaid: true, paymentMethod: 'BANK_TRANSFER' as any,
+          items: { create: [ { productId: p3.id, name: p3.name, price: 4.50, quantity: 1 } ] }
+        }
+      });
+    }
 
     return { success: true };
   } catch (error) {
-    console.error("Demo setup failed", error);
-    return { success: false };
+    console.error("Demo setup exact fail:", error);
+    return { success: false, error: String(error) };
   }
 }

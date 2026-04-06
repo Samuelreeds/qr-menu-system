@@ -19,7 +19,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package
+  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles
 } from 'lucide-react';
 
 import LazyImage from "./ui/LazyImage";
@@ -323,6 +323,23 @@ export default function AdminDashboard({ shopId, categories, products, settings,
 
       <main className={`flex-1 w-full max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden ${activeTab === 'pos' ? 'flex flex-col h-screen pt-[60px] md:pt-0 overflow-hidden bg-white print:h-auto print:overflow-visible print:pt-0' : 'p-4 pt-20 md:p-8 pb-28 md:pb-8 overflow-y-auto print:overflow-visible'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
+        {userEmail?.includes('demo_') && (
+          <div className="mb-6 bg-orange-50 border border-orange-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 print:hidden">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-orange-900">You are in Demo Mode</p>
+                <p className="text-xs text-orange-700">Make any changes you like! This temporary account is yours for 1 hour.</p>
+              </div>
+            </div>
+            <Link href="/auth/register" className="hidden sm:block bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-700 transition-colors">
+              Create Your Own Shop
+            </Link>
+          </div>
+        )}
+
         {/* OVERVIEW */}
         {featPos && (
           <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}>
@@ -445,8 +462,8 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                   <button onClick={() => setViewMode('list')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
                   <button onClick={() => setViewMode('grid')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
                 </div>
-                <button onClick={() => setIsFormOpen(true)} disabled={optProducts.length >= safeLimits.maxProducts} className={`hidden md:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}>
-                  <Plus size={18} strokeWidth={3}/> {optProducts.length >= safeLimits.maxProducts ? 'Limit Reached' : 'Add Product'}
+                <button onClick={() => setIsFormOpen(true)} className={`hidden md:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}>
+                  <Plus size={18} strokeWidth={3}/> Add Product
                 </button>
              </div>
              
@@ -538,7 +555,7 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                   </div>
                 </>
              )}
-             {optProducts.length > 0 && <button onClick={() => setIsFormOpen(true)} disabled={optProducts.length >= safeLimits.maxProducts} className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50 print:hidden"><Plus size={24} strokeWidth={3} /></button>}
+             {optProducts.length > 0 && <button onClick={() => setIsFormOpen(true)} className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50 print:hidden"><Plus size={24} strokeWidth={3} /></button>}
            </div>
         )}
 
@@ -547,8 +564,8 @@ export default function AdminDashboard({ shopId, categories, products, settings,
            <div className={`${activeTab === 'categories' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex justify-between items-center gap-4 mb-6">
                  <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
-                <button onClick={() => setIsCatFormOpen(true)} disabled={optCategories.length >= safeLimits.maxCategories} className={`hidden md:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}>
-                  <Plus size={18} strokeWidth={3}/> {optCategories.length >= safeLimits.maxCategories ? 'Limit Reached' : 'Add New'}
+                <button onClick={() => setIsCatFormOpen(true)} className={`hidden md:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-sm`}>
+                  <Plus size={18} strokeWidth={3}/> Add New
                 </button>
              </div>
              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -575,7 +592,7 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                 </tbody>
               </table>
             </div>
-            <button onClick={() => setIsCatFormOpen(true)} disabled={optCategories.length >= safeLimits.maxCategories} className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"><Plus size={24} strokeWidth={3} /></button>
+            <button onClick={() => setIsCatFormOpen(true)} className="md:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"><Plus size={24} strokeWidth={3} /></button>
            </div>
         )}
 
