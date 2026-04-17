@@ -25,7 +25,7 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
     }
   }, [isExpanded]);
 
-  const handleClear = (e: React.MouseEvent) => {
+  const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange("");
     setIsExpanded(false);
@@ -38,7 +38,6 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
       }`}
       onClick={() => !isExpanded && setIsExpanded(true)}
     >
-      {/* Icon Container - Strictly fixed to 42px to prevent shifting/squishing */}
       <div className="flex items-center justify-center min-w-[42px] w-[42px] h-[42px] shrink-0">
         <Search 
           size={18} 
@@ -56,16 +55,15 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
         className={`bg-transparent text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none h-full transition-all duration-300 min-w-0 ${
           isExpanded ? 'flex-1 opacity-100' : 'w-0 flex-none opacity-0 pointer-events-none p-0 m-0'
         }`}
-        onBlur={() => value === "" && setIsExpanded(false)}
       />
 
       <div 
         className={`flex items-center justify-center h-[42px] shrink-0 transition-all duration-300 ${
-          isExpanded && value !== "" ? 'w-[36px] opacity-100' : 'w-0 flex-none opacity-0 pointer-events-none'
+          isExpanded ? 'w-[36px] opacity-100 pr-1' : 'w-0 flex-none opacity-0 pointer-events-none'
         }`}
       >
         <button 
-          onClick={handleClear}
+          onClick={handleClose}
           className="p-1.5 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
         >
           <X size={14} className="text-gray-400" />
