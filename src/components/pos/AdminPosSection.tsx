@@ -15,11 +15,11 @@ import BillingPanel from './BillingPanel';
 
 // DEFINED LOCALLY TO FIX IMPORT ERRORS
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
-export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
+export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
 
 export interface ProductCustomization { mood: string; size: string; sugar: string; ice: string; }
 export interface BillingItem { id: string; productId: string; name: string; price: number; qty: number; notes: string; img: string; customization: ProductCustomization; }
-export interface PosProduct { id: string; name: string; description: string; price: number; category: string; img: string; isDrink?: boolean; }
+export interface PosProduct { id: string; name: string; description: string; price: number; variants?: {id?: string, name: string, price: number}[]; category: string; img: string; isDrink?: boolean; }
 export type OrderType = "walk-in" | "table" | "delivery";
 
 const TAX_RATE = 0.1;
@@ -69,6 +69,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         name: item.name,
         description: item.description || "",
         price: item.price,
+        variants: item.variants, // Pass variants to the POS product card
         category: catName,
         img: item.image || "",
         isDrink: parentCat?.isDrink || false,
@@ -92,9 +93,11 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     return matchCat && matchSearch;
   });
 
-  const handleAddToBilling = (product: PosProduct, customization: ProductCustomization, notes: string) => {
+  const handleAddToBilling = (product: PosProduct, customization: ProductCustomization, notes: string, dynamicPrice?: number) => {
+    const finalPrice = dynamicPrice !== undefined ? dynamicPrice : product.price;
+
     setBillingItems((prev) => {
-      const existing = prev.find((i) => i.name === product.name && i.notes === notes && JSON.stringify(i.customization) === JSON.stringify(customization));
+      const existing = prev.find((i) => i.name === product.name && i.notes === notes && JSON.stringify(i.customization) === JSON.stringify(customization) && i.price === finalPrice);
       if (existing) {
         return prev.map((i) => i.id === existing.id ? { ...i, qty: i.qty + 1 } : i);
       }
@@ -104,7 +107,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           id: `b${Date.now()}`,
           productId: product.id, 
           name: product.name,
-          price: product.price,
+          price: finalPrice, // Utilize the selected variant price
           qty: 1,
           notes: notes,
           img: product.img,
@@ -181,13 +184,10 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     }
   };
 
-  // ADDED: Special handler for reprinting historical orders
   const handleReprintOrder = (orderToPrint: any) => {
     setLatestOrder(orderToPrint);
-    // Give the DOM 300ms to render the receipt before telling the browser to print
     setTimeout(() => {
       window.print();
-      // Hide it again after printing
       setTimeout(() => setLatestOrder(null), 1000);
     }, 300);
   };

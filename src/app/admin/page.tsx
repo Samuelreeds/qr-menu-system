@@ -66,7 +66,7 @@ export default async function AdminPage() {
     }),
     prisma.product.findMany({
       where: { shopId },
-      include: { category: true },
+      include: { category: true, variants: true }, // ADDED VARIANTS INCLUDE
       orderBy: { createdAt: 'desc' }
     }),
     prisma.banner.findMany({
@@ -113,6 +113,7 @@ export default async function AdminPage() {
     name_kh: p.name_kh,
     name_zh: p.name_zh,
     price: p.price,
+    variants: p.variants, // PASSED VARIANTS TO FRONTEND
     image: p.image,
     category: {
       name: p.category.name,

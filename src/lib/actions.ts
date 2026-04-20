@@ -98,7 +98,7 @@ export async function getProducts() {
   if (!shopId) return [];
   return await prisma.product.findMany({
     where: { shopId },
-    include: { category: true },
+    include: { category: true, variants: true }, // ADDED VARIANTS INCLUDE
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -308,7 +308,19 @@ export async function deleteCategory(formData: FormData) {
 }
 
 // --- PRODUCT ACTIONS ---
-export async function createProduct(formData: FormData) {
+export async function createProduct(data: {
+  name: string;
+  name_kh?: string | null;
+  name_zh?: string | null;
+  price?: number | null;
+  variants?: { name: string; price: number }[] | null;
+  discount?: number;
+  categoryId: string;
+  time?: string;
+  image?: any;
+  isPopular?: boolean;
+  isSoldOut?: boolean;
+}) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -316,38 +328,88 @@ export async function createProduct(formData: FormData) {
   const currentCount = await prisma.product.count({ where: { shopId } });
   if (currentCount >= limit) return { error: "Product limit reached." };
 
-  const name = formData.get('name') as string
-  const name_kh = formData.get('name_kh') as string || null;
-  const name_zh = formData.get('name_zh') as string || null;
-  const price = parseFloat(formData.get('price') as string)
-  const discount = parseFloat(formData.get('discount') as string) || 0
-  const categoryId = formData.get('categoryId') as string
-  const time = formData.get('time') as string || '15min'
-  const imageFile = formData.get('image') as File
-  const isSoldOut = formData.get('isSoldOut') === 'on'
-  
-  let imagePath = await uploadToSupabase(imageFile, 'products');
+  const name = data.name;
+  const name_kh = data.name_kh || null;
+  const name_zh = data.name_zh || null;
+  const discount = data.discount || 0;
+  const categoryId = data.categoryId;
+  const time = data.time || '15min';
+  const isSoldOut = !!data.isSoldOut;
+
+  // Use variants explicitly 
+  const variants = data.variants && data.variants.length > 0 ? data.variants : [{ name: 'Default', price: data.price || 0 }];
+  const price = variants[0]?.price || data.price || 0;
+
+  console.log("RECEIVED VARIANTS FOR CREATE:", variants);
+
+  let imagePath: string | undefined;
+  if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
+    imagePath = await uploadToSupabase(data.image as File, 'products');
+  } else if (typeof data.image === 'string' && data.image) {
+    imagePath = data.image;
+  }
   if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
   await prisma.product.create({
-    data: { name, name_kh, name_zh, price, discount, categoryId, image: imagePath, time, rating: 4.5, description: '', isPopular: formData.get('isPopular') === 'on', isSoldOut, shopId }
+    data: { 
+      name, 
+      name_kh, 
+      name_zh, 
+      price, 
+      discount, 
+      categoryId, 
+      image: imagePath, 
+      time, 
+      rating: 4.5, 
+      description: '', 
+      isPopular: !!data.isPopular, 
+      isSoldOut, 
+      shopId,
+      // Nested create for variants
+      variants: {
+        create: variants.map(v => ({
+          name: v.name,
+          price: v.price
+        }))
+      }
+    }
   })
   await revalidateActiveShop();
 }
 
-export async function updateProduct(formData: FormData) {
-  const id = formData.get('id') as string;
-  const name = formData.get('name') as string;
-  const name_kh = formData.get('name_kh') as string || null;
-  const name_zh = formData.get('name_zh') as string || null;
-  const price = parseFloat(formData.get('price') as string);
-  const discount = parseFloat(formData.get('discount') as string) || 0;
-  const categoryId = formData.get('categoryId') as string;
-  const time = formData.get('time') as string || '15min';
-  const imageFile = formData.get('image') as File;
-  const isSoldOut = formData.get('isSoldOut') === 'on';
+export async function updateProduct(data: {
+  id: string;
+  name: string;
+  name_kh?: string | null;
+  name_zh?: string | null;
+  price?: number | null;
+  variants?: { name: string; price: number }[] | null;
+  discount?: number;
+  categoryId: string;
+  time?: string;
+  image?: any;
+  isPopular?: boolean;
+  isSoldOut?: boolean;
+}) {
+  const id = data.id;
+  const name = data.name;
+  const name_kh = data.name_kh || null;
+  const name_zh = data.name_zh || null;
+  const discount = data.discount || 0;
+  const categoryId = data.categoryId;
+  const time = data.time || '15min';
+  const isSoldOut = !!data.isSoldOut;
+  
+  // Use variants explicitly
+  const variants = data.variants && data.variants.length > 0 ? data.variants : [{ name: 'Default', price: data.price || 0 }];
+  const price = variants[0]?.price || data.price || 0;
 
-  const newImagePath = await uploadToSupabase(imageFile, 'products');
+  console.log("RECEIVED VARIANTS FOR UPDATE:", variants);
+
+  let newImagePath: string | undefined;
+  if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
+    newImagePath = await uploadToSupabase(data.image as File, 'products');
+  }
 
   if (newImagePath) {
     const oldProduct = await prisma.product.findUnique({ where: { id }, select: { image: true } });
@@ -356,7 +418,26 @@ export async function updateProduct(formData: FormData) {
 
   await prisma.product.update({
     where: { id },
-    data: { name, name_kh, name_zh, price, discount, categoryId, time, ...(newImagePath && { image: newImagePath }), isPopular: formData.get('isPopular') === 'on', isSoldOut }
+    data: { 
+      name, 
+      name_kh, 
+      name_zh, 
+      price, 
+      discount, 
+      categoryId, 
+      time, 
+      ...(newImagePath && { image: newImagePath }), 
+      isPopular: !!data.isPopular, 
+      isSoldOut,
+      // Clear old variants and set new ones to ensure clean state
+      variants: {
+        deleteMany: {}, 
+        create: variants.map(v => ({
+          name: v.name,
+          price: v.price
+        }))
+      }
+    }
   });
   await revalidateActiveShop();
 }
@@ -995,7 +1076,10 @@ export async function executeMenuImport(formData: FormData) {
                 rating: 5.0,
                 description: item.description || '',
                 isPopular: item.isPopular,
-                shopId: shopId
+                shopId: shopId,
+                variants: {
+                  create: [{ name: 'Default', price: item.price }]
+                }
              }
           });
           existingProductKeys.add(prodKey);
@@ -1651,7 +1735,12 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     ];
 
     for (const p of products) {
-        await prisma.product.create({ data: p });
+        await prisma.product.create({
+            data: {
+               ...p,
+               variants: { create: [{ name: 'Default', price: p.price }] }
+            }
+        });
     }
 
     const p1 = await prisma.product.findFirst({ where: { shopId, name: "Signature Matcha Latte" }});

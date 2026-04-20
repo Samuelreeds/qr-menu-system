@@ -37,6 +37,7 @@ export default async function ShopMenuPage({
       products: {
         include: {
           category: true,
+          variants: true, // <-- ADDED: Fetch variants from the DB
         },
       },
     },
@@ -138,6 +139,7 @@ export default async function ShopMenuPage({
     name_kh: product.name_kh || null,
     name_zh: product.name_zh || null,
     price: product.price,
+    variants: product.variants, // <-- ADDED: Pass variants to the client
     rating: product.rating || 5.0, 
     time: product.time || '10-15 min', 
     image: product.image || '', 

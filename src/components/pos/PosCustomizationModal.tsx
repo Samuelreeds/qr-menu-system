@@ -12,16 +12,21 @@ export default function PosCustomizationModal({
 }: {
   product: PosProduct;
   onClose: () => void;
-  onAdd: (product: PosProduct, customization: ProductCustomization, notes: string) => void;
+  onAdd: (product: PosProduct, customization: ProductCustomization, notes: string, dynamicPrice?: number) => void;
 }) {
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
+
   const [customization, setCustomization] = useState<ProductCustomization>({
     mood: "hot",
-    size: "M",
+    size: "", // We override this below upon adding
     sugar: "50%",
     ice: "50%",
   });
   const [notes, setNotes] = useState("");
+  
   const isDrink = product.isDrink;
+  const hasVariants = product.variants && product.variants.length > 0 && product.variants.some(v => v.name !== 'Default');
+  const activeBasePrice = product.variants?.[selectedVariantIndex]?.price ?? product.price;
 
   return (
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 print:hidden animate-in fade-in duration-200" onClick={onClose}>
@@ -39,7 +44,7 @@ export default function PosCustomizationModal({
         <div className="p-5 overflow-y-auto no-scrollbar flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
            <h3 className="font-bold text-xl text-gray-900 leading-tight mb-1">{product.name}</h3>
            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">{product.category}</p>
-           <p className="font-black text-2xl text-gray-900 mb-6">${product.price.toFixed(2)}</p>
+           <p className="font-black text-2xl text-gray-900 mb-6">${activeBasePrice.toFixed(2)}</p>
 
            <div className="space-y-5">
              <div className={`grid ${isDrink ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
@@ -52,14 +57,23 @@ export default function PosCustomizationModal({
                    </div>
                  </div>
                )}
-               <div>
-                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Size</p>
-                 <div className="flex bg-gray-100 p-1.5 rounded-xl">
-                   {(["S", "M", "L"] as const).map((s) => (
-                     <button key={s} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${customization.size === s ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} onClick={() => setCustomization((c) => ({ ...c, size: s }))}>{s}</button>
-                   ))}
+               
+               {hasVariants && (
+                 <div>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Size</p>
+                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                     {product.variants!.map((v, idx) => (
+                       <button 
+                         key={idx} 
+                         className={`flex-1 py-2 rounded-lg text-sm transition-colors ${selectedVariantIndex === idx ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} 
+                         onClick={() => setSelectedVariantIndex(idx)}
+                       >
+                         {v.name}
+                       </button>
+                     ))}
+                   </div>
                  </div>
-               </div>
+               )}
              </div>
 
              {isDrink && (
@@ -90,8 +104,19 @@ export default function PosCustomizationModal({
         </div>
 
         <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0">
-           <button onClick={() => { const finalCust = isDrink ? customization : { mood: "", size: customization.size, sugar: "", ice: "" }; onAdd(product, finalCust, notes); onClose(); }} className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-[15px]">
-             <Plus size={18}/> Add to Order — ${product.price.toFixed(2)}
+           <button 
+             onClick={() => { 
+               const finalSizeName = product.variants?.[selectedVariantIndex]?.name || "";
+               const finalCust = isDrink 
+                  ? { ...customization, size: finalSizeName } 
+                  : { mood: "", size: finalSizeName, sugar: "", ice: "" }; 
+               
+               onAdd(product, finalCust, notes, activeBasePrice); 
+               onClose(); 
+             }} 
+             className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-[15px]"
+           >
+             <Plus size={18}/> Add to Order — ${activeBasePrice.toFixed(2)}
            </button>
         </div>
       </div>

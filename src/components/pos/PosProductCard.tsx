@@ -24,6 +24,10 @@ export default function PosProductCard({
   product: PosProduct; 
   onClick: (product: PosProduct) => void; 
 }) {
+  const basePrice = product.variants && product.variants.length > 0 
+    ? Math.min(...product.variants.map(v => v.price)) 
+    : product.price;
+
   return (
     <div 
       className="animate-scale-in bg-white p-3 rounded-[20px] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-gray-100 transition-all hover:shadow-md flex flex-col h-full group cursor-pointer" 
@@ -42,7 +46,10 @@ export default function PosProductCard({
       <div className="flex-1 flex flex-col px-1">
         <h3 className="font-extrabold text-gray-900 text-sm leading-tight mb-0.5 line-clamp-1">{product.name}</h3>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{product.category}</p>
-        <p className="font-black text-[17px] text-gray-900 mb-4"><sup className="text-[10px] font-bold text-gray-500 mr-0.5">$</sup>{product.price.toFixed(2)}</p>
+        <p className="font-black text-[17px] text-gray-900 mb-4">
+          <sup className="text-[10px] font-bold text-gray-500 mr-0.5">$</sup>
+          {basePrice.toFixed(2)}
+        </p>
         
         <div className="mt-auto">
           {/* S M L buttons removed. Tapping the button below opens the modal directly */}

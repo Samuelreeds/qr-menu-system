@@ -33,13 +33,20 @@ import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
-export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
+export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
+
+const getDisplayPrice = (product: Product) => {
+  if (product.variants && product.variants.length > 0) {
+    return Math.min(...product.variants.map((v: any) => v.price));
+  }
+  return product.price || 0;
+};
 
 interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; }
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string };
@@ -69,6 +76,9 @@ export default function AdminDashboard({ shopId, categories, products, settings,
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
   const [catIsDrink, setCatIsDrink] = useState(false);
+
+  const [productVariants, setProductVariants] = useState<{name: string, price: number}[]>([{name: 'Default', price: 0}]);
+  const hasInitializedProductRef = useRef(false);
 
   const [previewNameEn, setPreviewNameEn] = useState(settings?.name || '');
   const [previewNameKh, setPreviewNameKh] = useState(settings?.name_kh || '');
@@ -150,7 +160,45 @@ export default function AdminDashboard({ shopId, categories, products, settings,
 
   useEffect(() => { setOrigin(window.location.origin); const afterPrint = () => setPrintFormat(null); window.addEventListener('afterprint', afterPrint); return () => { window.removeEventListener('afterprint', afterPrint); if (pendingDeleteRef.current) { clearTimeout(pendingDeleteRef.current.timeoutId); clearInterval(pendingDeleteRef.current.intervalId); deleteProduct(pendingDeleteRef.current.actionFormData).catch(() => {}); } }; }, []);
   useEffect(() => { setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); }, [settings?.logo, settings?.logoType]);
-  useEffect(() => { if (editingProduct) { setProductPreview(getValidImage(editingProduct.image) === PLACEHOLDER_IMAGE ? '' : editingProduct.image); setProductFileBlob(null); setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' }); setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15'); setIsHotSale(editingProduct.isPopular || false); setIsSoldOutState(editingProduct.isSoldOut || false); } else if (isFormOpen) { setProductPreview(''); setProductFileBlob(null); setProdName({ en: '', kh: '', zh: '' }); setPrepTime('15'); setIsHotSale(false); setIsSoldOutState(false); } }, [editingProduct, isFormOpen]);
+  
+  const [wasEditingProduct, setWasEditingProduct] = useState<string | null>(null);
+  const [wasFormOpen, setWasFormOpen] = useState(false);
+
+  useEffect(() => { 
+    if ((isFormOpen || editingProduct) && !hasInitializedProductRef.current) {
+      hasInitializedProductRef.current = true;
+      
+      if (editingProduct) { 
+        setProductPreview(getValidImage(editingProduct.image) === PLACEHOLDER_IMAGE ? '' : editingProduct.image); 
+        setProductFileBlob(null); 
+        setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' }); 
+        setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15'); 
+        setIsHotSale(editingProduct.isPopular || false); 
+        setIsSoldOutState(editingProduct.isSoldOut || false); 
+        
+        if (editingProduct.variants && editingProduct.variants.length > 0) {
+          setProductVariants(editingProduct.variants.map(v => ({ name: v.name, price: v.price })));
+        } else {
+          setProductVariants([{name: 'Default', price: editingProduct.price || 0}]);
+        }
+        setWasEditingProduct(editingProduct.id);
+      } else { 
+        setProductPreview(''); 
+        setProductFileBlob(null); 
+        setProdName({ en: '', kh: '', zh: '' }); 
+        setPrepTime('15'); 
+        setIsHotSale(false); 
+        setIsSoldOutState(false); 
+        setProductVariants([{name: 'Default', price: 0}]);
+        setWasFormOpen(true);
+      } 
+    } else if (!isFormOpen && !editingProduct) {
+      hasInitializedProductRef.current = false;
+      setWasEditingProduct(null);
+      setWasFormOpen(false);
+    }
+  }, [editingProduct, isFormOpen]);
+  
   useEffect(() => { if (editingCategory) { setCatName({ en: editingCategory.name || '', kh: editingCategory.name_kh || '', zh: editingCategory.name_zh || '' }); setCatIsDrink(editingCategory.isDrink || false); } else if (isCatFormOpen) { setCatName({ en: '', kh: '', zh: '' }); setCatIsDrink(false); } }, [editingCategory, isCatFormOpen]);
 
   const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
@@ -483,7 +531,8 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                     const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
                     const rawItemDiscount = item.discount || 0;
                     const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                    const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                    const basePrice = getDisplayPrice(item);
+                    const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
                     return (
                     <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full group hover:shadow-md transition-all overflow-hidden cursor-pointer" onClick={() => setEditingProduct(item)}>
                       <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10 pointer-events-none">
@@ -500,9 +549,9 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                           <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0 pr-2">
                               {effectiveDiscount > 0 ? (
-                                <div className="flex flex-col"><span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1 truncate block">${item.price.toFixed(2)}</span></div>
+                                <div className="flex flex-col"><span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1 truncate block">${basePrice.toFixed(2)}</span></div>
                               ) : (
-                                <span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${item.price.toFixed(2)}</span>
+                                <span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${basePrice.toFixed(2)}</span>
                               )}
                             </div>
                             <div className="flex items-center shrink-0 relative z-10" onClick={(e) => e.stopPropagation()}>
@@ -525,12 +574,13 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                           const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
                           const rawItemDiscount = item.discount || 0;
                           const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                          const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                          const basePrice = getDisplayPrice(item);
+                          const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
                           return (
                           <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${item.isSoldOut ? 'opacity-70' : ''}`} onClick={() => setEditingProduct(item)}>
                             <td className="p-4 flex items-center gap-4"><div className={`w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div><div className="flex flex-col"><span className={`font-bold text-base ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</span><div className="flex items-center gap-2 mt-1">{item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}{effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}</div></div></td>
                             <td className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1.5 rounded-lg">{item.category?.name}</span></td>
-                            <td className={`p-4 font-black text-xl ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{effectiveDiscount > 0 ? (<div className="flex flex-col"><span className={item.isSoldOut ? 'text-gray-500' : 'text-red-500'}>${discountedPrice.toFixed(2)}</span><span className="text-xs text-gray-400 line-through font-medium mt-0.5">${item.price.toFixed(2)}</span></div>) : (`$${item.price.toFixed(2)}`)}</td>
+                            <td className={`p-4 font-black text-xl ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{effectiveDiscount > 0 ? (<div className="flex flex-col"><span className={item.isSoldOut ? 'text-gray-500' : 'text-red-500'}>${discountedPrice.toFixed(2)}</span><span className="text-xs text-gray-400 line-through font-medium mt-0.5">${basePrice.toFixed(2)}</span></div>) : (`$${basePrice.toFixed(2)}`)}</td>
                             <td className="p-4 text-sm text-gray-500 font-medium">{item.time}</td>
                             <td className="p-4 text-right"><div className="flex items-center justify-end gap-3 relative z-10" onClick={(e) => e.stopPropagation()}><button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><MoreVertical size={18} /></button></div></td>
                           </tr>
@@ -544,11 +594,12 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                        const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
                        const rawItemDiscount = item.discount || 0;
                        const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                       const discountedPrice = effectiveDiscount > 0 ? item.price * (1 - effectiveDiscount / 100) : item.price;
+                       const basePrice = getDisplayPrice(item);
+                       const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
                        return(
                         <div key={item.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer ${item.isSoldOut ? 'opacity-75' : ''}`} onClick={() => setEditingProduct(item)}>
                            <div className="flex items-start gap-4 mb-3"><div className={`w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div><div className="flex-1 pt-1"><h4 className={`font-extrabold text-base leading-tight mb-1.5 line-clamp-2 ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</h4><div className="flex items-center gap-2 flex-wrap"><p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{item.category?.name} • {item.time}</p>{item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-50 px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider">Hot</span>}</div></div></div>
-                           <div className="flex flex-col border-t border-gray-50 pt-3 relative z-10 mt-auto"><div className="flex items-center justify-between"><div className="flex-1 min-w-0 pr-2 pointer-events-none">{effectiveDiscount > 0 ? (<div className="flex items-baseline gap-1.5 flex-wrap"><span className={`font-black text-xl leading-none truncate ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="text-xs font-medium text-gray-400 line-through truncate">${item.price.toFixed(2)}</span></div>) : (<span className={`font-black text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${item.price.toFixed(2)}</span>)}</div><div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}><button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><MoreVertical size={16} /></button></div></div></div>
+                           <div className="flex flex-col border-t border-gray-50 pt-3 relative z-10 mt-auto"><div className="flex items-center justify-between"><div className="flex-1 min-w-0 pr-2 pointer-events-none">{effectiveDiscount > 0 ? (<div className="flex items-baseline gap-1.5 flex-wrap"><span className={`font-black text-xl leading-none truncate ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="text-xs font-medium text-gray-400 line-through truncate">${basePrice.toFixed(2)}</span></div>) : (<span className={`font-black text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${basePrice.toFixed(2)}</span>)}</div><div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}><button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><MoreVertical size={16} /></button></div></div></div>
                         </div>
                      )})}
                      {filteredProducts.length === 0 && searchQuery !== '' && <div className="bg-white p-8 rounded-3xl text-center text-gray-400 font-medium shadow-sm border border-gray-100">No products found matching "{searchQuery}"</div>}
@@ -840,7 +891,65 @@ export default function AdminDashboard({ shopId, categories, products, settings,
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
             <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
                <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">{editingProduct ? 'Edit Product' : 'New Product'}</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 active:scale-95 transition-transform" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}><X size={20}/></button></div>
-               <form key={editingProduct ? editingProduct.id : 'new'} onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); const isEdit = !!editingProduct; const tempId = isEdit ? editingProduct!.id : `temp-${Date.now()}`; const catId = fd.get('categoryId') as string; const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown'; const tempProduct: Product = { id: tempId, name: prodName.en, name_kh: prodName.kh, name_zh: prodName.zh, price: parseFloat(fd.get('price') as string), discount: parseFloat(fd.get('discount') as string) || 0, image: productPreview || editingProduct?.image || PLACEHOLDER_IMAGE, category: { name: catNameStr }, time: fd.get('time') as string || '15min', isPopular: isHotSale, isSoldOut: isSoldOutState }; startTransition(() => { dispatchOptProducts({ type: isEdit ? 'update' : 'add', payload: tempProduct }); }); setIsFormOpen(false); setEditingProduct(null); startTransition(async () => { if (productFileBlob) fd.set('image', productFileBlob, 'product.webp'); else if (productPreview) fd.set('image', productPreview); fd.set('name', prodName.en); fd.set('name_kh', prodName.kh); fd.set('name_zh', prodName.zh); fd.set('isPopular', isHotSale ? 'on' : 'off'); fd.set('isSoldOut', isSoldOutState ? 'true' : 'false'); try { if (isEdit) await updateProduct(fd); else await createProduct(fd); setProductFileBlob(null); showToast("Product saved successfully!"); } catch (err) { showToast("Failed to save product."); } }); }} className="space-y-4">
+               <form key={editingProduct ? editingProduct.id : 'new'} onSubmit={(e) => { 
+                 e.preventDefault(); 
+                 const fd = new FormData(e.currentTarget); 
+                 const isEdit = !!editingProduct; 
+                 const tempId = isEdit ? editingProduct!.id : `temp-${Date.now()}`; 
+                 const catId = fd.get('categoryId') as string; 
+                 const catNameStr = categories.find(c => c.id === catId)?.name || 'Unknown'; 
+                 const finalVariants = productVariants.length > 0 ? productVariants : [{ name: 'Default', price: 0 }];
+                 const basePrice = finalVariants[0].price;
+
+                 const tempProduct: Product = { 
+                   id: tempId, 
+                   name: prodName.en, 
+                   name_kh: prodName.kh, 
+                   name_zh: prodName.zh, 
+                   price: basePrice, 
+                   variants: finalVariants,
+                   discount: parseFloat(fd.get('discount') as string) || 0, 
+                   image: productPreview || editingProduct?.image || PLACEHOLDER_IMAGE, 
+                   category: { name: catNameStr }, 
+                   time: fd.get('time') as string || '15min', 
+                   isPopular: isHotSale, 
+                   isSoldOut: isSoldOutState 
+                 }; 
+
+                 startTransition(() => { dispatchOptProducts({ type: isEdit ? 'update' : 'add', payload: tempProduct }); }); 
+                 setIsFormOpen(false); 
+                 setEditingProduct(null); 
+                 startTransition(async () => { 
+                   const payload = {
+                     id: isEdit ? editingProduct!.id : tempId,
+                     name: prodName.en,
+                     name_kh: prodName.kh || null,
+                     name_zh: prodName.zh || null,
+                     price: basePrice,
+                     variants: finalVariants,
+                     discount: parseFloat(fd.get('discount') as string) || 0,
+                     categoryId: catId,
+                     time: fd.get('time') as string || '15min',
+                     image: productFileBlob ? productFileBlob : (productPreview || editingProduct?.image || null),
+                     isPopular: isHotSale,
+                     isSoldOut: isSoldOutState
+                   };
+
+                   console.log("PAYLOAD VARIANTS:", payload.variants); // Debug Log
+
+                   try { 
+                     if (isEdit) {
+                       await updateProduct(payload as any);
+                     } else {
+                       await createProduct(payload as any);
+                     } 
+                     setProductFileBlob(null); 
+                     showToast("Product saved successfully!"); 
+                   } catch (err) { 
+                     showToast("Failed to save product."); 
+                   } 
+                 }); 
+               }} className="space-y-4">
                   {editingProduct && <input type="hidden" name="id" value={editingProduct.id} />}
                   
                   <div className="w-full">
@@ -863,8 +972,34 @@ export default function AdminDashboard({ shopId, categories, products, settings,
                   </div>
 
                   <LocalizedInput label="Product Name" value={prodName.en} valueKh={prodName.kh} valueZh={prodName.zh} onChange={(lang, val) => setProdName(prev => ({ ...prev, [lang]: val }))} required multiLangEnabled={multiLanguageEnabled} />
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1"><label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Price ($)</label><input name="price" defaultValue={editingProduct?.price || ''} type="number" step="0.01" placeholder="0.00" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required /></div>
+                  
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-4">
+                    <label className="block text-sm font-semibold text-gray-800">Sizes & Pricing</label>
+                    <div className="space-y-3 w-full">
+                      {productVariants.map((size, idx) => (
+                         <div key={idx} className="flex items-center gap-2 sm:gap-3 w-full">
+                            <input type="text" placeholder="Size Name (e.g. Regular, L)" value={size.name} onChange={(e) => {
+                               setProductVariants(prev => {
+                                  const newSizes = [...prev];
+                                  newSizes[idx] = { ...newSizes[idx], name: e.target.value };
+                                  return newSizes;
+                               });
+                            }} className="flex-[3] min-w-0 px-3 sm:px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required />
+                            <input type="number" step="0.01" placeholder="Price ($)" value={size.price === 0 && size.name === '' ? '' : size.price} onChange={(e) => {
+                               setProductVariants(prev => {
+                                  const newSizes = [...prev];
+                                  newSizes[idx] = { ...newSizes[idx], price: parseFloat(e.target.value) || 0 };
+                                  return newSizes;
+                               });
+                            }} className="flex-[2] sm:w-32 min-w-0 px-3 sm:px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" required />
+                            <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} disabled={productVariants.length <= 1} className="p-2 sm:p-3 text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed rounded-xl transition-colors active:scale-95 shrink-0 flex items-center justify-center"><Trash2 size={18} /></button>
+                         </div>
+                      ))}
+                      <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: 0}])} className="text-sm font-bold text-gray-900 flex items-center gap-1.5 hover:text-gray-700 px-1 py-1 transition-colors"><Plus size={16}/> Add Size</button>
+                   </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {featCampaign ? (<div className="space-y-1"><label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Discount (%)</label><input name="discount" defaultValue={editingProduct?.discount || ''} type="number" min="0" max="100" placeholder="0" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 placeholder:text-gray-400 shadow-sm" /></div>) : (<div className="space-y-1 opacity-70"><div className="flex items-center justify-between mb-1.5 ml-1 pr-1"><label className="block text-sm font-semibold text-gray-800">Discount (%)</label><Lock size={12} className="text-gray-500" /></div><input disabled type="text" placeholder="Upgrade Plan" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed shadow-sm" /><input type="hidden" name="discount" value="0" /></div>)}
                     <div className="space-y-1"><label className="block text-sm font-semibold text-gray-800 mb-1.5 ml-1">Category</label><select name="categoryId" defaultValue={categories.find(c => c.name === editingProduct?.category?.name)?.id || categories[0]?.id} className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-sm text-gray-900 cursor-pointer shadow-sm" required>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                   </div>

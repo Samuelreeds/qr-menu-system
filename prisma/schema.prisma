@@ -121,7 +121,7 @@ model Invite {
   createdAt DateTime @default(now())
 }
 
-// --- YOUR EXISTING MODELS (SCOPED TO SHOP) ---
+// --- EXISTING MODELS (SCOPED TO SHOP) ---
 model Category {
   id        String  @id @default(cuid())
   name      String
@@ -137,12 +137,24 @@ model Category {
   products Product[]
 }
 
+// --- NEW RELATIONAL VARIANTS MODEL ---
+model ProductVariant {
+  id        String  @id @default(cuid())
+  name      String
+  price     Float
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
 model Product {
   id          String  @id @default(cuid())
   name        String
   name_kh     String?
   name_zh     String?
-  price       Float
+  price       Float   // Kept as base/fallback price
   image       String
   time        String?
   rating      Float   @default(0)
@@ -150,6 +162,9 @@ model Product {
   isPopular   Boolean @default(false)
   isSoldOut   Boolean @default(false)
   discount    Float   @default(0)
+
+  // RELATIONAL VARIANTS INSTEAD OF JSON
+  variants    ProductVariant[]
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -182,6 +197,7 @@ model ShopSettings {
   address       String?
   phone         String?
   openingHours  String?
+
   themeColor    String  @default("#000000")
   headerDesign  String  @default("design1")
   logo          String?
@@ -320,7 +336,7 @@ model OrderItem {
   notes           String?  @db.Text
   
   // Store customizations (mood, size, sugar, ice) as a flexible JSON object
-  customization   Json?    
+  customization   Json?
   
   createdAt       DateTime @default(now())
 

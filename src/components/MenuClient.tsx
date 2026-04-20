@@ -30,12 +30,19 @@ interface ShopSettings {
   socials: string; 
 }
 
+interface ProductVariant {
+  id?: string;
+  name: string;
+  price: number;
+}
+
 interface Product {
   id: string;
   name: string;
   name_kh?: string | null; 
   name_zh?: string | null; 
   price: number;
+  variants?: ProductVariant[];
   rating: number;
   time: string;
   image: string;
@@ -111,6 +118,7 @@ export default function MenuClient({
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0);
   const [currentBanner, setCurrentBanner] = useState(0);
   
   // Floating Staff Call State
@@ -230,6 +238,12 @@ export default function MenuClient({
     }
   };
 
+  const handleOpenItem = (item: Product) => {
+    setSelectedItem(item);
+    setSelectedVariantIndex(0);
+    setSelectedImgLoaded(false);
+  };
+
   const themeColor = shopSettings?.themeColor || '#5CB85C'; 
   const headerDesign = shopSettings?.headerDesign || 'design1';
   const logoUrl = shopSettings?.logo || '';
@@ -256,6 +270,15 @@ export default function MenuClient({
       (multiLanguageEnabled && p.name_zh && p.name_zh.includes(searchQuery))
     );
   };
+
+  // Dynamic Price Calculations for Modal
+  const hasVariants = selectedItem?.variants && selectedItem.variants.length > 0 && !(selectedItem.variants.length === 1 && selectedItem.variants[0].name === 'Default');
+  const activeBasePrice = selectedItem?.variants?.[selectedVariantIndex]?.price ?? selectedItem?.price ?? 0;
+  
+  const selectedCatDiscount = selectedItem && typeof selectedItem.category === 'object' ? (selectedItem.category.discount || 0) : 0;
+  const selectedRawDiscount = selectedItem?.discount || 0;
+  const selectedEffDiscount = featCampaign === false ? 0 : (selectedRawDiscount > 0 ? selectedRawDiscount : selectedCatDiscount);
+  const activeDiscPrice = selectedEffDiscount > 0 ? activeBasePrice * (1 - selectedEffDiscount / 100) : activeBasePrice;
 
   return (
     <main 
@@ -439,8 +462,8 @@ export default function MenuClient({
                   key={item.id} 
                   item={item as any} 
                   themeColor={themeColor} 
-                  featCampaign={featCampaign} // PASSED HERE
-                  onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                  featCampaign={featCampaign} 
+                  onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                 />
               ))}
             </div>
@@ -458,8 +481,8 @@ export default function MenuClient({
                         key={item.id} 
                         item={item as any} 
                         themeColor={themeColor} 
-                        featCampaign={featCampaign} // PASSED HERE
-                        onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                        featCampaign={featCampaign} 
+                        onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                       />
                     ))}
                   </div>
@@ -485,8 +508,8 @@ export default function MenuClient({
                           key={item.id} 
                           item={item as any} 
                           themeColor={themeColor} 
-                          featCampaign={featCampaign} // PASSED HERE
-                          onClick={item.isSoldOut ? undefined : () => { setSelectedItem(item); setSelectedImgLoaded(false); }} 
+                          featCampaign={featCampaign} 
+                          onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                         />
                       ))}
                     </div>
@@ -501,9 +524,9 @@ export default function MenuClient({
       {/* --- SELECTED ITEM MODAL --- */}
       {selectedItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedItem(null)}>
-          <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedItem(null)} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-10 hover:bg-black/60 transition-all"><X size={20} /></button>
-            <div className="w-full aspect-square bg-gray-100 relative overflow-hidden">
+            <div className="w-full aspect-[4/3] bg-gray-100 relative shrink-0 overflow-hidden">
               {!selectedImgLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
               <img 
                 ref={selectedImgRef}
@@ -516,17 +539,55 @@ export default function MenuClient({
                 onError={() => setSelectedImgLoaded(true)}
               />
             </div>
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            
+            <div className="p-6 overflow-y-auto no-scrollbar flex flex-col">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2 leading-tight">
                 {lang === 'kh' ? (selectedItem.name_kh || selectedItem.name) : (lang === 'zh' && multiLanguageEnabled) ? (selectedItem.name_zh || selectedItem.name) : selectedItem.name}
               </h2>
-              <div className="flex items-center gap-3 text-gray-500 text-sm mb-4">
+              <div className="flex items-center gap-3 text-gray-500 text-sm mb-6">
                 <span>{selectedItem.time}</span>
                 <div className="flex items-center gap-1"><Star size={14} className="text-yellow-400 fill-yellow-400" /><span>{selectedItem.rating}</span></div>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                 <span className="font-extrabold text-2xl" style={{ color: 'var(--brand-color)' }}>${selectedItem.price.toFixed(2)}</span>
+
+              {/* Variant Selector */}
+              {hasVariants && (
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Select Size</label>
+                  <div className="flex flex-wrap gap-2.5">
+                    {selectedItem.variants!.map((v, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedVariantIndex(idx)}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                          selectedVariantIndex === idx 
+                            ? 'border-gray-900 bg-gray-900 text-white shadow-md' 
+                            : 'border-gray-100 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                        style={selectedVariantIndex === idx ? { borderColor: themeColor, backgroundColor: themeColor } : {}}
+                      >
+                        {v.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-auto pt-6 border-t border-gray-100">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Price</span>
+                    {selectedEffDiscount > 0 ? (
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="font-extrabold text-3xl" style={{ color: themeColor }}>${activeDiscPrice.toFixed(2)}</span>
+                        <span className="font-semibold text-sm text-gray-400 line-through">${activeBasePrice.toFixed(2)}</span>
+                      </div>
+                    ) : (
+                      <span className="font-extrabold text-3xl" style={{ color: themeColor }}>${activeBasePrice.toFixed(2)}</span>
+                    )}
+                  </div>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
