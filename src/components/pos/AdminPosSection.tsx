@@ -1,8 +1,8 @@
 // src/components/pos/AdminPosSection.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ShoppingCart, Search } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ShoppingCart, Search, WifiOff, CloudOff, RefreshCcw } from 'lucide-react';
 import { useOrder } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
 import PosReceipt from "@/components/PosReceipt";
@@ -12,6 +12,9 @@ import { useRouter } from 'next/navigation';
 import PosCustomizationModal from './PosCustomizationModal';
 import PosProductCard, { PosProductCardSkeleton } from './PosProductCard';
 import BillingPanel from './BillingPanel';
+
+// IMPORT OFFLINE STORE
+import { saveOfflineOrder, getPendingOrders, markOrderSynced, OfflineOrder } from '@/lib/offlineStore';
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
@@ -26,27 +29,74 @@ const TAX_RATE = 0.1;
 export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string }) {
   const router = useRouter();
   
-  const {
-    setOrderType: setContextOrderType,
-    setTableNumber: setContextTableNumber,
-    setDeliveryAgent: setContextDeliveryAgent,
-    setDiscount: setContextDiscount,
-    setPromoCode: setContextPromoCode,
-    addItem: addContextItem,
-    removeItem: removeContextItem,
-    updateQty: updateContextQty,
-    clearDraft,
-    draft,
-  } = useOrder();
-
   const [menuLoading, setMenuLoading] = useState(true);
   const [latestOrder, setLatestOrder] = useState<any>(null);
   const [selectedModalProduct, setSelectedModalProduct] = useState<PosProduct | null>(null);
+
+  // Offline Sync State
+  const [pendingSyncCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = useRef(false); // Ref for precise interval locking
 
   useEffect(() => {
     const timer = setTimeout(() => setMenuLoading(false), 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // --- BACKGROUND SYNC LOGIC ---
+  const checkPendingOrders = async () => {
+    try {
+      const pending = await getPendingOrders();
+      setPendingCount(pending.length);
+    } catch (e) {
+      console.error("Failed to read pending offline orders", e);
+    }
+  };
+
+  const syncPendingOrders = async () => {
+    if (isSyncingRef.current) return;
+    
+    try {
+      const pendingOrders = await getPendingOrders();
+      if (pendingOrders.length === 0) return;
+
+      isSyncingRef.current = true;
+      setIsSyncing(true);
+
+      for (const offlineOrder of pendingOrders) {
+        try {
+          const res = await createPosOrder(offlineOrder.payload);
+          if (res?.success) {
+            await markOrderSynced(offlineOrder.id);
+          }
+        } catch (error) {
+          console.warn(`Failed to sync offline order ${offlineOrder.id}, will retry later`, error);
+          // Stop attempting to sync the rest if network is fully down
+          if (!navigator.onLine) break; 
+        }
+      }
+    } finally {
+      await checkPendingOrders();
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+      router.refresh(); // Refresh inventory/orders visually after a batch sync
+    }
+  };
+
+  useEffect(() => {
+    checkPendingOrders();
+    
+    // Attempt sync immediately on load, on interval, and when network comes back online
+    syncPendingOrders();
+    const interval = setInterval(syncPendingOrders, 30000); // Check every 30 seconds
+    window.addEventListener('online', syncPendingOrders);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', syncPendingOrders);
+    };
+  }, []);
+  // ------------------------------
 
   const categories = [
     { id: "all", label: "All", emoji: "📋", isDrink: false },
@@ -144,8 +194,10 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
     const afterDiscount = subtotal - discountAmount;
     const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
+    const total = afterDiscount + tax;
 
-    const res = await createPosOrder({
+    // 1. Construct the payload matching createPosOrder exactly
+    const orderPayload = {
       shopId,
       orderType: orderType.toUpperCase(),
       tableNumber,
@@ -162,25 +214,71 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         notes: i.notes,
         customization: i.customization
       }))
-    });
+    };
 
+    // 2. Generate a temporary Offline ID & Save to IndexedDB IMMEDIATELY
+    const tempOrderId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const offlineRecord: OfflineOrder = {
+      id: tempOrderId,
+      payload: orderPayload,
+      status: 'pending',
+      createdAt: Date.now()
+    };
+    
+    await saveOfflineOrder(offlineRecord);
+    await checkPendingOrders(); // Update UI badge
+
+    let finalOrderForReceipt: any = null;
+
+    // 3. Try hitting the server
+    try {
+      const res = await createPosOrder(orderPayload);
+      
+      if (res?.success && res.order) {
+        // Success: Mark as synced
+        await markOrderSynced(tempOrderId);
+        await checkPendingOrders();
+        finalOrderForReceipt = res.order;
+      } else {
+        throw new Error(res?.error || "Server rejected order");
+      }
+    } catch (err) {
+      console.warn("Order saved locally due to offline/error state:", err);
+      // Construct a "Mock" order for the local receipt printer so the flow doesn't stop
+      finalOrderForReceipt = {
+        id: tempOrderId,
+        shopId: shopId,
+        orderType: orderPayload.orderType,
+        tableNumber: orderPayload.tableNumber,
+        deliveryAgent: orderPayload.deliveryAgent,
+        subtotal: subtotal,
+        discount: discountAmount,
+        promoCode: orderPayload.promoCode,
+        tax: tax,
+        total: total,
+        paymentMethod: orderPayload.paymentMethod,
+        status: 'COMPLETED',
+        isPaid: true,
+        createdAt: new Date(),
+        items: billingItems,
+        isOffline: true // Can use this in PosReceipt to add a "Pending Sync" watermark if desired
+      };
+    }
+
+    // 4. Cleanup & Print regardless of network state
+    setLatestOrder(finalOrderForReceipt);
+    setBillingItems([]);
+    setTableNumber("");
+    setIsMobileCartOpen(false);
     setIsSavingOrder(false);
 
-    if (res?.success && res.order) {
-      setLatestOrder(res.order);
-      setBillingItems([]);
-      setTableNumber("");
-      setIsMobileCartOpen(false);
-
-      setTimeout(() => {
-        window.print();
-        setTimeout(() => setLatestOrder(null), 1000); 
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setLatestOrder(null), 1000); 
+      if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
         router.refresh();
-      }, 500);
-
-    } else {
-      alert("Error: " + (res?.error || "Failed to create order"));
-    }
+      }
+    }, 500);
   };
 
   return (
@@ -235,9 +333,24 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0">
-          <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
-            Select Products
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
+              Select Products
+            </h1>
+            
+            {/* OFFLINE SYNC INDICATOR */}
+            {pendingSyncCount > 0 && (
+              <div 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isSyncing ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+                onClick={syncPendingOrders}
+                title="Click to force sync"
+              >
+                {isSyncing ? <RefreshCcw size={14} className="animate-spin" /> : <CloudOff size={14} />}
+                <span>{pendingSyncCount} order{pendingSyncCount > 1 ? 's' : ''} pending sync</span>
+              </div>
+            )}
+          </div>
+
           <div className="relative w-full sm:w-72 shrink-0">
             <input
               type="text"

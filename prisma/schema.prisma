@@ -298,6 +298,8 @@ model Order {
   shopId          String
   shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
   
+  orderNumber     String?       // NEW FIELD ADDED
+
   // POS Specific Fields
   orderType       OrderType     @default(TABLE)
   tableNumber     String?       // "Table 1", "Table 2"

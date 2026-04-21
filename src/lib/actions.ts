@@ -12,14 +12,12 @@ import { getServerSession } from 'next-auth';
 import { canUseFeature, getLimit } from '@/lib/shop-guard';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-// --- SETUP ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 const PRODUCT_PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 
-// --- MULTI-TENANT HELPER (SECURED) ---
 async function getActiveShopId() {
   const session = await getServerSession(authOptions);
   
@@ -38,7 +36,6 @@ async function getActiveShopId() {
   return user.shopUsers[0].shopId;
 }
 
-// --- OPTIMIZATION: TARGETED REVALIDATION HELPER ---
 async function revalidateActiveShop() {
   revalidatePath('/admin');
   try {
@@ -55,7 +52,6 @@ async function revalidateActiveShop() {
   }
 }
 
-// --- SUPER ADMIN HELPER (SECURED) ---
 export async function verifySuperAdmin() {
   const session = await getServerSession(authOptions);
   
@@ -83,7 +79,6 @@ export async function verifySuperAdmin() {
   return null;
 }
 
-// --- READ ACTIONS ---
 export async function getCategories() {
   const shopId = await getActiveShopId();
   if (!shopId) return [];
@@ -98,7 +93,7 @@ export async function getProducts() {
   if (!shopId) return [];
   return await prisma.product.findMany({
     where: { shopId },
-    include: { category: true, variants: true }, // ADDED VARIANTS INCLUDE
+    include: { category: true, variants: true },
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -137,7 +132,6 @@ export async function getBanners() {
   });
 }
 
-// --- HELPERS ---
 async function uploadToSupabase(file: File, folder: 'products' | 'branding' | 'banners'): Promise<string | undefined> {
   if (!file || file.size === 0 || file.name === 'undefined') return undefined;
 
@@ -177,7 +171,6 @@ async function deleteFromSupabase(fullUrl: string | null) {
   }
 }
 
-// --- BANNER ACTIONS ---
 export async function addBanner(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
@@ -258,7 +251,6 @@ export async function reorderBanners(banners: {id: string, sortOrder: number}[])
   }
 }
 
-// --- CATEGORY ACTIONS ---
 export async function createCategory(formData: FormData) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
@@ -307,7 +299,6 @@ export async function deleteCategory(formData: FormData) {
   await revalidateActiveShop();
 }
 
-// --- PRODUCT ACTIONS ---
 export async function createProduct(data: {
   name: string;
   name_kh?: string | null;
@@ -336,11 +327,8 @@ export async function createProduct(data: {
   const time = data.time || '15min';
   const isSoldOut = !!data.isSoldOut;
 
-  // Use variants explicitly 
   const variants = data.variants && data.variants.length > 0 ? data.variants : [{ name: 'Default', price: data.price || 0 }];
   const price = variants[0]?.price || data.price || 0;
-
-  console.log("RECEIVED VARIANTS FOR CREATE:", variants);
 
   let imagePath: string | undefined;
   if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
@@ -365,7 +353,6 @@ export async function createProduct(data: {
       isPopular: !!data.isPopular, 
       isSoldOut, 
       shopId,
-      // Nested create for variants
       variants: {
         create: variants.map(v => ({
           name: v.name,
@@ -400,11 +387,8 @@ export async function updateProduct(data: {
   const time = data.time || '15min';
   const isSoldOut = !!data.isSoldOut;
   
-  // Use variants explicitly
   const variants = data.variants && data.variants.length > 0 ? data.variants : [{ name: 'Default', price: data.price || 0 }];
   const price = variants[0]?.price || data.price || 0;
-
-  console.log("RECEIVED VARIANTS FOR UPDATE:", variants);
 
   let newImagePath: string | undefined;
   if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
@@ -429,7 +413,6 @@ export async function updateProduct(data: {
       ...(newImagePath && { image: newImagePath }), 
       isPopular: !!data.isPopular, 
       isSoldOut,
-      // Clear old variants and set new ones to ensure clean state
       variants: {
         deleteMany: {}, 
         create: variants.map(v => ({
@@ -448,9 +431,7 @@ export async function toggleProductSoldOut(formData: FormData) {
   try {
     await prisma.product.update({ where: { id }, data: { isSoldOut } });
     await revalidateActiveShop();
-  } catch (e) {
-    console.error("Failed to toggle sold out status", e);
-  }
+  } catch (e) {}
 }
 
 export async function deleteProduct(formData: FormData) {
@@ -463,7 +444,6 @@ export async function deleteProduct(formData: FormData) {
   await revalidateActiveShop();
 }
 
-// --- SETTINGS ACTIONS ---
 export async function updateShopIdentity(formData: FormData) {
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
@@ -481,9 +461,7 @@ export async function updateShopIdentity(formData: FormData) {
       where: { id: shopId },
       data: { name, slug: newSlug }
     });
-  } catch (error) {
-    console.error("Failed to update slug (might be duplicate):", error);
-  }
+  } catch (error) {}
 
   await prisma.shopSettings.upsert({
     where: { shopId },
@@ -561,7 +539,6 @@ export async function forceRevalidateAction() {
   await revalidateActiveShop();
 }
 
-// --- SUPER ADMIN ACTIONS ---
 export async function createInvite(formData: FormData) {
   if (!await verifySuperAdmin()) return { error: "Unauthorized" };
   
@@ -579,9 +556,7 @@ export async function createInvite(formData: FormData) {
       }
     });
     revalidatePath('/superadmin');
-  } catch (error) {
-    console.error(error);
-  }
+  } catch (error) {}
 }
 
 export async function deleteInvite(formData: FormData) {
@@ -591,9 +566,7 @@ export async function deleteInvite(formData: FormData) {
   try {
     await prisma.invite.delete({ where: { id } });
     revalidatePath('/superadmin');
-  } catch (error) {
-    console.error(error);
-  }
+  } catch (error) {}
 }
 
 export async function listInvites() {
@@ -630,9 +603,7 @@ export async function updateShopPlan(formData: FormData) {
     revalidatePath('/superadmin');
     if (shop.slug) revalidatePath(`/${shop.slug}`);
     revalidatePath(`/${shop.id}`);
-  } catch (error) {
-    console.error("Failed to update shop plan:", error);
-  }
+  } catch (error) {}
 }
 
 export async function updateShopLimits(formData: FormData) {
@@ -706,12 +677,10 @@ export async function deleteShop(formData: FormData) {
     if (pathsToDelete.length > 0) {
       const { error } = await supabase.storage.from('uploads').remove(pathsToDelete);
       if (error) {
-        console.error("Storage deletion error:", error);
         warningMsg = "Shop deleted from database, but failed to remove some files from storage.";
       }
     }
   } catch (error: any) {
-    console.error("Delete shop failed:", error);
     return { error: "Failed to permanently delete shop." };
   }
 
@@ -787,9 +756,7 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
     }
 
     revalidatePath(`/superadmin/shop/${shopId}`);
-  } catch (error) {
-    console.error("Super Admin Delete Failed:", error);
-  }
+  } catch (error) {}
 }
 
 export async function listShopProductsForModeration(shopId: string, cursor?: string, take = 50) {
@@ -846,9 +813,7 @@ export async function importMenuData(formData: FormData) {
         contentType: 'text/plain;charset=UTF-8',
         upsert: true
       });
-    } catch (e) {
-      console.warn("Temp file upload to Supabase failed.", e);
-    }
+    } catch (e) {}
 
     const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
 
@@ -952,7 +917,6 @@ export async function importMenuData(formData: FormData) {
       }
     };
   } catch (error: any) {
-    console.error("Import parse error:", error);
     return { success: false, error: "Failed to parse the file. Please ensure it is a valid CSV." };
   }
 }
@@ -1100,7 +1064,6 @@ export async function executeMenuImport(formData: FormData) {
        }
     };
   } catch (error: any) {
-    console.error("Execute import error:", error);
     return { success: false, error: "Failed to process import into database." };
   }
 }
@@ -1171,7 +1134,6 @@ export async function createPlan(formData: FormData) {
     revalidatePath('/superadmin');
     return { success: true };
   } catch (error: any) {
-    console.error("Failed to create plan:", error);
     return { success: false, error: error.message || "Failed to create plan" };
   }
 }
@@ -1237,7 +1199,6 @@ export async function updatePlan(formData: FormData) {
     revalidatePath('/superadmin');
     return { success: true };
   } catch (error: any) {
-    console.error("Failed to update plan:", error);
     return { success: false, error: error.message || "Failed to update plan. Ensure internal key is unique." };
   }
 }
@@ -1268,9 +1229,7 @@ export async function togglePlanStatus(formData: FormData) {
     }
     revalidatePath('/superadmin');
     revalidatePath('/', 'layout');
-  } catch (error) {
-    console.error("Failed to toggle plan status:", error);
-  }
+  } catch (error) {}
 }
 
 export async function validateInviteToken(token: string) {
@@ -1450,7 +1409,6 @@ export async function createSuperAdminUser(formData: FormData) {
     revalidatePath('/superadmin');
     return { success: true };
   } catch (error) {
-    console.error("Failed to create super admin", error);
     return { success: false, error: "Failed to create SuperAdmin account" };
   }
 }
@@ -1511,9 +1469,13 @@ export async function createPosOrder(data: {
 
     const mappedOrderType = data.orderType.toUpperCase() === 'WALK-IN' ? 'TAKEAWAY' : data.orderType.toUpperCase();
 
+    const currentOrderCount = await prisma.order.count({ where: { shopId: data.shopId } });
+    const generatedOrderNumber = `# ORD-${String(currentOrderCount + 1).padStart(4, '0')}`;
+
     const order = await prisma.order.create({
       data: {
         shopId: data.shopId,
+        orderNumber: generatedOrderNumber,
         orderType: mappedOrderType as any,
         tableNumber: data.tableNumber,
         deliveryAgent: data.deliveryAgent,
@@ -1535,7 +1497,6 @@ export async function createPosOrder(data: {
     revalidatePath('/admin');
     return { success: true, order };
   } catch (error: any) {
-    console.error("POS_ORDER_ERROR", error);
     return { error: error.message || "Failed to save order to database." };
   }
 }
@@ -1556,7 +1517,6 @@ export async function updateOrderStatus(orderId: string, status: string) {
     revalidatePath('/admin');
     return { success: true };
   } catch (error) {
-    console.error("Update Order Error:", error);
     return { success: false, error: "Failed to update order" };
   }
 }
@@ -1576,7 +1536,6 @@ export async function deleteOrder(orderId: string) {
     revalidatePath('/admin');
     return { success: true };
   } catch (error) {
-    console.error("Delete Order Error:", error);
     return { success: false, error: "Failed to delete order" };
   }
 }
@@ -1631,7 +1590,6 @@ export async function adjustStockAction(ingredientId: string, change: number, re
     revalidatePath('/admin');
     return { success: true };
   } catch (error) {
-    console.error("Stock adjustment failed:", error);
     return { success: false, error: "Failed to adjust stock" };
   }
 }
@@ -1663,7 +1621,6 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     const demoEmail = `demo_${demoId}@scandine.xyz`;
     const slug = `demo-cafe-${demoId}`;
 
-    // 1. FAST CHECK: If demo account exists, instantly return so we don't overwrite changes!
     const existingUser = await prisma.user.findUnique({ 
       where: { email: demoEmail },
       select: { id: true } 
@@ -1671,13 +1628,11 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
 
     if (existingUser) return { success: true };
 
-    // 2. CREATE NEW DEMO ACCOUNT
     const DEMO_PRODUCT_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2ZmZWRkNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmOTczMTYiPkNhZmU8L3RleHQ+PC9zdmc+";
     const DEMO_LOGO_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y5NzMxNiIgcng9IjEwMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjAiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIj5TPC90ZXh0Pjwvc3ZnPg==";
     
     const hashedPassword = await bcrypt.hash('demo_password_123', 10);
     
-    // Create Plan
     try {
         await (prisma as any).plan.create({
           data: {
@@ -1688,8 +1643,7 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
         }).catch(() => {});
     } catch(e) {}
 
-    // Calculate expiration time (1 hour from now)
-    const expirationTime = new Date(Date.now() + 60 * 60 * 1000);
+    const expirationTime = new Date(Date.now() + 60 * 1000);
 
     const shop = await prisma.shop.create({
       data: { 
@@ -1697,8 +1651,8 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
         slug: slug, 
         plan: "EXCLUSIVE" as any, 
         status: "ACTIVE" as any,
-        isDemo: true,             // Mark as demo shop
-        expiresAt: expirationTime // Set expiration
+        isDemo: true,
+        expiresAt: expirationTime
       }
     });
     const shopId = shop.id;
@@ -1715,7 +1669,6 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
       data: { shopId: shopId, name: "Scandine Demo Shop", themeColor: "#f97316", headerDesign: "design1", socials: "[]", logo: DEMO_LOGO_IMAGE }
     });
 
-    // Add Data
     const cat1 = await prisma.category.create({ data: { shopId, name: "Popular 🔥", sortOrder: 1, isDrink: true } });
     const cat2 = await prisma.category.create({ data: { shopId, name: "Coffee ☕", sortOrder: 2, isDrink: true } });
     const cat3 = await prisma.category.create({ data: { shopId, name: "Tea & Refreshers 🍹", sortOrder: 3, isDrink: true } });
@@ -1760,13 +1713,13 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     if (p1 && p2 && p3) {
       await prisma.order.create({
         data: {
-          shopId, orderType: 'TABLE' as any, tableNumber: 'Table 4', subtotal: 7.00, discount: 0, tax: 0.70, total: 7.70, status: 'COMPLETED' as any, isPaid: true, paymentMethod: 'CASH' as any,
+          shopId, orderNumber: '# ORD-0001', orderType: 'TABLE' as any, tableNumber: 'Table 4', subtotal: 7.00, discount: 0, tax: 0.70, total: 7.70, status: 'COMPLETED' as any, isPaid: true, paymentMethod: 'CASH' as any,
           items: { create: [ { productId: p1.id, name: p1.name, price: 4.00, quantity: 1 }, { productId: p2.id, name: p2.name, price: 3.00, quantity: 1 } ] }
         }
       });
       await prisma.order.create({
         data: {
-          shopId, orderType: 'TAKEAWAY' as any, subtotal: 4.50, discount: 0, tax: 0.45, total: 4.95, status: 'PENDING' as any, isPaid: true, paymentMethod: 'KHQR' as any,
+          shopId, orderNumber: '# ORD-0002', orderType: 'TAKEAWAY' as any, subtotal: 4.50, discount: 0, tax: 0.45, total: 4.95, status: 'PENDING' as any, isPaid: true, paymentMethod: 'KHQR' as any,
           items: { create: [ { productId: p3.id, name: p3.name, price: 4.50, quantity: 1 } ] }
         }
       });
@@ -1774,7 +1727,6 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
 
     return { success: true };
   } catch (error) {
-    console.error("Demo setup exact fail:", error);
     return { success: false, error: String(error) };
   }
 }
