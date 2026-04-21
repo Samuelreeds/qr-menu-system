@@ -13,7 +13,6 @@ import PosCustomizationModal from './PosCustomizationModal';
 import PosProductCard, { PosProductCardSkeleton } from './PosProductCard';
 import BillingPanel from './BillingPanel';
 
-// DEFINED LOCALLY TO FIX IMPORT ERRORS
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
 
@@ -69,7 +68,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         name: item.name,
         description: item.description || "",
         price: item.price,
-        variants: item.variants, // Pass variants to the POS product card
+        variants: item.variants,
         category: catName,
         img: item.image || "",
         isDrink: parentCat?.isDrink || false,
@@ -107,7 +106,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           id: `b${Date.now()}`,
           productId: product.id, 
           name: product.name,
-          price: finalPrice, // Utilize the selected variant price
+          price: finalPrice, 
           qty: 1,
           notes: notes,
           img: product.img,
@@ -184,14 +183,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     }
   };
 
-  const handleReprintOrder = (orderToPrint: any) => {
-    setLatestOrder(orderToPrint);
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setLatestOrder(null), 1000);
-    }, 300);
-  };
-
   return (
     <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative">
       
@@ -212,11 +203,9 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
               padding: 0 !important;
               overflow: hidden !important;
             }
-            /* Hide the dashboard completely */
             aside, header, nav, #pos-left-pane, #pos-right-pane, #pos-mobile-fab, .md\\:hidden { 
               display: none !important; 
             }
-            /* Position receipt naturally */
             #pos-receipt-print-area, #dashboard-receipt-print-area { 
               display: block !important; 
               position: relative !important; 
@@ -242,7 +231,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         />
       )}
       
-      {/* LEFT PANE: ALWAYS SHOW MENU */}
+      {/* LEFT PANE: MENU */}
       <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0">
@@ -284,11 +273,11 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           </div>
 
           {menuLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
               {Array.from({ length: 10 }).map((_, i) => <PosProductCardSkeleton key={i} />)}
             </div>
           ) : filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
               {filteredProducts.map((product) => (
                 <PosProductCard key={product.id} product={product}  onClick={(p) => setSelectedModalProduct(p)} />
               ))}
@@ -332,7 +321,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
 
       {/* RIGHT PANE: CART & ORDER CONFIG */}
-      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
+      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
         <BillingPanel
           items={billingItems}
           onRemove={handleRemove}

@@ -1688,8 +1688,18 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
         }).catch(() => {});
     } catch(e) {}
 
+    // Calculate expiration time (1 hour from now)
+    const expirationTime = new Date(Date.now() + 60 * 60 * 1000);
+
     const shop = await prisma.shop.create({
-      data: { name: "Scandine Demo Shop", slug: slug, plan: "EXCLUSIVE" as any, status: "ACTIVE" as any }
+      data: { 
+        name: "Scandine Demo Shop", 
+        slug: slug, 
+        plan: "EXCLUSIVE" as any, 
+        status: "ACTIVE" as any,
+        isDemo: true,             // Mark as demo shop
+        expiresAt: expirationTime // Set expiration
+      }
     });
     const shopId = shop.id;
     
@@ -1750,13 +1760,13 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     if (p1 && p2 && p3) {
       await prisma.order.create({
         data: {
-          shopId, orderType: 'DINE_IN' as any, tableNumber: 'Table 4', subtotal: 7.00, discount: 0, tax: 0.70, total: 7.70, status: 'COMPLETED' as any, isPaid: true, paymentMethod: 'CASH' as any,
+          shopId, orderType: 'TABLE' as any, tableNumber: 'Table 4', subtotal: 7.00, discount: 0, tax: 0.70, total: 7.70, status: 'COMPLETED' as any, isPaid: true, paymentMethod: 'CASH' as any,
           items: { create: [ { productId: p1.id, name: p1.name, price: 4.00, quantity: 1 }, { productId: p2.id, name: p2.name, price: 3.00, quantity: 1 } ] }
         }
       });
       await prisma.order.create({
         data: {
-          shopId, orderType: 'TAKEAWAY' as any, subtotal: 4.50, discount: 0, tax: 0.45, total: 4.95, status: 'PENDING' as any, isPaid: true, paymentMethod: 'BANK_TRANSFER' as any,
+          shopId, orderType: 'TAKEAWAY' as any, subtotal: 4.50, discount: 0, tax: 0.45, total: 4.95, status: 'PENDING' as any, isPaid: true, paymentMethod: 'KHQR' as any,
           items: { create: [ { productId: p3.id, name: p3.name, price: 4.50, quantity: 1 } ] }
         }
       });

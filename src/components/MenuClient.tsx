@@ -298,7 +298,7 @@ export default function MenuClient({
           <div className="absolute top-4 left-0 right-0 px-4 flex justify-between items-center w-full max-w-7xl mx-auto z-20 pointer-events-none">
               <button 
                 onClick={() => setIsInfoOpen(true)} 
-                className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white active:scale-95 flex-shrink-0 pointer-events-auto shadow-sm"
+                className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white active:scale-95 transition-transform duration-200 flex-shrink-0 pointer-events-auto shadow-sm"
               >
                 <Menu size={20} />
               </button>
@@ -395,10 +395,10 @@ export default function MenuClient({
                     setActiveCategory('Hot Sale');
                     scrollToCategory('Hot Sale');
                   }}
-                  className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border shrink-0 ${
+                  className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-200 ease-out active:scale-95 border shrink-0 ${
                     activeCategory === 'Hot Sale' 
                       ? 'text-white shadow-md border-transparent' 
-                      : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100'
+                      : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100 hover:border-orange-200'
                   }`}
                   style={activeCategory === 'Hot Sale' ? { backgroundColor: themeColor } : {}}
                 >
@@ -414,10 +414,10 @@ export default function MenuClient({
                   setActiveCategory(cat.name);
                   scrollToCategory(cat.name);
                 }}
-                className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shrink-0 border ${
+                className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-200 ease-out active:scale-95 shrink-0 border ${
                   activeCategory === cat.name 
                     ? 'text-white shadow-md border-transparent' 
-                    : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-gray-100'
+                    : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-gray-100 hover:border-gray-200'
                 }`}
                 style={activeCategory === cat.name ? { backgroundColor: themeColor } : {}}
               >
@@ -447,7 +447,7 @@ export default function MenuClient({
             {banners.length > 1 && (
               <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-30 pb-1">
                 {banners.map((_, i) => (
-                  <button key={i} onClick={() => setCurrentBanner(i)} className={`h-1.5 rounded-full transition-all ${i === currentBanner ? 'bg-[var(--brand-color)] w-5' : 'bg-gray-300/80 w-1.5'}`} />
+                  <button key={i} onClick={() => setCurrentBanner(i)} className={`h-1.5 rounded-full transition-all duration-200 ${i === currentBanner ? 'bg-[var(--brand-color)] w-5' : 'bg-gray-300/80 w-1.5'}`} />
                 ))}
               </div>
             )}
@@ -525,7 +525,7 @@ export default function MenuClient({
       {selectedItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedItem(null)}>
           <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedItem(null)} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-10 hover:bg-black/60 transition-all"><X size={20} /></button>
+            <button onClick={() => setSelectedItem(null)} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-10 hover:bg-black/60 transition-transform duration-200 active:scale-95"><X size={20} /></button>
             <div className="w-full aspect-[4/3] bg-gray-100 relative shrink-0 overflow-hidden">
               {!selectedImgLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
               <img 
@@ -558,10 +558,10 @@ export default function MenuClient({
                       <button
                         key={idx}
                         onClick={() => setSelectedVariantIndex(idx)}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ease-out active:scale-95 border-2 ${
                           selectedVariantIndex === idx 
-                            ? 'border-gray-900 bg-gray-900 text-white shadow-md' 
-                            : 'border-gray-100 bg-white text-gray-600 hover:border-gray-300'
+                            ? 'border-gray-900 text-white shadow-md' 
+                            : 'border-gray-100 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                         style={selectedVariantIndex === idx ? { borderColor: themeColor, backgroundColor: themeColor } : {}}
                       >
@@ -578,11 +578,11 @@ export default function MenuClient({
                     <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Price</span>
                     {selectedEffDiscount > 0 ? (
                       <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="font-extrabold text-3xl" style={{ color: themeColor }}>${activeDiscPrice.toFixed(2)}</span>
+                        <span className="font-extrabold text-3xl transition-all duration-200" style={{ color: themeColor }}>${activeDiscPrice.toFixed(2)}</span>
                         <span className="font-semibold text-sm text-gray-400 line-through">${activeBasePrice.toFixed(2)}</span>
                       </div>
                     ) : (
-                      <span className="font-extrabold text-3xl" style={{ color: themeColor }}>${activeBasePrice.toFixed(2)}</span>
+                      <span className="font-extrabold text-3xl transition-all duration-200" style={{ color: themeColor }}>${activeBasePrice.toFixed(2)}</span>
                     )}
                   </div>
                 </div>
@@ -601,8 +601,8 @@ export default function MenuClient({
                <p className="font-extrabold text-gray-900 mb-1">Call Staff?</p>
                <p className="text-xs text-gray-500 mb-4">Request assistance at <strong className="text-gray-700">Table {tableContext.tableLabel}</strong></p>
                <div className="flex gap-2">
-                 <button onClick={handleFloatingCallStaff} className="flex-1 bg-black text-white text-xs font-bold py-2.5 rounded-xl hover:bg-gray-800 transition-colors">Yes</button>
-                 <button onClick={() => setCallState('IDLE')} className="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2.5 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+                 <button onClick={handleFloatingCallStaff} className="flex-1 bg-black text-white text-xs font-bold py-2.5 rounded-xl hover:bg-gray-800 active:scale-95 transition-transform duration-200">Yes</button>
+                 <button onClick={() => setCallState('IDLE')} className="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2.5 rounded-xl hover:bg-gray-200 active:scale-95 transition-transform duration-200">Cancel</button>
                </div>
              </div>
           )}
@@ -614,7 +614,7 @@ export default function MenuClient({
                  <p className="font-bold text-red-800 text-xs">Could not call staff</p>
                  <p className="text-[10px] text-red-600 mt-0.5 leading-snug">{callError}</p>
                </div>
-               <button onClick={() => setCallState('IDLE')} className="text-red-400 hover:text-red-600 p-1 shrink-0"><X size={14}/></button>
+               <button onClick={() => setCallState('IDLE')} className="text-red-400 hover:text-red-600 p-1 shrink-0 active:scale-95 transition-transform"><X size={14}/></button>
              </div>
           )}
 
@@ -630,7 +630,7 @@ export default function MenuClient({
           {callState === 'IDLE' && (
             <button 
               onClick={() => setCallState('CONFIRM')}
-              className="w-14 h-14 bg-white text-gray-800 rounded-full shadow-2xl flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-all active:scale-95 group relative"
+              className="w-14 h-14 bg-white text-gray-800 rounded-full shadow-2xl flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-all duration-200 active:scale-90 group relative"
             >
               <Bell size={24} className="text-gray-700 group-hover:text-black transition-colors" />
               {/* Optional tiny notification dot */}

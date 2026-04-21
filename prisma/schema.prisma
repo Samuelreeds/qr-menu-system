@@ -43,16 +43,16 @@ enum OrderStatus {
 
 // --- USER MODEL ---
 model User {
-  id               String     @id @default(cuid())
-  email            String     @unique
-  password         String
-  failedAttempts   Int        @default(0)
-  lockoutUntil     DateTime?
-  resetToken       String?    @unique
+  id             String    @id @default(cuid())
+  email          String    @unique
+  password       String
+  failedAttempts Int       @default(0)
+  lockoutUntil   DateTime?
+  resetToken     String?   @unique
   resetTokenExpiry DateTime?
-  isSuperAdmin     Boolean    @default(false)
-  role             String     @default("USER")
-  shopUsers        ShopUser[]
+  isSuperAdmin   Boolean   @default(false)
+  role           String    @default("USER")
+  shopUsers      ShopUser[]
 }
 
 // --- NEW SAAS MODELS ---
@@ -65,6 +65,10 @@ model Shop {
   status      String    @default("ACTIVE")
   trialEndsAt DateTime?
   paidUntil   DateTime?
+
+  // --- DEMO SHOP AUTODELETE ---
+  isDemo      Boolean   @default(false)
+  expiresAt   DateTime?
 
   // LIMIT OVERRIDES
   overrideMaxProducts   Int?

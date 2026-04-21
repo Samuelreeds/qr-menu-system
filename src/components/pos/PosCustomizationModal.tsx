@@ -1,4 +1,3 @@
-// src/components/pos/PosCustomizationModal.tsx
 'use client';
 
 import { useState } from 'react';
@@ -18,7 +17,7 @@ export default function PosCustomizationModal({
 
   const [customization, setCustomization] = useState<ProductCustomization>({
     mood: "hot",
-    size: "", // We override this below upon adding
+    size: "", 
     sugar: "50%",
     ice: "50%",
   });
@@ -46,26 +45,37 @@ export default function PosCustomizationModal({
            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">{product.category}</p>
            <p className="font-black text-2xl text-gray-900 mb-6">${activeBasePrice.toFixed(2)}</p>
 
-           <div className="space-y-5">
-             <div className={`grid ${isDrink ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+           <div className="space-y-6">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+               
                {isDrink && (
                  <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Mood</p>
-                   <div className="flex bg-gray-100 p-1.5 rounded-xl">
-                     <button className={`flex-1 py-2 rounded-lg text-sm transition-colors ${customization.mood === "hot" ? "bg-white text-red-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} onClick={() => setCustomization((c) => ({ ...c, mood: "hot" }))}>Hot</button>
-                     <button className={`flex-1 py-2 rounded-lg text-sm transition-colors ${customization.mood === "cold" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} onClick={() => setCustomization((c) => ({ ...c, mood: "cold" }))}>Cold</button>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Mood</p>
+                   <div className="flex flex-wrap gap-2">
+                     <button 
+                       className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.mood === "hot" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                       onClick={() => setCustomization((c) => ({ ...c, mood: "hot" }))}
+                     >
+                       Hot
+                     </button>
+                     <button 
+                       className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.mood === "cold" ? "border-blue-500 bg-blue-50 text-blue-600 shadow-sm" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                       onClick={() => setCustomization((c) => ({ ...c, mood: "cold" }))}
+                     >
+                       Cold
+                     </button>
                    </div>
                  </div>
                )}
                
                {hasVariants && (
                  <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Size</p>
-                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Size</p>
+                   <div className="flex flex-wrap gap-2">
                      {product.variants!.map((v, idx) => (
                        <button 
                          key={idx} 
-                         className={`flex-1 py-2 rounded-lg text-sm transition-colors ${selectedVariantIndex === idx ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} 
+                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 whitespace-nowrap ${selectedVariantIndex === idx ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
                          onClick={() => setSelectedVariantIndex(idx)}
                        >
                          {v.name}
@@ -74,31 +84,52 @@ export default function PosCustomizationModal({
                    </div>
                  </div>
                )}
+
              </div>
 
              {isDrink && (
-               <div className="grid grid-cols-2 gap-3">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                  <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Sugar</p>
-                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Sugar</p>
+                   <div className="flex flex-wrap gap-2">
                      {(["30%", "50%", "70%"] as const).map((v) => (
-                       <button key={v} className={`flex-1 py-2 rounded-lg text-[11px] transition-colors ${customization.sugar === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}>{v.replace('%', '')}</button>
+                       <button 
+                         key={v} 
+                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.sugar === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                         onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
+                       >
+                         {v.replace('%', '')}
+                       </button>
                      ))}
                    </div>
                  </div>
+                 
                  <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Ice</p>
-                   <div className="flex flex-wrap bg-gray-100 p-1.5 rounded-xl gap-1">
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Ice</p>
+                   <div className="flex flex-wrap gap-2">
                      {(["30%", "50%", "70%"] as const).map((v) => (
-                       <button key={v} className={`flex-1 py-2 rounded-lg text-[11px] transition-colors ${customization.ice === v ? "bg-white text-gray-900 shadow-sm font-bold" : "text-gray-500 font-medium hover:text-gray-700"}`} onClick={() => setCustomization((c) => ({ ...c, ice: v }))}>{v.replace('%', '')}</button>
+                       <button 
+                         key={v} 
+                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.ice === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                         onClick={() => setCustomization((c) => ({ ...c, ice: v }))}
+                       >
+                         {v.replace('%', '')}
+                       </button>
                      ))}
                    </div>
                  </div>
                </div>
              )}
+
              <div>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Special Instructions</p>
-               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Extra spicy, no onions..." className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm text-gray-900 focus:outline-none focus:border-gray-400 focus:bg-white transition-colors resize-none" rows={2} />
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Special Instructions</p>
+               <textarea 
+                 value={notes} 
+                 onChange={(e) => setNotes(e.target.value)} 
+                 placeholder="e.g. Extra spicy, no onions..." 
+                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-900 focus:outline-none focus:border-gray-900 focus:bg-white transition-colors resize-none shadow-sm" 
+                 rows={2} 
+               />
              </div>
            </div>
         </div>
