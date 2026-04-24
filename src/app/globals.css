@@ -18,6 +18,13 @@
   --font-sans: var(--font-poppins), var(--font-chenla), var(--font-noto-tc), sans-serif;
 }
 
+html, body {
+  height: 100%;
+  min-height: 100dvh;
+  /* Safari specific fill-available fallback */
+  min-height: -webkit-fill-available;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

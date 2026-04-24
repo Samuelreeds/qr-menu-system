@@ -93,52 +93,52 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
   }, [orders]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 print:hidden">
+    <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 print:hidden min-w-0">
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
           <div className="flex justify-between items-start mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0">
               <DollarSign size={24} strokeWidth={2.5} />
             </div>
             {stats.salesGrowth !== 0 && (
-              <span className={`flex items-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg ${stats.salesGrowth > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
+              <span className={`flex items-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg shrink-0 ${stats.salesGrowth > 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
                 {stats.salesGrowth > 0 ? <TrendingUp size={12} className="mr-1" strokeWidth={3}/> : <TrendingDown size={12} className="mr-1" strokeWidth={3}/>}
                 {stats.salesGrowth > 0 ? '+' : ''}{stats.salesGrowth.toFixed(1)}%
               </span>
             )}
           </div>
-          <div>
-             <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">Gross Sales (Today)</p>
-             <h2 className="text-4xl font-black text-gray-900">${stats.grossSales.toFixed(2)}</h2>
+          <div className="min-w-0">
+             <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1 truncate">Gross Sales (Today)</p>
+             <h2 className="text-4xl font-black text-gray-900 truncate">${stats.grossSales.toFixed(2)}</h2>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
           <div className="flex justify-between items-start mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
               <Receipt size={24} strokeWidth={2.5} />
             </div>
           </div>
-          <div>
-             <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">Total Orders</p>
-             <h2 className="text-4xl font-black text-gray-900">{stats.totalOrders}</h2>
+          <div className="min-w-0">
+             <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1 truncate">Total Orders</p>
+             <h2 className="text-4xl font-black text-gray-900 truncate">{stats.totalOrders}</h2>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px]">
-          <h3 className="font-extrabold text-gray-900 mb-6">Sales by Hour (Today)</h3>
-          <div className="flex-1 flex items-end gap-3 md:gap-4 mt-auto pt-4 border-b border-gray-50 relative">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
+        <div className="xl:col-span-2 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px] min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 truncate">Sales by Hour (Today)</h3>
+          <div className="flex-1 flex items-end gap-3 md:gap-4 mt-auto pt-4 border-b border-gray-50 relative min-w-0">
             {stats.chartData.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+              <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end min-w-0">
                 <div className="w-full bg-gray-100/80 rounded-t-lg relative overflow-hidden transition-all group-hover:bg-gray-200 h-40">
                   <div className="absolute bottom-0 w-full bg-[#111827] rounded-t-lg transition-all duration-500" style={{ height: d.height }}></div>
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 mt-3">{d.label}</span>
+                <span className="text-[10px] font-bold text-gray-400 mt-3 truncate w-full text-center">{d.label}</span>
                 {d.value > 0 && (
-                  <span className="absolute -top-7 text-[10px] font-black bg-gray-900 text-white px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md">
+                  <span className="absolute -top-7 text-[10px] font-black bg-gray-900 text-white px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md whitespace-nowrap">
                     ${d.value.toFixed(0)}
                   </span>
                 )}
@@ -147,9 +147,9 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px]">
-          <h3 className="font-extrabold text-gray-900 mb-8">Order Breakdown</h3>
-          <div className="flex-1 flex flex-col justify-center gap-6">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px] min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-8 truncate">Order Breakdown</h3>
+          <div className="flex-1 flex flex-col justify-center gap-6 min-w-0">
              <div className="space-y-6 w-full">
                 <div>
                   <div className="flex justify-between text-xs font-extrabold mb-2 text-gray-700">
@@ -180,73 +180,73 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
         
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2">
-            <TrendingUp size={18} className="text-gray-400" strokeWidth={2.5}/> Top Selling Items
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
+            <TrendingUp size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Top Selling Items
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {stats.topItems.length === 0 ? (
               <p className="text-sm font-medium text-gray-400 py-8 text-center">No sales today</p>
             ) : (
               stats.topItems.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50/80 rounded-xl border border-gray-100/50">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-black text-gray-400 w-5 text-center">{idx + 1}</span>
-                    <span className="font-extrabold text-sm text-gray-900 truncate max-w-[120px] sm:max-w-[150px]">{item[0]}</span>
+                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50/80 rounded-xl border border-gray-100/50 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[11px] font-black text-gray-400 w-5 text-center shrink-0">{idx + 1}</span>
+                    <span className="font-extrabold text-sm text-gray-900 truncate">{item[0]}</span>
                   </div>
-                  <span className="text-[11px] font-bold bg-white border border-gray-200 px-2.5 py-1 rounded-lg text-gray-600 shadow-sm">{item[1]} sold</span>
+                  <span className="text-[11px] font-bold bg-white border border-gray-200 px-2.5 py-1 rounded-lg text-gray-600 shadow-sm shrink-0 whitespace-nowrap">{item[1]} sold</span>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2">
-            <Banknote size={18} className="text-gray-400" strokeWidth={2.5}/> Payment Split
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
+            <Banknote size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Payment Split
           </h3>
-          <div className="flex flex-col gap-4">
-            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-               <div className="flex items-center gap-3.5">
-                  <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-500">
+          <div className="flex flex-col gap-4 min-w-0">
+            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
+               <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-500 shrink-0">
                     <Banknote size={20} strokeWidth={2.5}/>
                   </div>
-                  <span className="font-extrabold text-gray-900 text-sm">Cash Register</span>
+                  <span className="font-extrabold text-gray-900 text-sm truncate">Cash Register</span>
                </div>
-               <span className="text-xl font-black text-gray-900">${stats.cash.toFixed(2)}</span>
+               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.cash.toFixed(2)}</span>
             </div>
             
-            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-               <div className="flex items-center gap-3.5">
-                  <div className="p-2.5 bg-blue-50 rounded-xl text-blue-500">
+            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
+               <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="p-2.5 bg-blue-50 rounded-xl text-blue-500 shrink-0">
                     <QrCode size={20} strokeWidth={2.5}/>
                   </div>
-                  <span className="font-extrabold text-gray-900 text-sm">KHQR Digital</span>
+                  <span className="font-extrabold text-gray-900 text-sm truncate">KHQR Digital</span>
                </div>
-               <span className="text-xl font-black text-gray-900">${stats.khqr.toFixed(2)}</span>
+               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.khqr.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2">
-            <Clock size={18} className="text-gray-400" strokeWidth={2.5}/> Recent Activity
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
+            <Clock size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Recent Activity
           </h3>
-          <div className="space-y-0">
+          <div className="space-y-0 min-w-0">
             {stats.recentOrders.length === 0 ? (
               <p className="text-sm font-medium text-gray-400 py-8 text-center">No orders yet</p>
             ) : (
               stats.recentOrders.map((o) => (
-                <div key={o.id} className="flex justify-between items-center border-b border-gray-50 py-3.5 first:pt-0 last:border-0 last:pb-0">
-                  <div>
-                    <p className="text-sm font-extrabold text-gray-900">Order #{o.id.slice(-4).toUpperCase()}</p>
-                    <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-wider">
+                <div key={o.id} className="flex justify-between items-center border-b border-gray-50 py-3.5 first:pt-0 last:border-0 last:pb-0 min-w-0">
+                  <div className="min-w-0 pr-2">
+                    <p className="text-sm font-extrabold text-gray-900 truncate">Order #{o.id.slice(-4).toUpperCase()}</p>
+                    <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-wider truncate">
                       {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {o.orderType === 'TAKEAWAY' ? 'Walkin' : o.orderType}
                     </p>
                   </div>
-                  <span className="font-black text-gray-900 text-[15px]">${o.total.toFixed(2)}</span>
+                  <span className="font-black text-gray-900 text-[15px] shrink-0 whitespace-nowrap">${o.total.toFixed(2)}</span>
                 </div>
               ))
             )}
