@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { AlertTriangle, X, Search, Copy, CheckCircle2, ChevronDown, Loader2, Plus, Package } from "lucide-react";
-import { adjustStockAction, createIngredient, getInventory } from "@/lib/actions";
+import { AlertTriangle, X, Search, Copy, CheckCircle2, ChevronDown, Loader2, Plus, Package, Trash2 } from "lucide-react";
+import { adjustStockAction, createIngredient, getInventory, deleteInventoryItem } from "@/lib/actions";
 
 type AdjustmentReason = "Restock" | "Sold" | "Waste" | "Manual";
 
@@ -65,6 +65,10 @@ export default function InventoryManager({
   const [newItemUnit, setNewItemUnit] = useState("kg");
   const [newItemMax, setNewItemMax] = useState<number | "">("");
   const [newItemThreshold, setNewItemThreshold] = useState<number | "">(20);
+
+  // Delete Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
 
   // --- Memoized Filtering ---
   const lowStockItems = useMemo(() => {
@@ -181,6 +185,27 @@ export default function InventoryManager({
     setIsProcessing(false);
   };
 
+  const executeDelete = async () => {
+    if (!itemToDelete || isProcessing) return;
+
+    setIsProcessing(true);
+    const id = itemToDelete.id;
+    
+    // 1. Optimistic UI update
+    setLocalIngredients(prev => prev.filter(item => item.id !== id));
+    setIsDeleteModalOpen(false); // Close early for a snappy feel
+
+    // 2. Database update
+    const res = await deleteInventoryItem(id);
+    if (!res.success) {
+      alert(res.error || "Failed to delete item.");
+      await syncWithServer(); // Revert back to DB truth if it failed
+    }
+    
+    setIsProcessing(false);
+    setItemToDelete(null);
+  };
+
   const handleCopyRestockList = () => {
     const listText = lowStockItems.map(item => `- ${item.name}: Needs Restock (Currently ${item.current.toFixed(1)} ${item.unit})`).join('\n');
     navigator.clipboard.writeText(`🚨 Restock Required:\n${listText}`);
@@ -253,9 +278,26 @@ export default function InventoryManager({
             const isLow = pct < item.lowThreshold;
             return (
               <div key={item.id} className={`bg-white rounded-2xl p-5 shadow-sm transition-all duration-200 flex flex-col ${isLow ? 'border-2 border-red-400' : 'border border-gray-200'}`}>
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-extrabold text-gray-900 text-sm truncate pr-2">{item.name}</h3>
-                  {isLow && <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 border border-red-100">LOW</span>}
+                <div className="flex justify-between items-start mb-1 gap-2">
+                  <h3 className="font-extrabold text-gray-900 text-sm truncate flex-1">{item.name}</h3>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isLow && <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border border-red-100">LOW</span>}
+                    <button 
+                      onClick={() => {
+                        if (item.id.startsWith("temp-")) {
+                          alert("This item is still being saved to the database. Please wait a few seconds.");
+                          return;
+                        }
+                        setItemToDelete({ id: item.id, name: item.name });
+                        setIsDeleteModalOpen(true);
+                      }} 
+                      disabled={isProcessing}
+                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1 rounded-md transition-colors disabled:opacity-50" 
+                      title="Delete Item"
+                    >
+                      <Trash2 size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-gray-500 font-semibold mb-4">{item.current.toFixed(1)} / {item.max} {item.unit}</p>
                 <div className="w-full bg-gray-100 rounded-full h-2 mb-2 overflow-hidden mt-auto">
@@ -436,6 +478,37 @@ export default function InventoryManager({
                 {isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Create Item"}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: DELETE CONFIRMATION */}
+      {isDeleteModalOpen && itemToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 p-6 md:p-8">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-5">
+              <Trash2 size={24} className="text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Item?</h3>
+            <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-gray-700">"{itemToDelete.name}"</span>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)} 
+                disabled={isProcessing}
+                className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeDelete} 
+                disabled={isProcessing}
+                className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm disabled:opacity-50"
+              >
+                {isProcessing ? <Loader2 className="animate-spin" size={18} /> : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

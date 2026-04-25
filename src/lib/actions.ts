@@ -311,6 +311,7 @@ export async function createProduct(data: {
   image?: any;
   isPopular?: boolean;
   isSoldOut?: boolean;
+  department?: string; 
 }) {
   const shopId = await getActiveShopId();
   if (!shopId) return;
@@ -338,6 +339,8 @@ export async function createProduct(data: {
   }
   if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
+  const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
+
   await prisma.product.create({
     data: { 
       name, 
@@ -349,10 +352,11 @@ export async function createProduct(data: {
       image: imagePath, 
       time, 
       rating: 4.5, 
-      description: '', 
+      description: hiddenDeptTag, 
       isPopular: !!data.isPopular, 
       isSoldOut, 
       shopId,
+      department: data.department || 'coffee', 
       variants: {
         create: variants.map(v => ({
           name: v.name,
@@ -377,6 +381,7 @@ export async function updateProduct(data: {
   image?: any;
   isPopular?: boolean;
   isSoldOut?: boolean;
+  department?: string; 
 }) {
   const id = data.id;
   const name = data.name;
@@ -400,6 +405,8 @@ export async function updateProduct(data: {
     await deleteFromSupabase(oldProduct?.image || null);
   }
 
+  const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
+
   await prisma.product.update({
     where: { id },
     data: { 
@@ -413,6 +420,8 @@ export async function updateProduct(data: {
       ...(newImagePath && { image: newImagePath }), 
       isPopular: !!data.isPopular, 
       isSoldOut,
+      department: data.department || 'coffee', 
+      description: hiddenDeptTag, 
       variants: {
         deleteMany: {}, 
         create: variants.map(v => ({
@@ -1037,10 +1046,11 @@ export async function executeMenuImport(formData: FormData) {
                 categoryId: categoryId,
                 time: item.preparationTime || '15min',
                 image: item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-                rating: 5.0,
-                description: item.description || '',
+                rating: 5.0, 
+                description: '[COFFEE]', // Default hidden tag for imported items
                 isPopular: item.isPopular,
                 shopId: shopId,
+                department: 'coffee', 
                 variants: {
                   create: [{ name: 'Default', price: item.price }]
                 }
@@ -1377,9 +1387,6 @@ export async function registerPublicShop(formData: FormData): Promise<{ success:
       return { success: true };
     });
   } catch (error: any) {
-    if (error.code === 'P2002') {
-      return { success: false, error: "Email already exists" };
-    }
     return { success: false, error: "Registration failed. Please try again." };
   }
 }
@@ -1613,6 +1620,27 @@ export async function createIngredient(data: { name: string, unit: string, max: 
     return { success: true, ingredient };
   } catch (e) {
     return { success: false, error: "Failed to create ingredient" };
+  }
+}
+
+export async function deleteInventoryItem(id: string) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "Unauthorized" };
+
+  try {
+    const item = await prisma.ingredient.findUnique({ where: { id } });
+    if (!item || item.shopId !== shopId) {
+      return { success: false, error: "Item not found or unauthorized" };
+    }
+    
+    await prisma.ingredient.delete({
+      where: { id }
+    });
+    
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Failed to delete item" };
   }
 }
 
