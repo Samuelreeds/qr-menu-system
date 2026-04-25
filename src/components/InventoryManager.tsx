@@ -134,10 +134,10 @@ export default function InventoryManager({
     // 2. BACKGROUND DATABASE UPDATE
     const res = await adjustStockAction(selectedItem.id, changeAmount, reason, userName);
     if (res.success) {
-      await syncWithServer(); // Pull the real timestamp and ID from database
+      await syncWithServer(); 
     } else {
       alert(res.error || "Failed to adjust stock. Changes reverted.");
-      await syncWithServer(); // Revert back to DB truth if it failed
+      await syncWithServer(); 
     }
     setIsProcessing(false);
   };
@@ -177,10 +177,10 @@ export default function InventoryManager({
       setNewItemUnit("kg"); 
       setNewItemMax(""); 
       setNewItemThreshold(20);
-      await syncWithServer(); // Securely replaces the 'temp' ID with the real database ID
+      await syncWithServer(); 
     } else {
       alert(res.error || "Failed to create ingredient");
-      await syncWithServer(); // Revert back to DB truth if it failed
+      await syncWithServer(); 
     }
     setIsProcessing(false);
   };
@@ -193,13 +193,13 @@ export default function InventoryManager({
     
     // 1. Optimistic UI update
     setLocalIngredients(prev => prev.filter(item => item.id !== id));
-    setIsDeleteModalOpen(false); // Close early for a snappy feel
+    setIsDeleteModalOpen(false); 
 
     // 2. Database update
     const res = await deleteInventoryItem(id);
     if (!res.success) {
       alert(res.error || "Failed to delete item.");
-      await syncWithServer(); // Revert back to DB truth if it failed
+      await syncWithServer(); 
     }
     
     setIsProcessing(false);

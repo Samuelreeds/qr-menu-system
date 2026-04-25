@@ -22,6 +22,9 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   const [cashReceivedUSD, setCashReceivedUSD] = useState("");
   const [cashReceivedKHR, setCashReceivedKHR] = useState("");
 
+  // KHQR Modal State
+  const [isKhqrModalOpen, setIsKhqrModalOpen] = useState(false);
+
   const { addSuccessToast, addErrorToast } = useToast();
 
   // Editable Name State
@@ -77,6 +80,8 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
       setCashReceivedUSD(""); 
       setCashReceivedKHR("");
       setIsCashModalOpen(true);
+    } else if (paymentMethod === 'khqr') {
+      setIsKhqrModalOpen(true);
     } else {
       onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
     }
@@ -84,6 +89,11 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
 
   const handleConfirmCashPayment = () => {
     setIsCashModalOpen(false);
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
+  };
+
+  const handleConfirmKhqrPayment = () => {
+    setIsKhqrModalOpen(false);
     onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
   };
 
@@ -339,7 +349,7 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
             {isSavingOrder ? <Loader2 className="animate-spin shrink-0" size={18} /> : null}
             <span className="truncate">
               {items.length > 0 && !isSavingOrder 
-                ? (paymentMethod === 'cash' ? `Calculate Change & Pay — $${total.toFixed(2)}` : `Place Order — $${total.toFixed(2)}`) 
+                ? (paymentMethod === 'cash' ? `Calculate Change & Pay — $${total.toFixed(2)}` : paymentMethod === 'khqr' ? `Show KHQR & Pay — $${total.toFixed(2)}` : `Place Order — $${total.toFixed(2)}`) 
                 : isSavingOrder ? "Processing..." : "Select items to begin"}
             </span>
           </button>
@@ -425,6 +435,47 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}
               Confirm Payment
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* KHQR PAYMENT MODAL */}
+      {isKhqrModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col items-center">
+            
+            <div className="w-full flex justify-between items-center mb-6">
+              <h3 className="font-extrabold text-gray-900 text-xl">KHQR Payment</h3>
+              <button onClick={() => setIsKhqrModalOpen(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100 w-full">
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Amount to Pay</p>
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <p className="text-4xl font-black text-gray-900">${total.toFixed(2)}</p>
+                <p className="text-sm font-bold text-gray-500">{(total * EXCHANGE_RATE).toLocaleString()} ៛</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-8 w-full flex justify-center shadow-sm relative overflow-hidden">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${total}`)}`} 
+                alt="KHQR Code" 
+                className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply"
+              />
+            </div>
+
+            <button 
+              onClick={handleConfirmKhqrPayment}
+              disabled={isSavingOrder}
+              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}
+              Confirm Payment Received
+            </button>
+
           </div>
         </div>
       )}

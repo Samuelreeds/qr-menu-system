@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { getShopTables, createTable, toggleTableStatus, updateTable, deleteTable } from "@/lib/table-actions";
-import { Copy, QrCode, Edit2, Trash2, Check, X, Download, MoreHorizontal, Power, PowerOff, Search } from "lucide-react";
+import { Copy, QrCode, Edit2, Trash2, Check, X, Download, MoreHorizontal, Power, PowerOff, Search, Loader2 } from "lucide-react";
 
 interface TableItem {
   id: string;
@@ -27,6 +27,11 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
   // QR Modal State
   const [qrModalTable, setQrModalTable] = useState<TableItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait');
+  
+  // QR Async Loading States
+  const [isQrLoaded, setIsQrLoaded] = useState(false);
+  const [isDownloadingQR, setIsDownloadingQR] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -92,6 +97,7 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
 
   const downloadQR = async (url: string, label: string) => {
     try {
+      setIsDownloadingQR(true);
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(url)}`;
       const response = await fetch(qrUrl);
       const blob = await response.blob();
@@ -105,7 +111,67 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       alert("Failed to download QR code.");
+    } finally {
+      setIsDownloadingQR(false);
     }
+  };
+
+  const renderPrintTemplate = (format: 'portrait' | 'landscape', table: TableItem) => {
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`${origin}/${shopSlug}?tableId=${table.id}`)}`;
+    
+    return (
+      <div className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-[#4a4a4a] relative font-sans" style={{ width: format === 'landscape' ? '1000px' : '650px', height: format === 'landscape' ? '650px' : '1000px', flexDirection: format === 'landscape' ? 'row' : 'column', boxSizing: 'border-box', padding: format === 'landscape' ? '3rem 4rem' : '4rem 3rem' }}>
+        {format === 'landscape' ? (
+          <>
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2 min-w-0">
+              <h1 className="text-[4rem] font-bold text-gray-900 mb-2 tracking-wide break-words max-w-full font-sans uppercase">TABLE {table.label}</h1>
+              <p className="text-[2.5rem] text-gray-500 mb-12 font-light">scan to order !</p>
+              <div className="flex items-center w-full justify-center gap-4 mb-8">
+                <div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div>
+                <div className="relative flex items-center justify-center px-4">
+                  <div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div>
+                  <div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                    <div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center"><QrCode size={18} className="text-black" /></div>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div>
+              </div>
+              <p className="text-xl text-gray-500 font-medium tracking-wide font-mono">{origin ? new URL(origin).host : 'scandine.xyz'}</p>
+            </div>
+            <div className="flex-1 flex justify-center items-center w-1/2 pl-4">
+              <div className="relative w-[400px] h-[400px] overflow-hidden">
+                <img src={qrCodeUrl} alt="Table QR Code" className="w-[400px] h-[400px] object-contain" onLoad={() => setIsQrLoaded(true)} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4 min-w-0">
+              <h1 className="text-[5rem] font-bold text-gray-900 mb-2 tracking-wide break-words max-w-full font-sans uppercase">TABLE {table.label}</h1>
+              <p className="text-[3rem] text-gray-500 font-light">scan to order !</p>
+            </div>
+            <div className="flex justify-center items-center flex-1 w-full my-6">
+              <div className="relative w-[450px] h-[450px] overflow-hidden">
+                <img src={qrCodeUrl} alt="Table QR Code" className="w-[450px] h-[450px] object-contain" onLoad={() => setIsQrLoaded(true)} />
+              </div>
+            </div>
+            <div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4 min-w-0">
+              <div className="flex items-center w-full justify-center gap-4 mb-8">
+                <div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div>
+                <div className="relative flex items-center justify-center px-4">
+                  <div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div>
+                  <div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]">
+                    <div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center"><QrCode size={22} className="text-black" /></div>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div>
+              </div>
+              <p className="text-2xl text-gray-500 font-medium tracking-wide font-mono">{origin ? new URL(origin).host : 'scandine.xyz'}</p>
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
 
   const filteredTables = tables.filter(t => t.label.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -259,7 +325,10 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
                 {/* PRIMARY ACTION */}
                 <div className="mt-auto pt-2">
                   <button 
-                    onClick={() => setQrModalTable(table)}
+                    onClick={() => {
+                      setIsQrLoaded(false);
+                      setQrModalTable(table);
+                    }}
                     className={`w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                       table.isActive 
                         ? 'bg-gray-900 text-white hover:bg-gray-800 shadow-md' 
@@ -284,25 +353,45 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
       {/* QR MODAL */}
       {qrModalTable && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setQrModalTable(null)}>
-          <div className="bg-white rounded-[32px] p-6 sm:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={(e) => e.stopPropagation()}>
             
             {/* Modal Header */}
-            <div className="w-full flex justify-between items-start mb-6">
+            <div className="w-full flex justify-between items-center mb-6">
               <div>
                 <h3 className="text-2xl font-black text-gray-900 leading-none">Table {qrModalTable.label}</h3>
                 <p className="text-sm text-gray-500 mt-1.5 font-medium">Customer Access QR</p>
               </div>
               <button onClick={() => setQrModalTable(null)} className="p-2 bg-gray-50 rounded-full hover:bg-gray-200 transition-colors text-gray-500 active:scale-95"><X size={20}/></button>
             </div>
+
+            {/* Format Switcher */}
+            <div className="flex gap-2 mb-6 bg-gray-100 p-1.5 rounded-2xl w-full">
+              <button onClick={() => setPreviewFormat('portrait')} className={`flex-1 py-2 px-1 rounded-xl text-[16px] md:text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'portrait' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                <span>Portrait</span>
+                <span className="text-[10px] font-normal opacity-70 mt-0.5">(Table stand)</span>
+              </button>
+              <button onClick={() => setPreviewFormat('landscape')} className={`flex-1 py-2 px-1 rounded-xl text-[16px] md:text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'landscape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                <span>Landscape</span>
+                <span className="text-[10px] font-normal opacity-70 mt-0.5">(Wall / Counter)</span>
+              </button>
+            </div>
             
-            {/* QR Image Display */}
-            <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-6 w-full flex justify-center shadow-sm relative overflow-hidden">
-              <div className="absolute inset-0 bg-gray-50 opacity-50 pointer-events-none"></div>
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`${origin}/${shopSlug}?tableId=${qrModalTable.id}`)}`} 
-                alt={`QR for Table ${qrModalTable.label}`} 
-                className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply"
-              />
+            {/* QR Image Display with Async Loading State */}
+            <div className="bg-gray-50/80 rounded-3xl flex items-center justify-center mb-6 overflow-hidden relative shadow-inner" style={{ height: '320px' }}>
+              <div className="absolute top-3 right-4 bg-white/90 backdrop-blur px-2 py-1 rounded shadow-sm z-20">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Actual print ratio</span>
+              </div>
+              
+              {!isQrLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-gray-50">
+                  <Loader2 size={28} className="animate-spin text-gray-400 mb-3" />
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Generating QR...</span>
+                </div>
+              )}
+
+              <div className={`origin-center transform transition-all duration-500 flex items-center justify-center shadow-lg bg-white ${isQrLoaded ? 'opacity-100' : 'opacity-0'}`} style={{ transform: previewFormat === 'portrait' ? 'scale(0.28)' : 'scale(0.3)' }}>
+                {renderPrintTemplate(previewFormat, qrModalTable)}
+              </div>
             </div>
 
             {/* Modal Link Copy */}
@@ -326,9 +415,11 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
             <div className="flex w-full">
               <button 
                 onClick={() => downloadQR(`${origin}/${shopSlug}?tableId=${qrModalTable.id}`, qrModalTable.label)}
-                className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors active:scale-[0.98] shadow-sm"
+                disabled={isDownloadingQR}
+                className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors active:scale-[0.98] shadow-sm disabled:opacity-70 disabled:cursor-wait"
               >
-                <Download size={18} /> Download QR Code
+                {isDownloadingQR ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 
+                {isDownloadingQR ? "Downloading..." : "Download QR Code"}
               </button>
             </div>
 
