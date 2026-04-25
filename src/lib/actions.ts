@@ -339,6 +339,7 @@ export async function createProduct(data: {
   }
   if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
+  // The hidden tag we store instead of a real database 'department' column
   const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
 
   await prisma.product.create({
@@ -356,7 +357,6 @@ export async function createProduct(data: {
       isPopular: !!data.isPopular, 
       isSoldOut, 
       shopId,
-      department: data.department || 'coffee', 
       variants: {
         create: variants.map(v => ({
           name: v.name,
@@ -405,6 +405,7 @@ export async function updateProduct(data: {
     await deleteFromSupabase(oldProduct?.image || null);
   }
 
+  // The hidden tag we store instead of a real database 'department' column
   const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
 
   await prisma.product.update({
@@ -420,7 +421,6 @@ export async function updateProduct(data: {
       ...(newImagePath && { image: newImagePath }), 
       isPopular: !!data.isPopular, 
       isSoldOut,
-      department: data.department || 'coffee', 
       description: hiddenDeptTag, 
       variants: {
         deleteMany: {}, 
@@ -1050,7 +1050,6 @@ export async function executeMenuImport(formData: FormData) {
                 description: '[COFFEE]', // Default hidden tag for imported items
                 isPopular: item.isPopular,
                 shopId: shopId,
-                department: 'coffee', 
                 variants: {
                   create: [{ name: 'Default', price: item.price }]
                 }
@@ -1703,26 +1702,26 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     const cat4 = await prisma.category.create({ data: { shopId, name: "Food & Pastries 🥐", sortOrder: 4, isDrink: false } });
 
     const products = [
-        { shopId, categoryId: cat1.id, name: "Signature Matcha Latte", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Premium grade matcha with creamy oat milk." },
-        { shopId, categoryId: cat1.id, name: "Iced Caramel Macchiato", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Espresso, vanilla syrup, milk, and caramel drizzle." },
-        { shopId, categoryId: cat1.id, name: "Classic Avocado Toast", price: 6.50, time: "10min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Mashed avocado, cherry tomatoes, and feta on sourdough." },
-        { shopId, categoryId: cat1.id, name: "Strawberry Hibiscus Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "Refreshing iced tea with real strawberry bits." },
-        { shopId, categoryId: cat2.id, name: "Hot Cafe Latte", price: 3.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso balanced with steamed milk." },
-        { shopId, categoryId: cat2.id, name: "Cold Brew Coffee", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Slow-steeped for 20 hours for a smooth finish." },
-        { shopId, categoryId: cat2.id, name: "Americano", price: 3.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso shots topped with hot water." },
-        { shopId, categoryId: cat2.id, name: "Iced Mocha", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Espresso with mocha sauce, milk and ice." },
-        { shopId, categoryId: cat2.id, name: "Vanilla Sweet Cream Cold Brew", price: 4.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Cold brew topped with house-made vanilla sweet cream." },
-        { shopId, categoryId: cat2.id, name: "Espresso Macchiato", price: 2.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Rich espresso marked with dollop of steamed milk and foam." },
-        { shopId, categoryId: cat3.id, name: "Peach Iced Tea", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Black tea infused with sweet peach flavor." },
-        { shopId, categoryId: cat3.id, name: "Lemon Passionfruit Tea", price: 4.20, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Tangy passionfruit and fresh lemon slice." },
-        { shopId, categoryId: cat3.id, name: "Thai Iced Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet, creamy, and rich spiced black tea." },
-        { shopId, categoryId: cat3.id, name: "Lychee Soda", price: 3.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sparkling soda with sweet lychee syrup and fruits." },
-        { shopId, categoryId: cat4.id, name: "Butter Croissant", price: 3.00, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Flaky, buttery, and baked fresh daily." },
-        { shopId, categoryId: cat4.id, name: "Chocolate Chip Cookie", price: 2.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Warm, gooey chocolate chip cookie." },
-        { shopId, categoryId: cat4.id, name: "Blueberry Muffin", price: 3.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Moist muffin packed with wild blueberries." },
-        { shopId, categoryId: cat4.id, name: "Almond Danish", price: 3.80, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Sweet pastry filled with almond paste and sliced almonds." },
-        { shopId, categoryId: cat4.id, name: "Spicy Basil Chicken Pasta", price: 7.50, time: "15min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Fusion pasta with a spicy kick." },
-        { shopId, categoryId: cat4.id, name: "Tiramisu Slice", price: 5.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "Classic Italian coffee-flavored dessert." }
+        { shopId, categoryId: cat1.id, name: "Signature Matcha Latte", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "[COFFEE]" },
+        { shopId, categoryId: cat1.id, name: "Iced Caramel Macchiato", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "[COFFEE]" },
+        { shopId, categoryId: cat1.id, name: "Classic Avocado Toast", price: 6.50, time: "10min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "[COFFEE]" },
+        { shopId, categoryId: cat1.id, name: "Strawberry Hibiscus Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: true, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Hot Cafe Latte", price: 3.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Cold Brew Coffee", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Americano", price: 3.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Iced Mocha", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Vanilla Sweet Cream Cold Brew", price: 4.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat2.id, name: "Espresso Macchiato", price: 2.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat3.id, name: "Peach Iced Tea", price: 4.00, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat3.id, name: "Lemon Passionfruit Tea", price: 4.20, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat3.id, name: "Thai Iced Tea", price: 4.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat3.id, name: "Lychee Soda", price: 3.80, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Butter Croissant", price: 3.00, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Chocolate Chip Cookie", price: 2.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Blueberry Muffin", price: 3.50, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Almond Danish", price: 3.80, time: "2min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Spicy Basil Chicken Pasta", price: 7.50, time: "15min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" },
+        { shopId, categoryId: cat4.id, name: "Tiramisu Slice", price: 5.50, time: "5min", image: DEMO_PRODUCT_IMAGE, isPopular: false, description: "[COFFEE]" }
     ];
 
     for (const p of products) {
