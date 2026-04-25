@@ -56,7 +56,8 @@ export default async function AdminPage() {
     banners,
     dbSettings,
     dbPlan,
-    orders
+    orders,
+    ingredients // FETCH INGREDIENTS FOR MAPPING
   ] = await Promise.all([
     getShopPlanState(shopId),
     getShopLimitsAndFeatures(shopId),
@@ -66,7 +67,7 @@ export default async function AdminPage() {
     }),
     prisma.product.findMany({
       where: { shopId },
-      include: { category: true, variants: true }, // ADDED VARIANTS INCLUDE
+      include: { category: true, variants: true, ingredients: true }, 
       orderBy: { createdAt: 'desc' }
     }),
     prisma.banner.findMany({
@@ -88,6 +89,10 @@ export default async function AdminPage() {
       },
       orderBy: { createdAt: 'desc' },
       include: { items: true }
+    }),
+    prisma.ingredient.findMany({
+      where: { shopId },
+      orderBy: { name: 'asc' }
     })
   ]);
 
@@ -113,9 +118,11 @@ export default async function AdminPage() {
     name_kh: p.name_kh,
     name_zh: p.name_zh,
     price: p.price,
-    variants: p.variants, // PASSED VARIANTS TO FRONTEND
+    variants: p.variants, 
+    ingredients: p.ingredients, // PASS RECIPE MAPPING
     image: p.image,
     category: {
+      id: p.categoryId,
       name: p.category.name,
       discount: canUseCampaign ? p.category.discount : 0
     },
@@ -161,6 +168,7 @@ export default async function AdminPage() {
       userEmail={user.email}
       userRole={shopUser.role}
       orders={orders}
+      ingredients={ingredients}
     />
   );
 }

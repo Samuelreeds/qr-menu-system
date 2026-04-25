@@ -82,7 +82,7 @@ model Shop {
   telegramChatId               String?
   staffCallTopicId             String?
   newOrderTopicId              String?
-
+  
   staffCalls StaffCallRequest[] @relation("ShopStaffCalls")
   tables     Table[]            @relation("ShopTables")
 
@@ -141,7 +141,7 @@ model Category {
   products Product[]
 }
 
-// --- NEW RELATIONAL VARIANTS MODEL ---
+// --- PRODUCT RELATIONS ---
 model ProductVariant {
   id        String  @id @default(cuid())
   name      String
@@ -151,6 +151,22 @@ model ProductVariant {
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+}
+
+model ProductIngredient {
+  id           String     @id @default(cuid())
+  
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  
+  quantityUsed Float      // How much of this ingredient is used per 1 order of this product
+
+  @@unique([productId, ingredientId])
+  @@index([productId])
+  @@index([ingredientId])
 }
 
 model Product {
@@ -167,8 +183,8 @@ model Product {
   isSoldOut   Boolean @default(false)
   discount    Float   @default(0)
 
-  // RELATIONAL VARIANTS INSTEAD OF JSON
   variants    ProductVariant[]
+  ingredients ProductIngredient[]
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -186,7 +202,7 @@ model Banner {
   image     String
   sortOrder Int       @default(0)
   deletedAt DateTime?
-
+  
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -201,7 +217,6 @@ model ShopSettings {
   address       String?
   phone         String?
   openingHours  String?
-
   themeColor    String  @default("#000000")
   headerDesign  String  @default("design1")
   logo          String?
@@ -298,12 +313,12 @@ model Order {
   shopId          String
   shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
   
-  orderNumber     String?       // NEW FIELD ADDED
+  orderNumber     String?
 
   // POS Specific Fields
   orderType       OrderType     @default(TABLE)
-  tableNumber     String?       // "Table 1", "Table 2"
-  deliveryAgent   String?       // "Grab", "Food Panda"
+  tableNumber     String?
+  deliveryAgent   String?
   
   // Financials
   subtotal        Float
@@ -343,7 +358,7 @@ model OrderItem {
   
   // Store customizations (mood, size, sugar, ice) as a flexible JSON object
   customization   Json?
-  
+
   createdAt       DateTime @default(now())
 
   @@index([orderId])
@@ -363,6 +378,7 @@ model Ingredient {
   lowThreshold  Float      @default(20) // percentage
   
   logs          StockLog[]
+  productUses   ProductIngredient[]
   
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

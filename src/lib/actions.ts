@@ -93,7 +93,7 @@ export async function getProducts() {
   if (!shopId) return [];
   return await prisma.product.findMany({
     where: { shopId },
-    include: { category: true, variants: true },
+    include: { category: true, variants: true, ingredients: true }, // Fetches recipe mapping
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -305,6 +305,7 @@ export async function createProduct(data: {
   name_zh?: string | null;
   price?: number | null;
   variants?: { name: string; price: number }[] | null;
+  ingredients?: { ingredientId: string; quantityUsed: number }[] | null;
   discount?: number;
   categoryId: string;
   time?: string;
@@ -339,7 +340,6 @@ export async function createProduct(data: {
   }
   if (!imagePath) imagePath = PRODUCT_PLACEHOLDER_IMAGE;
 
-  // The hidden tag we store instead of a real database 'department' column
   const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
 
   await prisma.product.create({
@@ -362,6 +362,12 @@ export async function createProduct(data: {
           name: v.name,
           price: v.price
         }))
+      },
+      ingredients: {
+        create: data.ingredients?.map(ing => ({
+          ingredientId: ing.ingredientId,
+          quantityUsed: ing.quantityUsed
+        })) || []
       }
     }
   })
@@ -375,6 +381,7 @@ export async function updateProduct(data: {
   name_zh?: string | null;
   price?: number | null;
   variants?: { name: string; price: number }[] | null;
+  ingredients?: { ingredientId: string; quantityUsed: number }[] | null;
   discount?: number;
   categoryId: string;
   time?: string;
@@ -405,7 +412,6 @@ export async function updateProduct(data: {
     await deleteFromSupabase(oldProduct?.image || null);
   }
 
-  // The hidden tag we store instead of a real database 'department' column
   const hiddenDeptTag = data.department === 'pub' ? '[PUB]' : '[COFFEE]';
 
   await prisma.product.update({
@@ -428,6 +434,13 @@ export async function updateProduct(data: {
           name: v.name,
           price: v.price
         }))
+      },
+      ingredients: {
+        deleteMany: {},
+        create: data.ingredients?.map(ing => ({
+          ingredientId: ing.ingredientId,
+          quantityUsed: ing.quantityUsed
+        })) || []
       }
     }
   });
@@ -1442,7 +1455,10 @@ export async function createPosOrder(data: {
     const productIds = data.items.map(i => i.productId);
     const realProducts = await prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, price: true, discount: true, category: { select: { discount: true } } }
+      include: {
+        category: { select: { discount: true } },
+        ingredients: true // fetch recipe mapping for inventory deduction
+      }
     });
 
     let secureSubtotal = 0;
@@ -1478,26 +1494,75 @@ export async function createPosOrder(data: {
     const currentOrderCount = await prisma.order.count({ where: { shopId: data.shopId } });
     const generatedOrderNumber = `# ORD-${String(currentOrderCount + 1).padStart(4, '0')}`;
 
-    const order = await prisma.order.create({
-      data: {
-        shopId: data.shopId,
-        orderNumber: generatedOrderNumber,
-        orderType: mappedOrderType as any,
-        tableNumber: data.tableNumber,
-        deliveryAgent: data.deliveryAgent,
-        subtotal: secureSubtotal,
-        discount: secureDiscount,
-        promoCode: data.promoCode,
-        tax: secureTax,
-        total: secureTotal,
-        paymentMethod: data.paymentMethod as any,
-        status: 'COMPLETED',
-        isPaid: true,
-        items: {
-          create: orderItemsData,
-        },
-      },
-      include: { items: true } 
+    // Execute order creation AND inventory deduction in a single transaction
+    const order = await prisma.$transaction(async (tx) => {
+       
+       // 1. Create the Order
+       const createdOrder = await tx.order.create({
+         data: {
+           shopId: data.shopId,
+           orderNumber: generatedOrderNumber,
+           orderType: mappedOrderType as any,
+           tableNumber: data.tableNumber,
+           deliveryAgent: data.deliveryAgent,
+           subtotal: secureSubtotal,
+           discount: secureDiscount,
+           promoCode: data.promoCode,
+           tax: secureTax,
+           total: secureTotal,
+           paymentMethod: data.paymentMethod as any,
+           status: 'COMPLETED',
+           isPaid: true,
+           items: {
+             create: orderItemsData,
+           },
+         },
+         include: { items: true } 
+       });
+
+       // 2. Map deductions (combining quantities if multiple items use the same ingredient)
+       const deductions = new Map<string, number>(); 
+       for (const clientItem of data.items) {
+          const realProd = realProducts.find(p => p.id === clientItem.productId);
+          if (realProd && realProd.ingredients && realProd.ingredients.length > 0) {
+             for (const recipeItem of realProd.ingredients) {
+                const amountToDeduct = recipeItem.quantityUsed * clientItem.qty;
+                deductions.set(
+                   recipeItem.ingredientId,
+                   (deductions.get(recipeItem.ingredientId) || 0) + amountToDeduct
+                );
+             }
+          }
+       }
+
+       // 3. Apply deductions securely
+       const staffName = (session as any)?.user?.email?.split('@')[0] || "POS System";
+       
+       for (const [ingredientId, amountToDeduct] of deductions.entries()) {
+          const ingredient = await tx.ingredient.findUnique({ where: { id: ingredientId } });
+          if (ingredient) {
+             const newStock = Math.max(0, ingredient.current - amountToDeduct);
+             
+             await tx.ingredient.update({
+                where: { id: ingredientId },
+                data: { current: newStock }
+             });
+
+             await tx.stockLog.create({
+                data: {
+                   shopId: data.shopId,
+                   ingredientId: ingredientId,
+                   change: -amountToDeduct,
+                   reason: "Sold",
+                   staffName: staffName,
+                   previousStock: ingredient.current,
+                   newStock: newStock
+                }
+             });
+          }
+       }
+
+       return createdOrder;
     });
 
     revalidatePath('/admin');
