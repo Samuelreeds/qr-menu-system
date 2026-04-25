@@ -7,6 +7,7 @@ import { useToast } from "@/context/ToastContext";
 import { BillingItem, OrderType } from './AdminPosSection';
 
 const TAX_RATE = 0.1;
+const EXCHANGE_RATE = 4000;
 
 export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
@@ -15,6 +16,11 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   const [discountValue, setDiscountValue] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
   const [isTaxEnabled, setIsTaxEnabled] = useState(false);
+
+  // Cash Modal State
+  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
+  const [cashReceivedUSD, setCashReceivedUSD] = useState("");
+  const [cashReceivedKHR, setCashReceivedKHR] = useState("");
 
   const { addSuccessToast, addErrorToast } = useToast();
 
@@ -48,14 +54,38 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
     }
   };
 
+  // Safe Math Calculations
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const discountNum = parseFloat(discountValue) || 0;
   const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
   const afterDiscount = subtotal - discountAmount;
   const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
-  const total = afterDiscount + tax;
+  const total = Number((afterDiscount + tax).toFixed(2));
 
-  const handlePrint = () => { if (items.length === 0) return; onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled); };
+  // Currency Calculations
+  const parsedUSD = parseFloat(cashReceivedUSD) || 0;
+  const parsedKHR = parseFloat(cashReceivedKHR) || 0;
+  const totalReceivedInUSD = parsedUSD + (parsedKHR / EXCHANGE_RATE);
+  const changeDueUSD = Math.max(0, totalReceivedInUSD - total);
+  const changeDueKHR = changeDueUSD * EXCHANGE_RATE;
+  
+  const isPaymentSufficient = Math.round(totalReceivedInUSD * 100) >= Math.round(total * 100);
+
+  const handleMainActionClick = () => {
+    if (items.length === 0) return;
+    if (paymentMethod === 'cash') {
+      setCashReceivedUSD(""); 
+      setCashReceivedKHR("");
+      setIsCashModalOpen(true);
+    } else {
+      onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
+    }
+  };
+
+  const handleConfirmCashPayment = () => {
+    setIsCashModalOpen(false);
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
+  };
 
   return (
     <>
@@ -275,13 +305,16 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
           </div>
           
           <div className="flex justify-between pt-2 border-t border-gray-100 mt-2 items-end min-w-0">
-            <span className="font-black text-gray-900 text-xs sm:text-sm truncate pr-2">Total</span>
-            <span className="font-black text-gray-900 text-xl sm:text-2xl leading-none shrink-0">${total.toFixed(2)}</span>
+            <span className="font-black text-gray-900 text-xs sm:text-sm truncate pr-2 mb-0.5">Total Amount</span>
+            <div className="flex flex-col items-end">
+              <span className="font-black text-gray-900 text-xl sm:text-2xl leading-none shrink-0">${total.toFixed(2)}</span>
+              <span className="font-bold text-gray-500 text-[10px] sm:text-xs mt-1">{(total * EXCHANGE_RATE).toLocaleString()} ៛</span>
+            </div>
           </div>
         </div>
         
         <div className="p-3 sm:p-4 pt-3 sm:pt-4 bg-gray-50/50 min-w-0">
-          <div className="flex gap-2 mb-2 sm:mb-3 min-w-0">
+          <div className="flex gap-2 mb-3 min-w-0">
             <button 
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-3 rounded-[12px] sm:rounded-[14px] font-bold text-[10px] sm:text-xs transition-all active:scale-[0.98] border-2 min-w-0 truncate px-1 ${paymentMethod === "cash" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} 
               onClick={() => setPaymentMethod("cash")}
@@ -300,16 +333,101 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
           
           <button 
             className={`w-full py-3 sm:py-4 rounded-[12px] sm:rounded-[14px] font-bold text-sm sm:text-[15px] transition-all flex items-center justify-center gap-2 min-w-0 px-2 ${items.length > 0 && !isSavingOrder ? 'bg-[#111827] text-white shadow-lg hover:bg-black active:scale-[0.98]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} 
-            onClick={handlePrint} 
+            onClick={handleMainActionClick} 
             disabled={items.length === 0 || isSavingOrder}
           >
             {isSavingOrder ? <Loader2 className="animate-spin shrink-0" size={18} /> : null}
             <span className="truncate">
-              {items.length > 0 && !isSavingOrder ? `Place Order — $${total.toFixed(2)}` : isSavingOrder ? "Processing..." : "Select items to begin"}
+              {items.length > 0 && !isSavingOrder 
+                ? (paymentMethod === 'cash' ? `Calculate Change & Pay — $${total.toFixed(2)}` : `Place Order — $${total.toFixed(2)}`) 
+                : isSavingOrder ? "Processing..." : "Select items to begin"}
             </span>
           </button>
         </div>
       </div>
+
+      {/* CASH PAYMENT MODAL */}
+      {isCashModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-extrabold text-gray-900 text-xl">Cash Payment</h3>
+              <button onClick={() => setIsCashModalOpen(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100">
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Due</p>
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <p className="text-4xl font-black text-gray-900">${total.toFixed(2)}</p>
+                <p className="text-sm font-bold text-gray-500">{(total * EXCHANGE_RATE).toLocaleString()} ៛</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
+                  <div className="relative mb-2">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">$</span>
+                    <input 
+                      type="number" step="0.01" min="0" 
+                      value={cashReceivedUSD} 
+                      onChange={e => setCashReceivedUSD(e.target.value)} 
+                      className="w-full pl-7 pr-2 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
+                      placeholder="0.00" 
+                    />
+                  </div>
+                  <button 
+                    onClick={() => { setCashReceivedUSD(total.toFixed(2)); setCashReceivedKHR(""); }} 
+                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
+                  >
+                    Exact $
+                  </button>
+                </div>
+                
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">KHR Received</label>
+                  <div className="relative mb-2">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">៛</span>
+                    <input 
+                      type="number" step="100" min="0" 
+                      value={cashReceivedKHR} 
+                      onChange={e => setCashReceivedKHR(e.target.value)} 
+                      className="w-full pl-3 pr-7 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
+                      placeholder="0" 
+                    />
+                  </div>
+                  <button 
+                    onClick={() => { setCashReceivedKHR((total * EXCHANGE_RATE).toString()); setCashReceivedUSD(""); }} 
+                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
+                  >
+                    Exact ៛
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">Change Due</label>
+                <div className="w-full px-4 py-3.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-600 text-lg flex items-center justify-between shadow-sm">
+                  <span>${changeDueUSD.toFixed(2)}</span>
+                  <span className="text-sm opacity-80">{changeDueKHR.toLocaleString()} ៛</span>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleConfirmCashPayment}
+              disabled={isSavingOrder || !isPaymentSufficient}
+              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}
+              Confirm Payment
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

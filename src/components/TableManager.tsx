@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { getShopTables, createTable, toggleTableStatus, updateTable, deleteTable } from "@/lib/table-actions";
-import { Copy, QrCode, Edit2, Trash2, Check, X, Download, MoreHorizontal, Power, PowerOff, Search, Printer } from "lucide-react";
+import { Copy, QrCode, Edit2, Trash2, Check, X, Download, MoreHorizontal, Power, PowerOff, Search } from "lucide-react";
 
 interface TableItem {
   id: string;
@@ -105,41 +105,6 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       alert("Failed to download QR code.");
-    }
-  };
-
-  const printQR = (url: string, label: string) => {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(url)}`;
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Print QR - Table ${label}</title>
-            <style>
-              body { font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: white; text-align: center; }
-              .card { border: 8px solid #111; padding: 3rem; border-radius: 2rem; display: flex; flex-direction: column; align-items: center; max-width: 600px; width: 100%; box-sizing: border-box; }
-              h1 { font-size: 4rem; margin: 0 0 0.5rem 0; color: #111; text-transform: uppercase; font-weight: 900; letter-spacing: -0.05em; }
-              p.sub { font-size: 1.5rem; color: #666; margin: 0 0 2rem 0; font-weight: 500; }
-              img { width: 100%; max-width: 400px; height: auto; display: block; aspect-ratio: 1/1; mix-blend-mode: multiply; }
-              .footer { margin-top: 2rem; font-size: 1rem; color: #999; font-family: monospace; word-break: break-all; max-width: 500px; }
-              @media print {
-                @page { size: portrait; margin: 0; }
-                body { height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="card">
-              <h1>Table ${label}</h1>
-              <p class="sub">Scan to view menu & order</p>
-              <img src="${qrUrl}" onload="window.print(); window.close();" />
-            </div>
-            <div class="footer">${url}</div>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
     }
   };
 
@@ -358,18 +323,12 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
             </div>
 
             {/* Modal Actions */}
-            <div className="flex gap-3 w-full">
-              <button 
-                onClick={() => printQR(`${origin}/${shopSlug}?tableId=${qrModalTable.id}`, qrModalTable.label)}
-                className="flex-1 py-3.5 bg-gray-100 text-gray-800 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-200 transition-colors active:scale-[0.98] shadow-sm"
-              >
-                <Printer size={18} /> Print
-              </button>
+            <div className="flex w-full">
               <button 
                 onClick={() => downloadQR(`${origin}/${shopSlug}?tableId=${qrModalTable.id}`, qrModalTable.label)}
-                className="flex-1 py-3.5 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors active:scale-[0.98] shadow-sm"
+                className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors active:scale-[0.98] shadow-sm"
               >
-                <Download size={18} /> Download
+                <Download size={18} /> Download QR Code
               </button>
             </div>
 

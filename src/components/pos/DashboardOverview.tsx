@@ -95,6 +95,7 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 print:hidden min-w-0">
       
+      {/* 1. TOTAL SALES + TOTAL ORDERS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
           <div className="flex justify-between items-start mb-6">
@@ -127,23 +128,56 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
-        <div className="xl:col-span-2 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px] min-w-0">
-          <h3 className="font-extrabold text-gray-900 mb-6 truncate">Sales by Hour (Today)</h3>
-          <div className="flex-1 flex items-end gap-3 md:gap-4 mt-auto pt-4 border-b border-gray-50 relative min-w-0">
-            {stats.chartData.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end min-w-0">
-                <div className="w-full bg-gray-100/80 rounded-t-lg relative overflow-hidden transition-all group-hover:bg-gray-200 h-40">
-                  <div className="absolute bottom-0 w-full bg-[#111827] rounded-t-lg transition-all duration-500" style={{ height: d.height }}></div>
+      {/* 2. PAYMENT SUMMARY */}
+      <div className="grid grid-cols-1 gap-6 min-w-0">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
+            <Banknote size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Payment Split
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
+            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
+               <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-500 shrink-0">
+                    <Banknote size={20} strokeWidth={2.5}/>
+                  </div>
+                  <span className="font-extrabold text-gray-900 text-sm truncate">Cash Register</span>
+               </div>
+               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.cash.toFixed(2)}</span>
+            </div>
+            
+            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
+               <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="p-2.5 bg-blue-50 rounded-xl text-blue-500 shrink-0">
+                    <QrCode size={20} strokeWidth={2.5}/>
+                  </div>
+                  <span className="font-extrabold text-gray-900 text-sm truncate">KHQR Digital</span>
+               </div>
+               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.khqr.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. TOP SELLING + ORDER BREAKDOWN */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 min-w-0">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
+            <TrendingUp size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Top Selling Items
+          </h3>
+          <div className="space-y-3 min-w-0">
+            {stats.topItems.length === 0 ? (
+              <p className="text-sm font-medium text-gray-400 py-8 text-center">No sales today</p>
+            ) : (
+              stats.topItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50/80 rounded-xl border border-gray-100/50 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[11px] font-black text-gray-400 w-5 text-center shrink-0">{idx + 1}</span>
+                    <span className="font-extrabold text-sm text-gray-900 truncate">{item[0]}</span>
+                  </div>
+                  <span className="text-[11px] font-bold bg-white border border-gray-200 px-2.5 py-1 rounded-lg text-gray-600 shadow-sm shrink-0 whitespace-nowrap">{item[1]} sold</span>
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 mt-3 truncate w-full text-center">{d.label}</span>
-                {d.value > 0 && (
-                  <span className="absolute -top-7 text-[10px] font-black bg-gray-900 text-white px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md whitespace-nowrap">
-                    ${d.value.toFixed(0)}
-                  </span>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -180,53 +214,24 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
         </div>
       </div>
 
+      {/* 4. EVERYTHING ELSE (Sales by Hour + Recent Activity) */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 min-w-0">
-        
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
-          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
-            <TrendingUp size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Top Selling Items
-          </h3>
-          <div className="space-y-3 min-w-0">
-            {stats.topItems.length === 0 ? (
-              <p className="text-sm font-medium text-gray-400 py-8 text-center">No sales today</p>
-            ) : (
-              stats.topItems.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50/80 rounded-xl border border-gray-100/50 min-w-0">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-[11px] font-black text-gray-400 w-5 text-center shrink-0">{idx + 1}</span>
-                    <span className="font-extrabold text-sm text-gray-900 truncate">{item[0]}</span>
-                  </div>
-                  <span className="text-[11px] font-bold bg-white border border-gray-200 px-2.5 py-1 rounded-lg text-gray-600 shadow-sm shrink-0 whitespace-nowrap">{item[1]} sold</span>
+        <div className="xl:col-span-2 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px] min-w-0">
+          <h3 className="font-extrabold text-gray-900 mb-6 truncate">Sales by Hour (Today)</h3>
+          <div className="flex-1 flex items-end gap-3 md:gap-4 mt-auto pt-4 border-b border-gray-50 relative min-w-0">
+            {stats.chartData.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center group relative h-full justify-end min-w-0">
+                <div className="w-full bg-gray-100/80 rounded-t-lg relative overflow-hidden transition-all group-hover:bg-gray-200 h-40">
+                  <div className="absolute bottom-0 w-full bg-[#111827] rounded-t-lg transition-all duration-500" style={{ height: d.height }}></div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 min-w-0">
-          <h3 className="font-extrabold text-gray-900 mb-6 flex items-center gap-2 truncate">
-            <Banknote size={18} className="text-gray-400 shrink-0" strokeWidth={2.5}/> Payment Split
-          </h3>
-          <div className="flex flex-col gap-4 min-w-0">
-            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
-               <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-500 shrink-0">
-                    <Banknote size={20} strokeWidth={2.5}/>
-                  </div>
-                  <span className="font-extrabold text-gray-900 text-sm truncate">Cash Register</span>
-               </div>
-               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.cash.toFixed(2)}</span>
-            </div>
-            
-            <div className="p-5 border border-gray-100 rounded-2xl flex items-center justify-between bg-white shadow-sm min-w-0">
-               <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="p-2.5 bg-blue-50 rounded-xl text-blue-500 shrink-0">
-                    <QrCode size={20} strokeWidth={2.5}/>
-                  </div>
-                  <span className="font-extrabold text-gray-900 text-sm truncate">KHQR Digital</span>
-               </div>
-               <span className="text-xl font-black text-gray-900 shrink-0 whitespace-nowrap pl-2">${stats.khqr.toFixed(2)}</span>
-            </div>
+                <span className="text-[10px] font-bold text-gray-400 mt-3 truncate w-full text-center">{d.label}</span>
+                {d.value > 0 && (
+                  <span className="absolute -top-7 text-[10px] font-black bg-gray-900 text-white px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md whitespace-nowrap">
+                    ${d.value.toFixed(0)}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -252,8 +257,8 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
             )}
           </div>
         </div>
-
       </div>
+
     </div>
   );
 }
