@@ -282,7 +282,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
   };
 
   return (
-    <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative">
+    <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative min-w-0">
       
       {/* INVISIBLE RECEIPT FOR PRINTING */}
       {latestOrder && (
@@ -330,23 +330,24 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
       
       {/* LEFT PANE: MENU */}
-      <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
+      <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 min-w-0 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0 min-w-0">
+          <div className="flex items-center gap-4 min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 truncate" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
               Select Products
             </h1>
             
             {/* OFFLINE SYNC INDICATOR */}
             {pendingSyncCount > 0 && (
               <div 
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isSyncing ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 ${isSyncing ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
                 onClick={syncPendingOrders}
                 title="Click to force sync"
               >
                 {isSyncing ? <RefreshCcw size={14} className="animate-spin" /> : <CloudOff size={14} />}
-                <span>{pendingSyncCount} order{pendingSyncCount > 1 ? 's' : ''} pending sync</span>
+                <span className="hidden sm:inline-block">{pendingSyncCount} pending sync</span>
+                <span className="sm:hidden">{pendingSyncCount}</span>
               </div>
             )}
           </div>
@@ -354,7 +355,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           <div className="relative w-full sm:w-72 shrink-0">
             <input
               type="text"
-              placeholder="Search category or menu..."
+              placeholder="Search menu..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:border-gray-900 transition-colors"
@@ -363,7 +364,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           </div>
         </div>
 
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0 no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0 no-scrollbar [&::-webkit-scrollbar]:hidden min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -375,28 +376,28 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden pb-12" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-gray-900" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
+        <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden pb-12 min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className="flex items-center justify-between mb-4 min-w-0">
+            <h2 className="font-bold text-gray-900 truncate" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
               {categories.find((c) => String(c.id) === activeCategory)?.label || "All"} Menu
             </h2>
-            <p className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+            <p className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg shrink-0">
               {menuLoading ? "Loading..." : `${filteredProducts.length} Items`}
             </p>
           </div>
 
           {menuLoading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
-              {Array.from({ length: 10 }).map((_, i) => <PosProductCardSkeleton key={i} />)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 min-w-0">
+              {Array.from({ length: 8 }).map((_, i) => <PosProductCardSkeleton key={i} />)}
             </div>
           ) : filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 min-w-0">
               {filteredProducts.map((product) => (
                 <PosProductCard key={product.id} product={product}  onClick={(p) => setSelectedModalProduct(p)} />
               ))}
             </div>
           ) : (
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-12">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-12 min-w-0">
               <EmptyState
                 illustration={<SearchEmptySVG />}
                 heading={searchQuery ? "No results found" : "No items in this category"}
@@ -410,13 +411,13 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
       {/* MOBILE VIEW CART FAB */}
       {!isMobileCartOpen && (
-        <div id="pos-mobile-fab" className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 print:hidden animate-in slide-in-from-bottom-10">
+        <div id="pos-mobile-fab" className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 print:hidden animate-in slide-in-from-bottom-10 min-w-0">
           <button 
             onClick={() => setIsMobileCartOpen(true)}
-            className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all"
+            className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all min-w-0"
           >
-            <div className="flex items-center gap-3">
-              <div className="relative flex items-center justify-center bg-gray-800 p-2 rounded-xl">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative flex items-center justify-center bg-gray-800 p-2 rounded-xl shrink-0">
                 <ShoppingCart size={20} />
                 {billingItems.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-gray-900">
@@ -424,9 +425,9 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
                   </span>
                 )}
               </div>
-              <span className="font-bold text-sm">View Cart</span>
+              <span className="font-bold text-sm truncate">View Cart</span>
             </div>
-            <span className="font-black text-lg">
+            <span className="font-black text-lg shrink-0">
               ${(billingItems.reduce((acc, item) => acc + item.price * item.qty, 0)).toFixed(2)}
             </span>
           </button>
@@ -434,7 +435,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
 
       {/* RIGHT PANE: CART & ORDER CONFIG */}
-      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
+      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
         <BillingPanel
           items={billingItems}
           onRemove={handleRemove}
