@@ -34,7 +34,7 @@ import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
-export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { id?: string, name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; ingredients?: { ingredientId: string, quantityUsed: number }[]; }
+export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; }
@@ -79,9 +79,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [catIsDrink, setCatIsDrink] = useState(false);
 
   const [productVariants, setProductVariants] = useState<{name: string, price: number | string}[]>([{name: 'Default', price: ''}]);
+  const [productRecipe, setProductRecipe] = useState<{ingredientId: string, quantityUsed: number | string}[]>([]);
   const [productDepartment, setProductDepartment] = useState<'coffee' | 'pub'>('coffee');
   const [productCategoryId, setProductCategoryId] = useState('');
-  const [productRecipe, setProductRecipe] = useState<{ingredientId: string, quantityUsed: number | string}[]>([]);
+  const [productDiscount, setProductDiscount] = useState<number | ''>(0);
+  const [showExtraLangs, setShowExtraLangs] = useState(false);
   
   const hasInitializedProductRef = useRef(false);
 
@@ -199,10 +201,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setProductPreview(getValidImage(editingProduct.image) === PLACEHOLDER_IMAGE ? '' : editingProduct.image); 
         setProductFileBlob(null); 
         setProdName({ en: editingProduct.name || '', kh: editingProduct.name_kh || '', zh: editingProduct.name_zh || '' }); 
+        setShowExtraLangs(!!(editingProduct.name_kh || editingProduct.name_zh));
         setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15'); 
         setIsHotSale(editingProduct.isPopular || false); 
         setIsSoldOutState(editingProduct.isSoldOut || false); 
-        setProductCategoryId(editingProduct.category?.id || optCategories[0]?.id || '');
+        setProductDiscount(editingProduct.discount || 0);
+        setProductCategoryId(optCategories.find(c => c.name === editingProduct.category.name)?.id || optCategories[0]?.id || '');
         
         const rawDept = (editingProduct.department || 'coffee').toLowerCase();
         const fallbackDept = editingProduct.description?.includes('[PUB]') ? 'pub' : 'coffee';
@@ -225,6 +229,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setProductPreview(''); 
         setProductFileBlob(null); 
         setProdName({ en: '', kh: '', zh: '' }); 
+        setShowExtraLangs(false);
+        setProductDiscount('');
         setPrepTime('15'); 
         setIsHotSale(false); 
         setIsSoldOutState(false); 
@@ -313,6 +319,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       name_zh: prodName.zh,
       price: parseFloat(productVariants[0]?.price as string) || 0,
       variants: productVariants.map(v => ({ name: v.name, price: parseFloat(v.price as string) || 0 })),
+      discount: Number(productDiscount) || 0,
       categoryId: productCategoryId,
       time: prepTime + 'min',
       isPopular: isHotSale,
@@ -1025,82 +1032,171 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
          </div>
       )}
 
-      {/* PRODUCT FORM MODAL WITH RECIPE MAPPING */}
+      {/* UPDATED PRODUCT FORM MODAL */}
       {(isFormOpen || editingProduct) && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto print:hidden" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-6 md:p-8 my-8 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6">
-               <h2 className="text-2xl font-bold">{editingProduct ? "Edit Product" : "Add Product"}</h2>
-               <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
-             </div>
-             <form onSubmit={handleSaveProduct} className="space-y-6">
+          <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl p-6 md:p-8 my-8 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-extrabold text-gray-900">{editingProduct ? "Edit Product" : "Add Product"}</h2>
+              <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:scale-95 transition-colors">
+                <X size={20}/>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="space-y-5">
+              
+              {/* Image Upload Box */}
+              <div 
+                onClick={() => productInputRef.current?.click()}
+                className="w-full h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition-colors overflow-hidden relative"
+              >
+                {productPreview ? (
+                  <>
+                    <img src={productPreview} className="w-full h-full object-cover" alt="Preview"/>
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity text-white font-bold text-sm">Tap to change</div>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud size={28} className="mb-2" />
+                    <span className="text-sm font-semibold">Tap to upload</span>
+                  </>
+                )}
+              </div>
+              <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
+
+              {/* Product Name */}
+              <div>
+                <div className="flex justify-between mb-1.5">
+                  <label className="text-sm font-bold text-gray-700">Product Name</label>
+                  {!showExtraLangs && (
+                    <button type="button" onClick={() => setShowExtraLangs(true)} className="text-xs font-bold text-gray-400 hover:text-gray-600">
+                      + Add Khmer
+                    </button>
+                  )}
+                </div>
+                <input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} placeholder="e.g. Anchor" className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 font-medium text-gray-900 transition-all shadow-sm" />
                 
-                <div className="mb-4">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Product Image</label>
-                  <div className="flex gap-4 items-center">
-                    <div className="w-20 h-20 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shrink-0">
-                      <LazyImage src={productPreview || PLACEHOLDER_IMAGE} className="w-full h-full object-cover" alt="Preview"/>
-                    </div>
-                    <button type="button" onClick={() => productInputRef.current?.click()} className="px-4 py-2 border border-gray-300 rounded-xl text-sm font-bold hover:bg-gray-50 active:scale-95 transition-all">Upload Image</button>
-                  </div>
-                  <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Name (EN)</label>
-                     <input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" />
+                {showExtraLangs && (
+                   <div className="flex gap-2 mt-2">
+                     <input value={prodName.kh} onChange={e => setProdName({...prodName, kh: e.target.value})} placeholder="Khmer (Optional)" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 text-sm font-medium transition-all shadow-sm" />
+                     <input value={prodName.zh} onChange={e => setProdName({...prodName, zh: e.target.value})} placeholder="Chinese (Optional)" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 text-sm font-medium transition-all shadow-sm" />
                    </div>
-                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category</label>
-                     <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900 bg-white">
-                       {optCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                     </select>
-                   </div>
-                </div>
+                )}
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Variants & Pricing</label>
+              {/* Sizes & Pricing */}
+              <div className="p-5 border border-gray-200 rounded-[24px] bg-white shadow-sm">
+                <label className="block text-sm font-bold text-gray-800 mb-3">Sizes & Pricing</label>
+                <div className="space-y-3 mb-4">
                   {productVariants.map((v, idx) => (
-                    <div key={idx} className="flex gap-2 mb-2">
-                      <input placeholder="Name (e.g. Regular)" value={v.name} onChange={e => { const nv = [...productVariants]; nv[idx].name = e.target.value; setProductVariants(nv); }} className="flex-1 p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-                      <input type="number" step="0.01" min="0" placeholder="Price" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-24 md:w-32 p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-                      {productVariants.length > 1 && <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={18}/></button>}
+                    <div key={idx} className="flex gap-2">
+                      <input placeholder="Default" value={v.name} onChange={e => { const nv = [...productVariants]; nv[idx].name = e.target.value; setProductVariants(nv); }} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 font-medium text-gray-900 shadow-sm" required />
+                      <div className="relative w-24">
+                         <input type="number" step="0.01" min="0" placeholder="0" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 font-medium text-gray-900 shadow-sm" required />
+                      </div>
+                      {productVariants.length > 1 && (
+                        <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center justify-center shrink-0">
+                          <Trash2 size={18}/>
+                        </button>
+                      )}
                     </div>
                   ))}
-                  <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-sm font-bold text-blue-600 hover:text-blue-700">+ Add Variant</button>
                 </div>
+                <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-sm font-bold text-gray-900 flex items-center gap-1.5 hover:opacity-70 transition-opacity">
+                  <Plus size={16} strokeWidth={3} /> Add Size
+                </button>
+              </div>
 
-                {/* RECIPE SYSTEM (INVENTORY MAPPING) */}
-                <div className="bg-gray-50 p-4 sm:p-5 rounded-2xl border border-gray-100">
-                  <div className="mb-4">
-                    <label className="flex items-center gap-2 text-sm font-bold text-gray-900"><Package size={16}/> Recipe Mapping (Auto-Deduct Inventory)</label>
-                    <p className="text-xs text-gray-500 mt-1">Select ingredients to automatically deduct from stock when this product is ordered.</p>
-                  </div>
-                  
+              {/* Discount & Category */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Discount (%)</label>
+                  <input type="number" min="0" max="100" placeholder="0" value={productDiscount} onChange={e => setProductDiscount(e.target.value ? Number(e.target.value) : '')} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium shadow-sm text-gray-900" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>
+                  <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium text-gray-900 appearance-none shadow-sm cursor-pointer">
+                    {optCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Preparation Time */}
+              <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Preparation Time</label>
+                 <div className="relative">
+                    <input type="number" min="1" value={prepTime} onChange={e => setPrepTime(e.target.value)} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium text-gray-900 shadow-sm" />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">min</span>
+                 </div>
+              </div>
+
+              {/* Recipe Mapping (Integrated into new style) */}
+              <div className="p-5 border border-gray-200 rounded-[24px] bg-white shadow-sm">
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-800 mb-1">
+                  <Package size={16}/> Recipe Mapping
+                </label>
+                <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">Auto-deduct inventory stock.</p>
+                <div className="space-y-3 mb-4">
                   {productRecipe.map((item, idx) => (
-                    <div key={idx} className="flex gap-2 mb-3">
-                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="flex-1 p-3 border border-gray-200 rounded-xl bg-white outline-none focus:border-gray-900" required>
+                    <div key={idx} className="flex gap-2">
+                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 text-sm font-medium shadow-sm cursor-pointer">
                         <option value="">Select Ingredient</option>
                         {ingredients?.map(ing => <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>)}
                       </select>
-                      <input type="number" step="0.01" min="0.01" placeholder="Qty per order" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-24 md:w-32 p-3 border border-gray-200 rounded-xl bg-white outline-none focus:border-gray-900" required />
-                      <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={18}/></button>
+                      <input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-20 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 text-sm font-medium shadow-sm" />
+                      <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors shrink-0"><Trash2 size={16}/></button>
                     </div>
                   ))}
-                  <button type="button" onClick={addRecipeItem} className="text-sm font-bold text-blue-600 hover:text-blue-700">+ Add Ingredient to Recipe</button>
                 </div>
+                <button type="button" onClick={addRecipeItem} className="text-sm font-bold text-gray-900 hover:opacity-70 flex items-center gap-1.5 transition-opacity">
+                  <Plus size={16} strokeWidth={3} /> Add Ingredient
+                </button>
+              </div>
 
-                <div className="flex flex-wrap gap-6 items-center border-t border-gray-100 pt-6">
-                  <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="w-4 h-4 cursor-pointer"/> Popular / Hot Sale</label>
-                  <label className="flex items-center gap-2 text-sm font-bold text-red-600 cursor-pointer"><input type="checkbox" checked={isSoldOutState} onChange={e => setIsSoldOutState(e.target.checked)} className="w-4 h-4 cursor-pointer"/> Mark as Sold Out</label>
-                </div>
+              {/* Hot Sale Toggle */}
+              <div className={`p-4 rounded-2xl flex justify-between items-center border transition-colors ${isHotSale ? 'bg-orange-50 border-orange-100' : 'bg-white border-gray-200'}`}>
+                 <div>
+                    <p className={`text-sm font-bold ${isHotSale ? 'text-orange-600' : 'text-gray-900'}`}>Hot Sale Item</p>
+                    <p className={`text-[11px] font-medium mt-0.5 ${isHotSale ? 'text-orange-500/80' : 'text-gray-400'}`}>Show this in the popular section</p>
+                 </div>
+                 <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="sr-only peer"/>
+                    <div className={`w-11 h-6 rounded-full peer shadow-inner transition-colors ${isHotSale ? 'bg-orange-500' : 'bg-gray-200'} after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isHotSale ? 'peer-checked:after:translate-x-full peer-checked:after:border-white' : ''}`}></div>
+                 </label>
+              </div>
 
-                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
-                   <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
-                   <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50">{isSaving && <Loader2 size={16} className="animate-spin"/>} {editingProduct ? "Update Product" : "Create Product"}</button>
+              {/* Availability Toggle */}
+              <div className="mb-2">
+                <div className={`p-4 rounded-2xl flex justify-between items-center border transition-colors ${!isSoldOutState ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
+                   <div>
+                      <p className={`text-sm font-black uppercase tracking-wider ${!isSoldOutState ? 'text-green-700' : 'text-gray-400'}`}>{!isSoldOutState ? 'AVAILABLE' : 'UNAVAILABLE'}</p>
+                   </div>
+                   <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer"/>
+                      <div className={`w-11 h-6 rounded-full peer shadow-inner transition-colors ${!isSoldOutState ? 'bg-green-500' : 'bg-gray-200'} after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${!isSoldOutState ? 'peer-checked:after:translate-x-full peer-checked:after:border-white' : ''}`}></div>
+                   </label>
                 </div>
-             </form>
+                <p className="text-[11px] text-gray-400 mt-2 px-1">Toggle to mark item as currently {!isSoldOutState ? 'available' : 'unavailable'}.</p>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex flex-col gap-3 pt-2">
+                 <button type="submit" disabled={isSaving} className="w-full bg-gray-900 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md disabled:opacity-70">
+                    {isSaving && <Loader2 size={18} className="animate-spin"/>} {editingProduct ? "Update Product" : "Save Product"}
+                 </button>
+                 {editingProduct && (
+                    <button type="button" onClick={() => {
+                       const fd = new FormData(); fd.append('id', editingProduct.id);
+                       confirmDelete('product', editingProduct.id, editingProduct.name, fd);
+                       setIsFormOpen(false); setEditingProduct(null);
+                    }} className="w-full bg-red-50 text-red-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 active:scale-[0.98] transition-all">
+                       <Trash2 size={18} /> Delete Product
+                    </button>
+                 )}
+              </div>
+            </form>
           </div>
         </div>
       )}
