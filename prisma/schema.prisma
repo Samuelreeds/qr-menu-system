@@ -43,16 +43,19 @@ enum OrderStatus {
 
 // --- USER MODEL ---
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  password       String
-  failedAttempts Int       @default(0)
-  lockoutUntil   DateTime?
-  resetToken     String?   @unique
+  id               String    @id @default(cuid())
+  email            String    @unique
+  password         String
+  failedAttempts   Int       @default(0)
+  lockoutUntil     DateTime?
+  resetToken       String?   @unique
   resetTokenExpiry DateTime?
-  isSuperAdmin   Boolean   @default(false)
-  role           String    @default("USER")
-  shopUsers      ShopUser[]
+  isSuperAdmin     Boolean   @default(false)
+  role             String    @default("staff") // "admin" | "staff"
+  createdBy        String?
+
+  shopUsers        ShopUser[]
+  orders           Order[]
 }
 
 // --- NEW SAAS MODELS ---
@@ -315,6 +318,9 @@ model Order {
   
   orderNumber     String?
 
+  userId          String?       // Track which staff member processed the order
+  user            User?         @relation(fields: [userId], references: [id])
+
   // POS Specific Fields
   orderType       OrderType     @default(TABLE)
   tableNumber     String?
@@ -326,6 +332,7 @@ model Order {
   promoCode       String?
   tax             Float         @default(0)
   total           Float
+  currency        String        @default("USD") // ADDED EXPLICIT CURRENCY
   
   // Status & Payment
   paymentMethod   PaymentMethod @default(CASH)
@@ -339,6 +346,7 @@ model Order {
   updatedAt       DateTime      @updatedAt
 
   @@index([shopId])
+  @@index([userId])
 }
 
 model OrderItem {

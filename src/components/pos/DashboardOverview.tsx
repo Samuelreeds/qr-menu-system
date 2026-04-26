@@ -4,6 +4,8 @@
 import { useMemo } from 'react';
 import { DollarSign, Receipt, TrendingUp, TrendingDown, Banknote, Clock, QrCode } from 'lucide-react';
 
+const EXCHANGE_RATE = 4000;
+
 export default function DashboardOverview({ orders, products }: { orders: any[], products: any[] }) {
   const stats = useMemo(() => {
     const now = new Date();
@@ -96,7 +98,9 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
     <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 print:hidden min-w-0">
       
       {/* 1. TOTAL SALES + TOTAL ORDERS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-w-0">
+        
+        {/* GROSS SALES (USD) */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
           <div className="flex justify-between items-start mb-6">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0">
@@ -115,6 +119,20 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
           </div>
         </div>
 
+        {/* GROSS SALES (KHR) */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
+          <div className="flex justify-between items-start mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-500 shrink-0">
+              <Banknote size={24} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="min-w-0">
+             <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1 truncate">Gross Sales (៛)</p>
+             <h2 className="text-4xl font-black text-gray-900 truncate">៛{(stats.grossSales * EXCHANGE_RATE).toLocaleString()}</h2>
+          </div>
+        </div>
+
+        {/* TOTAL ORDERS */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between min-w-0">
           <div className="flex justify-between items-start mb-6">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
@@ -126,6 +144,7 @@ export default function DashboardOverview({ orders, products }: { orders: any[],
              <h2 className="text-4xl font-black text-gray-900 truncate">{stats.totalOrders}</h2>
           </div>
         </div>
+
       </div>
 
       {/* 2. PAYMENT SUMMARY */}

@@ -5,7 +5,8 @@ import { useState, useTransition } from 'react';
 import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer } from 'lucide-react';
 import { deleteOrder, updateOrderStatus } from '@/lib/actions';
 
-// ADDED: onPrint to the props
+const EXCHANGE_RATE = 4000;
+
 export default function OrderHistoryCard({ order, onPrint }: { order: any, onPrint: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [, startTransition] = useTransition();
@@ -37,7 +38,15 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
 
   const handlePrint = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onPrint(); // Trigger the print function from the parent
+    onPrint(); 
+  };
+
+  // HELPER: Formats any USD value into the correct currency format based on what was saved
+  const formatMoney = (usdAmount: number) => {
+    if (order.currency === 'KHR') {
+      return `៛${(usdAmount * EXCHANGE_RATE).toLocaleString()}`;
+    }
+    return `$${usdAmount.toFixed(2)}`;
   };
 
   return (
@@ -87,7 +96,9 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
           </div>
           <div className="flex items-center gap-2 sm:gap-6 shrink-0">
             <div className="hidden sm:flex flex-col items-end">
-              <span className={`font-black text-sm ${isCancelled ? 'text-gray-400' : 'text-gray-900'}`}>${order.total.toFixed(2)}</span>
+              <span className={`font-black text-sm ${isCancelled ? 'text-gray-400' : 'text-gray-900'}`}>
+                {formatMoney(order.total)}
+              </span>
               <div className="flex items-center gap-1 text-[10px] text-gray-400 font-medium mt-0.5">
                 {order.paymentMethod === 'CASH' ? <Banknote size={10}/> : <CreditCard size={10}/>}
                 {order.paymentMethod}
@@ -129,7 +140,7 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
                         )}
                       </div>
                       <span className={`text-xs font-bold pt-0.5 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                        ${(item.price * item.quantity).toFixed(2)}
+                        {formatMoney(item.price * item.quantity)}
                       </span>
                     </div>
                   ))}
@@ -139,13 +150,13 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4">Summary</p>
                   <div className="space-y-2.5 mb-4">
-                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Subtotal</span><span className="font-bold text-gray-900">${order.subtotal.toFixed(2)}</span></div>
-                    {order.discount > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Discount</span><span className="font-bold text-gray-900">-${order.discount.toFixed(2)}</span></div>}
-                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Tax</span><span className="font-bold text-gray-900">${order.tax.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Subtotal</span><span className="font-bold text-gray-900">{formatMoney(order.subtotal)}</span></div>
+                    {order.discount > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Discount</span><span className="font-bold text-gray-900">-{formatMoney(order.discount)}</span></div>}
+                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Tax</span><span className="font-bold text-gray-900">{formatMoney(order.tax)}</span></div>
                   </div>
                   <div className="flex justify-between items-end pt-4 border-t border-gray-100 mb-6">
                     <span className="font-black text-sm text-gray-900 uppercase">Total</span>
-                    <span className={`font-black text-xl ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>${order.total.toFixed(2)}</span>
+                    <span className={`font-black text-xl ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatMoney(order.total)}</span>
                   </div>
                   <div className="space-y-2 pt-4 border-t border-gray-50">
                     <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Order Type</span><span className="font-bold text-gray-700 capitalize">{order.orderType === 'TAKEAWAY' ? 'Walk-in' : order.orderType.toLowerCase()} {order.tableNumber ? `(${order.tableNumber})` : ''}</span></div>

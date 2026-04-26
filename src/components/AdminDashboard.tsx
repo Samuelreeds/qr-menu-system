@@ -12,6 +12,8 @@ import {
   createCategory, updateCategory, deleteCategory,
   updateShopIdentity, updateShopBranding, updateShopSocials, 
   addBanner, deleteBanner, reorderBanners, toggleProductSoldOut,
+  getTeamMembers, createTeamMember, updateTeamMemberRole, deleteTeamMember,
+  getUserActivity
 } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { 
@@ -20,7 +22,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles
+  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users
 } from 'lucide-react';
 
 import LazyImage from "./ui/LazyImage";
@@ -57,7 +59,7 @@ interface PendingDelete { productId: string; productSnapshot: Product; name: str
 const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
 
 export default function AdminDashboard({ shopId, categories, products: initialProducts, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [], ingredients = [], stockLogs = [] }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos'>(featPos ? 'overview' : 'menu');
+  const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos' | 'team'>(featPos ? 'overview' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -66,6 +68,18 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); 
   
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null); 
+
+  // Team State
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [isTeamLoading, setIsTeamLoading] = useState(false);
+  const [isTeamFormOpen, setIsTeamFormOpen] = useState(false);
+  const [editingTeamMember, setEditingTeamMember] = useState<any>(null);
+  const hasFetchedTeam = useRef(false);
+
+  // User Activity View State
+  const [activityUser, setActivityUser] = useState<any>(null);
+  const [userActivityData, setUserActivityData] = useState<any>(null);
+  const [isActivityLoading, setIsActivityLoading] = useState(false);
 
   const [paperSize, setPaperSize] = useState<'A4' | 'A5' | '10x15'>('A4');
   const [origin, setOrigin] = useState('');
@@ -82,7 +96,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [productRecipe, setProductRecipe] = useState<{ingredientId: string, quantityUsed: number | string}[]>([]);
   const [productDepartment, setProductDepartment] = useState<'coffee' | 'pub'>('coffee');
   const [productCategoryId, setProductCategoryId] = useState('');
-  const [productDiscount, setProductDiscount] = useState<number | ''>(0);
+  const [productDiscount, setProductDiscount] = useState<number | ''>('');
   const [showExtraLangs, setShowExtraLangs] = useState(false);
   
   const hasInitializedProductRef = useRef(false);
@@ -114,7 +128,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [isSaving, setIsSaving] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Sidebar Collapse State (Default: true/collapsed)
+  // Sidebar Collapse State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
   const [openSection, setOpenSection] = useState<string | null>('identity');
@@ -172,7 +186,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
   const isNoBg = logoType === 'withoutBackground';
-  const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN';
+  const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN' || userRole === 'admin';
 
   // Auto-collapse on tablet
   useEffect(() => {
@@ -181,7 +195,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setIsSidebarCollapsed(true);
       }
     };
-    
     handleResize(); 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -204,8 +217,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setShowExtraLangs(!!(editingProduct.name_kh || editingProduct.name_zh));
         setPrepTime(editingProduct.time ? editingProduct.time.replace(/\D/g, '') : '15'); 
         setIsHotSale(editingProduct.isPopular || false); 
-        setIsSoldOutState(editingProduct.isSoldOut || false); 
-        setProductDiscount(editingProduct.discount || 0);
+        setIsSoldOutState(editingProduct.isSoldOut || false);
+        setProductDiscount(editingProduct.discount || ''); 
         setProductCategoryId(optCategories.find(c => c.name === editingProduct.category.name)?.id || optCategories[0]?.id || '');
         
         const rawDept = (editingProduct.department || 'coffee').toLowerCase();
@@ -230,10 +243,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setProductFileBlob(null); 
         setProdName({ en: '', kh: '', zh: '' }); 
         setShowExtraLangs(false);
-        setProductDiscount('');
         setPrepTime('15'); 
         setIsHotSale(false); 
         setIsSoldOutState(false); 
+        setProductDiscount('');
         setProductDepartment('coffee');
         setProductCategoryId(optCategories[0]?.id || '');
         setProductVariants([{name: 'Default', price: ''}]);
@@ -246,7 +259,20 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       setWasFormOpen(false);
     }
   }, [editingProduct, isFormOpen, optCategories]);
-  
+
+  useEffect(() => {
+    if (activeTab === 'team' && !hasFetchedTeam.current) {
+      setIsTeamLoading(true);
+      getTeamMembers().then(res => {
+        if (res.success) {
+          setTeamMembers(res.data);
+          hasFetchedTeam.current = true;
+        }
+        setIsTeamLoading(false);
+      });
+    }
+  }, [activeTab]);
+
   useEffect(() => { if (editingCategory) { setCatName({ en: editingCategory.name || '', kh: editingCategory.name_kh || '', zh: editingCategory.name_zh || '' }); setCatIsDrink(editingCategory.isDrink || false); } else if (isCatFormOpen) { setCatName({ en: '', kh: '', zh: '' }); setCatIsDrink(false); } }, [editingCategory, isCatFormOpen]);
 
   const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
@@ -261,6 +287,18 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       window.print();
       setTimeout(() => setReceiptToPrint(null), 1000);
     }, 300);
+  };
+
+  const fetchUserActivity = async (member: any) => {
+    setActivityUser(member);
+    setIsActivityLoading(true);
+    const res = await getUserActivity(member.id);
+    if (res.success) {
+      setUserActivityData(res.data);
+    } else {
+      showToast("Could not load activity");
+    }
+    setIsActivityLoading(false);
   };
 
   const executeNav = (type: 'tab' | 'section', payload: any) => { if (type === 'tab') { setActiveTab(payload); setIsMobileMenuOpen(false); } else if (type === 'section') { setOpenSection(openSection === payload ? null : payload); } };
@@ -500,6 +538,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 <NavItem id="menu" icon={LayoutGrid} label="Menu" />
                 <NavItem id="categories" icon={List} label="Categories" />
                 <NavItem id="inventory" icon={Package} label="Inventory" />
+                <NavItem id="team" icon={Users} label="Staff & Team" />
                 <NavItem id="settings" icon={Settings} label="Settings" />
               </div>
             )}
@@ -523,6 +562,110 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       </aside>
 
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden print:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+
+      {/* USER ACTIVITY MODAL */}
+      {activityUser && (
+        <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm p-4 flex justify-center items-center">
+          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">User Activity</h2>
+                <p className="text-sm text-gray-500 font-medium mt-1">{activityUser.email}</p>
+              </div>
+              <button onClick={() => setActivityUser(null)} className="p-2 bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors active:scale-95">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+              {isActivityLoading ? (
+                <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-gray-400" size={32} /></div>
+              ) : userActivityData ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Total Sales Generated</p>
+                      <p className="text-3xl font-black text-gray-900">${userActivityData.totalSales.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Orders Processed</p>
+                      <p className="text-3xl font-black text-gray-900">{userActivityData.orders.length}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                      <h3 className="font-bold text-gray-900 text-sm">Recent Orders</h3>
+                    </div>
+                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-white shadow-sm">
+                          <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <th className="p-3 pl-4">Order ID</th>
+                            <th className="p-3">Type</th>
+                            <th className="p-3">Total</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3 pr-4">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {userActivityData.orders.slice(0, 50).map((o: any) => (
+                            <tr key={o.id} className="hover:bg-gray-50/50">
+                              <td className="p-3 pl-4 text-xs font-bold text-gray-900">{o.orderNumber || o.id.slice(0,8)}</td>
+                              <td className="p-3 text-xs text-gray-500 font-medium">{o.orderType}</td>
+                              <td className="p-3 text-xs font-bold text-gray-900">${o.total.toFixed(2)}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${o.status === 'COMPLETED' ? 'bg-green-50 text-green-600' : o.status === 'CANCELLED' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
+                                  {o.status}
+                                </span>
+                              </td>
+                              <td className="p-3 pr-4 text-xs text-gray-500">{new Date(o.createdAt).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                          {userActivityData.orders.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm text-gray-400">No orders processed by this user.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                      <h3 className="font-bold text-gray-900 text-sm">Inventory Actions</h3>
+                    </div>
+                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-white shadow-sm">
+                          <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <th className="p-3 pl-4">Reason</th>
+                            <th className="p-3">Change</th>
+                            <th className="p-3">New Stock</th>
+                            <th className="p-3 pr-4">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {userActivityData.stockLogs.slice(0, 50).map((log: any) => (
+                            <tr key={log.id} className="hover:bg-gray-50/50">
+                              <td className="p-3 pl-4">
+                                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">{log.reason}</span>
+                              </td>
+                              <td className={`p-3 text-xs font-bold ${log.change > 0 ? 'text-green-500' : 'text-red-500'}`}>{log.change > 0 ? '+' : ''}{log.change}</td>
+                              <td className="p-3 text-xs font-bold text-gray-900">{log.newStock}</td>
+                              <td className="p-3 pr-4 text-xs text-gray-500">{new Date(log.timestamp).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                          {userActivityData.stockLogs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-sm text-gray-400">No inventory actions recorded.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-20 text-center text-red-500">Failed to load activity data.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className={`flex-1 w-full max-w-full min-w-0 min-h-0 no-scrollbar [&::-webkit-scrollbar]:hidden ${activeTab === 'pos' ? 'flex flex-col h-[100dvh] lg:h-[100dvh] pt-[60px] lg:pt-0 overflow-hidden bg-white print:h-auto print:overflow-visible print:pt-0' : 'p-4 pt-20 lg:p-8 lg:pt-8 pb-28 lg:pb-8 overflow-y-auto [-webkit-overflow-scrolling:touch] print:overflow-visible'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
@@ -626,8 +769,78 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
            </div>
         )}
 
+        {/* TEAM TAB */}
+        {isAdmin && (
+          <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h3 className="font-bold text-2xl text-gray-900">Staff & Team Management</h3>
+                <p className="text-sm text-gray-500 mt-1">Manage who has access to your shop's dashboard and POS.</p>
+              </div>
+              <button 
+                onClick={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} 
+                className="shrink-0 bg-gray-900 text-white hover:bg-gray-800 px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-[16px] md:text-sm"
+              >
+                <Plus size={18} strokeWidth={3}/> Add Staff
+              </button>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+              <table className="w-full text-left border-collapse min-w-[500px]">
+                <thead>
+                  <tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="p-5">User Email</th>
+                    <th className="p-5">Role Level</th>
+                    <th className="p-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {isTeamLoading ? (
+                    <tr><td colSpan={3} className="py-12 text-center text-gray-400"><Loader2 className="animate-spin mx-auto"/></td></tr>
+                  ) : teamMembers.map((member) => (
+                    <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="p-4 font-bold text-gray-900">
+                        {member.email}
+                        {member.email === userEmail && <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md">YOU</span>}
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-md border ${member.role === 'admin' || member.role === 'OWNER' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                          {member.role === 'OWNER' ? 'admin' : member.role}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => fetchUserActivity(member)} className="w-10 h-10 flex items-center justify-center text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition active:scale-95" title="View Activity">
+                            <Activity size={18} />
+                          </button>
+                          <button onClick={() => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95" title="Edit Role"><Pencil size={18} /></button>
+                          <form action={async (fd) => {
+                             if (confirm("Are you sure you want to remove this user from your team?")) {
+                               fd.append('userId', member.id);
+                               const res = await deleteTeamMember(fd);
+                               if (res.success) {
+                                  setTeamMembers(teamMembers.filter(m => m.id !== member.id));
+                                  showToast("User removed!");
+                               } else {
+                                  showToast(res.error || "Failed to remove user");
+                               }
+                             }
+                          }}>
+                            <button type="submit" disabled={member.email === userEmail} className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95 disabled:opacity-50" title="Delete User"><Trash2 size={18} /></button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!isTeamLoading && teamMembers.length === 0 && <tr><td colSpan={3} className="py-12 text-center text-gray-400 font-medium">No team members found</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Shared Header for standard tabs */}
-        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && (
+        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4 print:hidden">
              <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
              <div className="flex w-full sm:w-auto gap-3">
@@ -638,7 +851,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
 
         {/* Onboarding Guide */}
-        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && !isGuideComplete && !dismissGuide && (
+        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && !isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4 print:hidden min-w-0">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
             <div className="flex justify-between items-start mb-4">
@@ -1007,7 +1220,74 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
       </main>
 
-      {/* MODALS AND UTILS */}
+      {/* TEAM MODAL */}
+      {isTeamFormOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }}>
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-6">
+               <h2 className="text-2xl font-bold">{editingTeamMember ? "Edit Team Member" : "Add Staff"}</h2>
+               <button type="button" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
+             </div>
+             <form action={async (fd) => {
+               setIsSaving(true);
+               if (editingTeamMember) {
+                 fd.append('userId', editingTeamMember.id);
+                 const res = await updateTeamMemberRole(fd);
+                 if (res.success) {
+                   setTeamMembers(teamMembers.map(m => m.id === editingTeamMember.id ? { ...m, role: fd.get('role') } : m));
+                   showToast("Role updated!");
+                   setIsTeamFormOpen(false);
+                 } else {
+                   showToast(res.error || "Update failed");
+                 }
+               } else {
+                 const res = await createTeamMember(fd);
+                 if (res.success) {
+                   showToast("Team member added!");
+                   getTeamMembers().then(r => { if(r.success) setTeamMembers(r.data); });
+                   setIsTeamFormOpen(false);
+                 } else {
+                   showToast(res.error || "Creation failed");
+                 }
+               }
+               setIsSaving(false);
+             }} className="space-y-4">
+               {!editingTeamMember && (
+                 <>
+                   <div>
+                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email Address</label>
+                     <input type="email" name="email" placeholder="staff@shop.com" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Temporary Password</label>
+                     <input type="password" name="password" placeholder="Min 6 characters" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required minLength={6} />
+                   </div>
+                 </>
+               )}
+               {editingTeamMember && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">User</p>
+                    <p className="font-bold text-gray-900">{editingTeamMember.email}</p>
+                  </div>
+               )}
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Role</label>
+                 <select name="role" defaultValue={editingTeamMember?.role === 'OWNER' ? 'admin' : (editingTeamMember?.role || 'staff')} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900 bg-white" required>
+                   <option value="staff">Staff (POS & Orders)</option>
+                   <option value="admin">Admin (Full Access)</option>
+                 </select>
+               </div>
+               
+               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
+                 <button type="button" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
+                 <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button>
+               </div>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PENDING NAV & DELETE WARNING MODALS */}
       {pendingNav && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-5"><AlertTriangle size={24} className="text-orange-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Unsaved Changes</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">You have unsaved changes in this section. Do you want to save them before leaving?</p><div className="flex gap-3 w-full"><button onClick={() => { discardChanges(pendingNav.source); clearDirty(pendingNav.source); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); }} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">No, Discard</button><button onClick={async () => { setIsSaving(true); let success = false; if (pendingNav.source === 'identity') success = await saveIdentityForm(); else if (pendingNav.source === 'branding') success = await saveBrandingForm(); else if (pendingNav.source === 'socials') success = await saveSocialsForm(); else if (pendingNav.source === 'notifications') success = await saveNotificationsForm(); setIsSaving(false); if (success) { clearDirty(pendingNav.source); if (pendingNav.source === 'branding') setLogoFileBlob(null); showToast("Changes saved!"); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); } }} className="flex-1 py-3.5 px-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">{isSaving ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Save'}</button></div></div>
@@ -1032,171 +1312,153 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
          </div>
       )}
 
-      {/* UPDATED PRODUCT FORM MODAL */}
+      {/* STANDARD PRODUCT FORM MODAL */}
       {(isFormOpen || editingProduct) && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto print:hidden" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
-          <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl p-6 md:p-8 my-8 max-h-[90vh] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
-            
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-extrabold text-gray-900">{editingProduct ? "Edit Product" : "Add Product"}</h2>
-              <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:scale-95 transition-colors">
-                <X size={20}/>
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProduct} className="space-y-5">
-              
-              {/* Image Upload Box */}
-              <div 
-                onClick={() => productInputRef.current?.click()}
-                className="w-full h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition-colors overflow-hidden relative"
-              >
-                {productPreview ? (
-                  <>
-                    <img src={productPreview} className="w-full h-full object-cover" alt="Preview"/>
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity text-white font-bold text-sm">Tap to change</div>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud size={28} className="mb-2" />
-                    <span className="text-sm font-semibold">Tap to upload</span>
-                  </>
-                )}
-              </div>
-              <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
-
-              {/* Product Name */}
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <label className="text-sm font-bold text-gray-700">Product Name</label>
-                  {!showExtraLangs && (
-                    <button type="button" onClick={() => setShowExtraLangs(true)} className="text-xs font-bold text-gray-400 hover:text-gray-600">
-                      + Add Khmer
-                    </button>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto print:hidden" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
+          <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl p-6 sm:p-8 md:p-10 my-auto max-h-[90vh] overflow-y-auto no-scrollbar relative flex flex-col" onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-6 md:mb-8 shrink-0">
+               <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">{editingProduct ? "Edit Product" : "Add Product"}</h2>
+               <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 sm:p-3 bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><X size={20} className="sm:w-6 sm:h-6"/></button>
+             </div>
+             
+             <form onSubmit={handleSaveProduct} className="space-y-5 md:space-y-6 flex-1 overflow-y-auto no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                
+                {/* IMAGE UPLOAD */}
+                <div 
+                  onClick={() => productInputRef.current?.click()}
+                  className="w-full h-36 md:h-48 border-2 border-dashed border-gray-200 rounded-[24px] flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 transition-colors overflow-hidden relative group bg-gray-50/30 shrink-0"
+                >
+                  {productPreview ? (
+                    <>
+                      <img src={productPreview} className="w-full h-full object-contain p-2 md:p-4" alt="Preview"/>
+                      <div className="absolute inset-0 bg-white/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="bg-white text-gray-900 text-sm font-bold px-4 py-2 rounded-xl shadow-sm border border-gray-200">Change Image</span></div>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud size={32} className="mb-2 sm:mb-3 text-gray-300" strokeWidth={1.5} />
+                      <span className="text-sm sm:text-base font-semibold text-gray-400">Tap to upload</span>
+                    </>
                   )}
                 </div>
-                <input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} placeholder="e.g. Anchor" className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 font-medium text-gray-900 transition-all shadow-sm" />
-                
-                {showExtraLangs && (
-                   <div className="flex gap-2 mt-2">
-                     <input value={prodName.kh} onChange={e => setProdName({...prodName, kh: e.target.value})} placeholder="Khmer (Optional)" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 text-sm font-medium transition-all shadow-sm" />
-                     <input value={prodName.zh} onChange={e => setProdName({...prodName, zh: e.target.value})} placeholder="Chinese (Optional)" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 text-sm font-medium transition-all shadow-sm" />
+                <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
+
+                {/* PRODUCT NAME */}
+                <div>
+                   <div className="flex justify-between items-center mb-2">
+                     <label className="block text-xs md:text-sm font-extrabold text-gray-500">Product Name</label>
+                     <button type="button" onClick={() => setShowExtraLangs(!showExtraLangs)} className="text-[11px] md:text-xs font-extrabold text-gray-400 hover:text-gray-600">+ Add Khmer</button>
                    </div>
-                )}
-              </div>
+                   <input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} placeholder="e.g. Anchor" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />
+                   {showExtraLangs && (
+                      <input value={prodName.kh} onChange={e => setProdName({...prodName, kh: e.target.value})} placeholder="Khmer Name (Optional)" className="w-full mt-3 px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />
+                   )}
+                </div>
 
-              {/* Sizes & Pricing */}
-              <div className="p-5 border border-gray-200 rounded-[24px] bg-white shadow-sm">
-                <label className="block text-sm font-bold text-gray-800 mb-3">Sizes & Pricing</label>
-                <div className="space-y-3 mb-4">
-                  {productVariants.map((v, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input placeholder="Default" value={v.name} onChange={e => { const nv = [...productVariants]; nv[idx].name = e.target.value; setProductVariants(nv); }} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 font-medium text-gray-900 shadow-sm" required />
-                      <div className="relative w-24">
-                         <input type="number" step="0.01" min="0" placeholder="0" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 font-medium text-gray-900 shadow-sm" required />
+                {/* SIZES & PRICING */}
+                <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
+                   <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-3 md:mb-4">Sizes & Pricing</h3>
+                   {productVariants.map((v, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row gap-3 mb-3 items-start sm:items-center">
+                      <input placeholder="Default" value={v.name} onChange={e => { const nv = [...productVariants]; nv[idx].name = e.target.value; setProductVariants(nv); }} className="w-full sm:flex-1 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
+                      <div className="flex w-full sm:w-auto gap-3">
+                         <input type="number" step="0.01" min="0" placeholder="2" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-full sm:w-32 md:w-40 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
+                         {productVariants.length > 1 && <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-500 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>}
                       </div>
-                      {productVariants.length > 1 && (
-                        <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center justify-center shrink-0">
-                          <Trash2 size={18}/>
-                        </button>
-                      )}
                     </div>
-                  ))}
+                   ))}
+                   <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Size</button>
                 </div>
-                <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-sm font-bold text-gray-900 flex items-center gap-1.5 hover:opacity-70 transition-opacity">
-                  <Plus size={16} strokeWidth={3} /> Add Size
-                </button>
-              </div>
 
-              {/* Discount & Category */}
-              <div className="grid grid-cols-2 gap-4">
+                {/* DISCOUNT & CATEGORY */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                   <div>
+                     <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Discount (%)</label>
+                     <input type="number" min="0" max="100" value={productDiscount} onChange={e => setProductDiscount(Number(e.target.value))} placeholder="0" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" />
+                   </div>
+                   <div>
+                     <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Category</label>
+                     <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm appearance-none cursor-pointer">
+                       {optCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                     </select>
+                   </div>
+                </div>
+
+                {/* PREP TIME */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Discount (%)</label>
-                  <input type="number" min="0" max="100" placeholder="0" value={productDiscount} onChange={e => setProductDiscount(e.target.value ? Number(e.target.value) : '')} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium shadow-sm text-gray-900" />
+                   <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Preparation Time</label>
+                   <div className="relative">
+                     <input type="number" min="1" value={prepTime} onChange={e => setPrepTime(e.target.value)} placeholder="15" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" />
+                     <span className="absolute right-5 md:right-6 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm md:text-base pointer-events-none">min</span>
+                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>
-                  <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium text-gray-900 appearance-none shadow-sm cursor-pointer">
-                    {optCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
 
-              {/* Preparation Time */}
-              <div>
-                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Preparation Time</label>
-                 <div className="relative">
-                    <input type="number" min="1" value={prepTime} onChange={e => setPrepTime(e.target.value)} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-gray-900 font-medium text-gray-900 shadow-sm" />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">min</span>
-                 </div>
-              </div>
-
-              {/* Recipe Mapping (Integrated into new style) */}
-              <div className="p-5 border border-gray-200 rounded-[24px] bg-white shadow-sm">
-                <label className="flex items-center gap-2 text-sm font-bold text-gray-800 mb-1">
-                  <Package size={16}/> Recipe Mapping
-                </label>
-                <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">Auto-deduct inventory stock.</p>
-                <div className="space-y-3 mb-4">
-                  {productRecipe.map((item, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 text-sm font-medium shadow-sm cursor-pointer">
+                {/* RECIPE MAPPING (Styled to match the rest) */}
+                <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
+                   <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-1.5">Recipe Mapping</h3>
+                   <p className="text-[11px] md:text-xs text-gray-500 mb-4 font-medium">Auto-deduct inventory stock</p>
+                   {productRecipe.map((item, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row gap-3 mb-3 items-start sm:items-center">
+                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="w-full sm:flex-1 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required>
                         <option value="">Select Ingredient</option>
                         {ingredients?.map(ing => <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>)}
                       </select>
-                      <input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-20 p-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-gray-900 text-sm font-medium shadow-sm" />
-                      <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors shrink-0"><Trash2 size={16}/></button>
+                      <div className="flex w-full sm:w-auto gap-3">
+                         <input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-full sm:w-24 md:w-32 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
+                         <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-500 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>
+                      </div>
                     </div>
-                  ))}
+                   ))}
+                   <button type="button" onClick={addRecipeItem} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Ingredient</button>
                 </div>
-                <button type="button" onClick={addRecipeItem} className="text-sm font-bold text-gray-900 hover:opacity-70 flex items-center gap-1.5 transition-opacity">
-                  <Plus size={16} strokeWidth={3} /> Add Ingredient
-                </button>
-              </div>
 
-              {/* Hot Sale Toggle */}
-              <div className={`p-4 rounded-2xl flex justify-between items-center border transition-colors ${isHotSale ? 'bg-orange-50 border-orange-100' : 'bg-white border-gray-200'}`}>
-                 <div>
-                    <p className={`text-sm font-bold ${isHotSale ? 'text-orange-600' : 'text-gray-900'}`}>Hot Sale Item</p>
-                    <p className={`text-[11px] font-medium mt-0.5 ${isHotSale ? 'text-orange-500/80' : 'text-gray-400'}`}>Show this in the popular section</p>
-                 </div>
-                 <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="sr-only peer"/>
-                    <div className={`w-11 h-6 rounded-full peer shadow-inner transition-colors ${isHotSale ? 'bg-orange-500' : 'bg-gray-200'} after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isHotSale ? 'peer-checked:after:translate-x-full peer-checked:after:border-white' : ''}`}></div>
-                 </label>
-              </div>
-
-              {/* Availability Toggle */}
-              <div className="mb-2">
-                <div className={`p-4 rounded-2xl flex justify-between items-center border transition-colors ${!isSoldOutState ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
+                {/* HOT SALE TOGGLE */}
+                <div className="p-5 md:p-6 bg-orange-50/50 border border-orange-100 rounded-[24px] flex justify-between items-center mt-4">
                    <div>
-                      <p className={`text-sm font-black uppercase tracking-wider ${!isSoldOutState ? 'text-green-700' : 'text-gray-400'}`}>{!isSoldOutState ? 'AVAILABLE' : 'UNAVAILABLE'}</p>
+                     <h4 className="font-extrabold text-orange-600 text-sm md:text-base">Hot Sale Item</h4>
+                     <p className="text-[11px] md:text-xs text-orange-400 font-bold mt-1">Show this in the popular section</p>
                    </div>
-                   <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer"/>
-                      <div className={`w-11 h-6 rounded-full peer shadow-inner transition-colors ${!isSoldOutState ? 'bg-green-500' : 'bg-gray-200'} after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${!isSoldOutState ? 'peer-checked:after:translate-x-full peer-checked:after:border-white' : ''}`}></div>
+                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="sr-only peer" />
+                      <div className="w-12 h-7 md:w-14 md:h-8 bg-orange-200/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-orange-500"></div>
                    </label>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-2 px-1">Toggle to mark item as currently {!isSoldOutState ? 'available' : 'unavailable'}.</p>
-              </div>
 
-              {/* Buttons */}
-              <div className="flex flex-col gap-3 pt-2">
-                 <button type="submit" disabled={isSaving} className="w-full bg-gray-900 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md disabled:opacity-70">
-                    {isSaving && <Loader2 size={18} className="animate-spin"/>} {editingProduct ? "Update Product" : "Save Product"}
-                 </button>
-                 {editingProduct && (
-                    <button type="button" onClick={() => {
-                       const fd = new FormData(); fd.append('id', editingProduct.id);
-                       confirmDelete('product', editingProduct.id, editingProduct.name, fd);
-                       setIsFormOpen(false); setEditingProduct(null);
-                    }} className="w-full bg-red-50 text-red-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 active:scale-[0.98] transition-all">
-                       <Trash2 size={18} /> Delete Product
-                    </button>
-                 )}
-              </div>
-            </form>
+                {/* AVAILABLE TOGGLE */}
+                <div className="p-5 md:p-6 bg-emerald-50/50 border border-emerald-100 rounded-[24px] flex justify-between items-center mt-3 mb-1">
+                   <div>
+                     <h4 className="font-extrabold text-emerald-600 text-sm md:text-base tracking-wide">AVAILABLE</h4>
+                   </div>
+                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      {/* Note: Inverted logic because 'isSoldOut' is the internal state */}
+                      <input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer" />
+                      <div className="w-12 h-7 md:w-14 md:h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-emerald-500"></div>
+                   </label>
+                </div>
+                <p className="text-[11px] md:text-xs text-gray-400 font-medium px-2 mb-8">Toggle to mark item as currently unavailable.</p>
+
+                {/* BUTTONS */}
+                <div className="flex flex-col gap-3 sm:gap-4 pt-4 shrink-0">
+                   <button type="submit" disabled={isSaving} className="w-full py-4 sm:py-5 bg-[#111827] text-white rounded-[20px] font-extrabold text-sm md:text-base active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                     {isSaving && <Loader2 size={20} className="animate-spin"/>} {editingProduct ? "Update Product" : "Create Product"}
+                   </button>
+                   
+                   {editingProduct && (
+                     <button 
+                       type="button" 
+                       onClick={() => {
+                          const fd = new FormData();
+                          fd.append('id', editingProduct.id);
+                          confirmDelete('product', editingProduct.id, editingProduct.name, fd);
+                          setIsFormOpen(false);
+                          setEditingProduct(null);
+                       }}
+                       className="w-full py-4 sm:py-5 bg-red-50 text-red-600 rounded-[20px] font-extrabold text-sm md:text-base hover:bg-red-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
+                     >
+                       <Trash2 size={20} /> Delete Product
+                     </button>
+                   )}
+                </div>
+             </form>
           </div>
         </div>
       )}

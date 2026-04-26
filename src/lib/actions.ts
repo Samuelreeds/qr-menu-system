@@ -79,6 +79,24 @@ export async function verifySuperAdmin() {
   return null;
 }
 
+export async function checkIsAdmin() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return false;
+  
+  const user = await prisma.user.findUnique({ 
+    where: { email: session.user.email },
+    include: { shopUsers: true } 
+  });
+  
+  if (!user) return false;
+  if (user.isSuperAdmin || user.role === 'SUPERADMIN') return true;
+  if (user.role === 'admin') return true;
+  
+  if (user.shopUsers.some(su => su.role === 'OWNER' || su.role === 'admin')) return true;
+  
+  return false;
+}
+
 export async function getCategories() {
   const shopId = await getActiveShopId();
   if (!shopId) return [];
@@ -93,7 +111,7 @@ export async function getProducts() {
   if (!shopId) return [];
   return await prisma.product.findMany({
     where: { shopId },
-    include: { category: true, variants: true, ingredients: true }, // Fetches recipe mapping
+    include: { category: true, variants: true, ingredients: true }, 
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -172,6 +190,8 @@ async function deleteFromSupabase(fullUrl: string | null) {
 }
 
 export async function addBanner(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -197,6 +217,8 @@ export async function addBanner(formData: FormData) {
 }
 
 export async function deleteBanner(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -210,6 +232,8 @@ export async function deleteBanner(formData: FormData) {
 }
 
 export async function softDeleteBanner(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -222,6 +246,8 @@ export async function softDeleteBanner(formData: FormData) {
 }
 
 export async function undoDeleteBanner(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   try {
     const prismaAny = prisma as any;
@@ -234,6 +260,8 @@ export async function undoDeleteBanner(formData: FormData) {
 }
 
 export async function reorderBanners(banners: {id: string, sortOrder: number}[]) {
+  if (!(await checkIsAdmin())) return;
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -252,6 +280,8 @@ export async function reorderBanners(banners: {id: string, sortOrder: number}[])
 }
 
 export async function createCategory(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -278,6 +308,8 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function updateCategory(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
@@ -294,6 +326,8 @@ export async function updateCategory(formData: FormData) {
 }
 
 export async function deleteCategory(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   try { await prisma.category.delete({ where: { id } }); } catch (e) {}
   await revalidateActiveShop();
@@ -314,6 +348,8 @@ export async function createProduct(data: {
   isSoldOut?: boolean;
   department?: string; 
 }) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -390,6 +426,8 @@ export async function updateProduct(data: {
   isSoldOut?: boolean;
   department?: string; 
 }) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const id = data.id;
   const name = data.name;
   const name_kh = data.name_kh || null;
@@ -448,6 +486,8 @@ export async function updateProduct(data: {
 }
 
 export async function toggleProductSoldOut(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   const isSoldOut = formData.get('isSoldOut') === 'true';
   try {
@@ -457,6 +497,8 @@ export async function toggleProductSoldOut(formData: FormData) {
 }
 
 export async function deleteProduct(formData: FormData) {
+  if (!(await checkIsAdmin())) return;
+
   const id = formData.get('id') as string;
   try { 
     const product = await prisma.product.findUnique({ where: { id }, select: { image: true } });
@@ -467,6 +509,8 @@ export async function deleteProduct(formData: FormData) {
 }
 
 export async function updateShopIdentity(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const name = formData.get('name') as string;
   const name_kh = formData.get('name_kh') as string || null;
   const nameDisplay = formData.get('nameDisplay') as string || 'EN';
@@ -498,6 +542,8 @@ export async function updateShopIdentity(formData: FormData) {
 }
 
 export async function updateShopBranding(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -537,6 +583,8 @@ export async function updateShopBranding(formData: FormData) {
 }
 
 export async function updateShopSocials(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
   
@@ -1440,6 +1488,7 @@ export async function createPosOrder(data: {
   discount: number; 
   promoCode?: string;
   paymentMethod: string;
+  currency?: string;
   isTaxEnabled: boolean; 
   items: any[];
 }) {
@@ -1452,12 +1501,14 @@ export async function createPosOrder(data: {
        return { error: "Unauthorized for this shop" };
     }
 
+    const currentUser = await prisma.user.findUnique({ where: { email: session!.user!.email! } });
+
     const productIds = data.items.map(i => i.productId);
     const realProducts = await prisma.product.findMany({
       where: { id: { in: productIds } },
       include: {
         category: { select: { discount: true } },
-        ingredients: true // fetch recipe mapping for inventory deduction
+        ingredients: true 
       }
     });
 
@@ -1494,13 +1545,12 @@ export async function createPosOrder(data: {
     const currentOrderCount = await prisma.order.count({ where: { shopId: data.shopId } });
     const generatedOrderNumber = `# ORD-${String(currentOrderCount + 1).padStart(4, '0')}`;
 
-    // Execute order creation AND inventory deduction in a single transaction
     const order = await prisma.$transaction(async (tx) => {
        
-       // 1. Create the Order
        const createdOrder = await tx.order.create({
          data: {
            shopId: data.shopId,
+           userId: currentUser?.id, 
            orderNumber: generatedOrderNumber,
            orderType: mappedOrderType as any,
            tableNumber: data.tableNumber,
@@ -1510,6 +1560,7 @@ export async function createPosOrder(data: {
            promoCode: data.promoCode,
            tax: secureTax,
            total: secureTotal,
+           currency: data.currency || "USD",
            paymentMethod: data.paymentMethod as any,
            status: 'COMPLETED',
            isPaid: true,
@@ -1520,7 +1571,6 @@ export async function createPosOrder(data: {
          include: { items: true } 
        });
 
-       // 2. Map deductions (combining quantities if multiple items use the same ingredient)
        const deductions = new Map<string, number>(); 
        for (const clientItem of data.items) {
           const realProd = realProducts.find(p => p.id === clientItem.productId);
@@ -1535,7 +1585,6 @@ export async function createPosOrder(data: {
           }
        }
 
-       // 3. Apply deductions securely
        const staffName = (session as any)?.user?.email?.split('@')[0] || "POS System";
        
        for (const [ingredientId, amountToDeduct] of deductions.entries()) {
@@ -1593,6 +1642,8 @@ export async function updateOrderStatus(orderId: string, status: string) {
 }
 
 export async function deleteOrder(orderId: string) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return { success: false, error: "Unauthorized" };
 
@@ -1630,6 +1681,8 @@ export async function getInventory() {
 }
 
 export async function adjustStockAction(ingredientId: string, change: number, reason: string, staffName: string) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return { success: false, error: "Unauthorized" };
 
@@ -1666,6 +1719,8 @@ export async function adjustStockAction(ingredientId: string, change: number, re
 }
 
 export async function createIngredient(data: { name: string, unit: string, max: number, lowThreshold: number }) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return { error: "Unauthorized" };
 
@@ -1688,6 +1743,8 @@ export async function createIngredient(data: { name: string, unit: string, max: 
 }
 
 export async function deleteInventoryItem(id: string) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+
   const shopId = await getActiveShopId();
   if (!shopId) return { success: false, error: "Unauthorized" };
 
@@ -1708,6 +1765,158 @@ export async function deleteInventoryItem(id: string) {
   }
 }
 
+// --- TEAM MANAGEMENT ACTIONS ---
+
+export async function getTeamMembers() {
+  if (!(await checkIsAdmin())) return { success: false, data: [] };
+  
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, data: [] };
+
+  const members = await prisma.shopUser.findMany({
+    where: { shopId },
+    include: { user: true }
+  });
+
+  return {
+    success: true,
+    data: members.map(m => ({
+      id: m.user.id,
+      email: m.user.email,
+      role: m.user.role || 'staff',
+      createdAt: m.createdAt
+    }))
+  };
+}
+
+export async function createTeamMember(formData: FormData) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized. Admin access required." };
+  
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "No active shop." };
+  
+  const session = await getServerSession(authOptions);
+  const currentUser = await prisma.user.findUnique({ where: { email: session!.user!.email! } });
+  
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const role = formData.get('role') as string; // 'admin' | 'staff'
+  
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) return { success: false, error: "Email already in use." };
+  
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  try {
+    await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          role,
+          createdBy: currentUser!.id
+        }
+      });
+      
+      await tx.shopUser.create({
+        data: {
+          userId: newUser.id,
+          shopId,
+          role: role === 'admin' ? 'OWNER' : 'STAFF'
+        }
+      });
+    });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to create user." };
+  }
+}
+
+export async function updateTeamMemberRole(formData: FormData) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized." };
+  
+  const userId = formData.get('userId') as string;
+  const role = formData.get('role') as string;
+  
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role }
+    });
+    
+    // Sync ShopUser role
+    const shopId = await getActiveShopId();
+    if (shopId) {
+      const su = await prisma.shopUser.findFirst({
+         where: { userId: userId, shopId: shopId }
+      });
+      if (su) {
+        await prisma.shopUser.update({
+          where: { id: su.id },
+          data: { role: role === 'admin' ? 'OWNER' : 'STAFF' }
+        });
+      }
+    }
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: "Failed to update role." };
+  }
+}
+
+export async function deleteTeamMember(formData: FormData) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized." };
+  
+  const userId = formData.get('userId') as string;
+  const session = await getServerSession(authOptions);
+  const currentUser = await prisma.user.findUnique({ where: { email: session!.user!.email! } });
+  
+  if (userId === currentUser!.id) {
+    return { success: false, error: "You cannot delete yourself." };
+  }
+  
+  try {
+    await prisma.user.delete({ where: { id: userId } });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: "Failed to delete user." };
+  }
+}
+
+export async function getUserActivity(userId: string) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "No active shop" };
+
+  const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+  if (!targetUser) return { success: false, error: "User not found" };
+
+  const orders = await prisma.order.findMany({
+    where: { shopId, userId },
+    orderBy: { createdAt: 'desc' },
+    include: { items: true }
+  });
+
+  const totalSales = orders.reduce((sum, o) => sum + (o.status !== 'CANCELLED' ? o.total : 0), 0);
+
+  const staffNamePrefix = targetUser.email.split('@')[0];
+  const stockLogs = await prisma.stockLog.findMany({
+    where: { shopId, staffName: staffNamePrefix },
+    orderBy: { timestamp: 'desc' }
+  });
+
+  return {
+    success: true,
+    data: {
+      orders,
+      totalSales,
+      stockLogs
+    }
+  };
+}
+
 export async function ensureDemoAccountExists(demoId: string = 'default') {
   try {
     const demoEmail = `demo_${demoId}@scandine.xyz`;
@@ -1721,7 +1930,7 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     if (existingUser) return { success: true };
 
     const DEMO_PRODUCT_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2ZmZWRkNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmOTczMTYiPkNhZmU8L3RleHQ+PC9zdmc+";
-    const DEMO_LOGO_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y5NzMxNiIgcng9IjEwMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjAiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIj5TPC90ZXh0Pjwvc3ZnPg==";
+    const DEMO_LOGO_IMAGE = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y5NzMxNiIgcng9IjEwMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMjAiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIj5TPC90ZXh0Pjwvc3ZnPg==";
     
     const hashedPassword = await bcrypt.hash('demo_password_123', 10);
     

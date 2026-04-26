@@ -9,7 +9,7 @@ import { BillingItem, OrderType } from './AdminPosSection';
 const TAX_RATE = 0.1;
 const EXCHANGE_RATE = 4000;
 
-export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
+export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
   const [deliveryAgent, setDeliveryAgent] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -82,19 +82,19 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
       setIsCashModalOpen(true);
     } else if (paymentMethod === 'khqr') {
       setIsKhqrModalOpen(true);
-    } else {
-      onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
     }
   };
 
   const handleConfirmCashPayment = () => {
     setIsCashModalOpen(false);
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
+    // Explicit tracking: If they typed 0 USD and typed KHR, we record the transaction as KHR. Otherwise default to USD.
+    const currency = (parsedUSD === 0 && parsedKHR > 0) ? "KHR" : "USD";
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency);
   };
 
-  const handleConfirmKhqrPayment = () => {
+  const handleConfirmKhqrPayment = (currency: "USD" | "KHR") => {
     setIsKhqrModalOpen(false);
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled);
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency);
   };
 
   return (
@@ -467,14 +467,24 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               />
             </div>
 
-            <button 
-              onClick={handleConfirmKhqrPayment}
-              disabled={isSavingOrder}
-              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-            >
-              {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}
-              Confirm Payment Received
-            </button>
+            <div className="w-full flex gap-3">
+              <button 
+                onClick={() => handleConfirmKhqrPayment("USD")}
+                disabled={isSavingOrder}
+                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
+              >
+                <span>Paid in USD</span>
+                <span className="text-[10px] text-gray-300 font-medium">Record as $</span>
+              </button>
+              <button 
+                onClick={() => handleConfirmKhqrPayment("KHR")}
+                disabled={isSavingOrder}
+                className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[14px] hover:bg-blue-700 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
+              >
+                <span>Paid in ៛</span>
+                <span className="text-[10px] text-blue-200 font-medium">Record as KHR</span>
+              </button>
+            </div>
 
           </div>
         </div>

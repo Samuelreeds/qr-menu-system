@@ -36,14 +36,14 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
   // Offline Sync State
   const [pendingSyncCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const isSyncingRef = useRef(false); // Ref for precise interval locking
+  const isSyncingRef = useRef(false); 
+  const isCheckoutLocked = useRef(false); 
 
   useEffect(() => {
     const timer = setTimeout(() => setMenuLoading(false), 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // --- BACKGROUND SYNC LOGIC ---
   const checkPendingOrders = async () => {
     try {
       const pending = await getPendingOrders();
@@ -68,10 +68,12 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           const res = await createPosOrder(offlineOrder.payload);
           if (res?.success) {
             await markOrderSynced(offlineOrder.id);
+          } else if (res?.error) {
+            console.error(`Offline order rejected by server, discarding to clear queue:`, res.error);
+            await markOrderSynced(offlineOrder.id);
           }
         } catch (error) {
           console.warn(`Failed to sync offline order ${offlineOrder.id}, will retry later`, error);
-          // Stop attempting to sync the rest if network is fully down
           if (!navigator.onLine) break; 
         }
       }
@@ -79,16 +81,14 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       await checkPendingOrders();
       isSyncingRef.current = false;
       setIsSyncing(false);
-      router.refresh(); // Refresh inventory/orders visually after a batch sync
+      router.refresh(); 
     }
   };
 
   useEffect(() => {
     checkPendingOrders();
-    
-    // Attempt sync immediately on load, on interval, and when network comes back online
     syncPendingOrders();
-    const interval = setInterval(syncPendingOrders, 30000); // Check every 30 seconds
+    const interval = setInterval(syncPendingOrders, 30000); 
     window.addEventListener('online', syncPendingOrders);
     
     return () => {
@@ -96,7 +96,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       window.removeEventListener('online', syncPendingOrders);
     };
   }, []);
-  // ------------------------------
 
   const categories = [
     { id: "all", label: "All", emoji: "📋", isDrink: false },
@@ -180,105 +179,117 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  const handleProceedToConfirm = async (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean) => {
+  const handleProceedToConfirm = async (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string = "USD") => {
     if (billingItems.length === 0) return;
     if (orderType === "table" && !tableNumber) {
       alert("Please select a table number first.");
       return;
     }
     
+    if (isCheckoutLocked.current) return;
+    isCheckoutLocked.current = true;
     setIsSavingOrder(true);
     
-    const subtotal = billingItems.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const discountNum = parseFloat(discountValue) || 0;
-    const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
-    const afterDiscount = subtotal - discountAmount;
-    const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
-    const total = afterDiscount + tax;
-
-    // 1. Construct the payload matching createPosOrder exactly
-    const orderPayload = {
-      shopId,
-      orderType: orderType.toUpperCase(),
-      tableNumber,
-      deliveryAgent: deliveryAgent || "", 
-      discount: discountAmount,
-      promoCode: promoCode || "",
-      isTaxEnabled: isTaxEnabled,
-      paymentMethod: paymentMethod.toUpperCase(),
-      items: billingItems.map(i => ({
-        productId: i.productId,
-        name: i.name,
-        price: i.price,
-        qty: i.qty,
-        notes: i.notes,
-        customization: i.customization
-      }))
-    };
-
-    // 2. Generate a temporary Offline ID & Save to IndexedDB IMMEDIATELY
-    const tempOrderId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const offlineRecord: OfflineOrder = {
-      id: tempOrderId,
-      payload: orderPayload,
-      status: 'pending',
-      createdAt: Date.now()
-    };
-    
-    await saveOfflineOrder(offlineRecord);
-    await checkPendingOrders(); // Update UI badge
-
-    let finalOrderForReceipt: any = null;
-
-    // 3. Try hitting the server
     try {
-      const res = await createPosOrder(orderPayload);
-      
-      if (res?.success && res.order) {
-        // Success: Mark as synced
-        await markOrderSynced(tempOrderId);
-        await checkPendingOrders();
-        finalOrderForReceipt = res.order;
-      } else {
-        throw new Error(res?.error || "Server rejected order");
-      }
-    } catch (err) {
-      console.warn("Order saved locally due to offline/error state:", err);
-      // Construct a "Mock" order for the local receipt printer so the flow doesn't stop
-      finalOrderForReceipt = {
-        id: tempOrderId,
-        shopId: shopId,
-        orderType: orderPayload.orderType,
-        tableNumber: orderPayload.tableNumber,
-        deliveryAgent: orderPayload.deliveryAgent,
-        subtotal: subtotal,
+      const subtotal = billingItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+      const discountNum = parseFloat(discountValue) || 0;
+      const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
+      const afterDiscount = subtotal - discountAmount;
+      const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
+      const total = afterDiscount + tax;
+
+      const orderPayload = {
+        shopId,
+        orderType: orderType.toUpperCase(),
+        tableNumber,
+        deliveryAgent: deliveryAgent || "", 
         discount: discountAmount,
-        promoCode: orderPayload.promoCode,
-        tax: tax,
-        total: total,
-        paymentMethod: orderPayload.paymentMethod,
-        status: 'COMPLETED',
-        isPaid: true,
-        createdAt: new Date(),
-        items: billingItems,
-        isOffline: true // Can use this in PosReceipt to add a "Pending Sync" watermark if desired
+        promoCode: promoCode || "",
+        isTaxEnabled: isTaxEnabled,
+        paymentMethod: paymentMethod.toUpperCase(),
+        currency: currency,
+        items: billingItems.map(i => ({
+          productId: i.productId,
+          name: i.name,
+          price: i.price,
+          qty: i.qty,
+          notes: i.notes,
+          customization: i.customization
+        }))
       };
-    }
 
-    // 4. Cleanup & Print regardless of network state
-    setLatestOrder(finalOrderForReceipt);
-    setBillingItems([]);
-    setTableNumber("");
-    setIsMobileCartOpen(false);
-    setIsSavingOrder(false);
+      const tempOrderId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      let finalOrderForReceipt: any = null;
 
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setLatestOrder(null), 1000); 
-      if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
-        router.refresh();
+      try {
+        if (!navigator.onLine) throw new Error("Offline");
+
+        isSyncingRef.current = true;
+        
+        const res = await createPosOrder(orderPayload);
+        
+        if (res?.success && res.order) {
+          finalOrderForReceipt = res.order;
+        } else {
+          alert("Server rejected order: " + (res?.error || "Unknown error"));
+          isCheckoutLocked.current = false;
+          setIsSavingOrder(false);
+          isSyncingRef.current = false;
+          return;
+        }
+      } catch (err) {
+        console.warn("Network offline or error, saving to local queue:", err);
+        
+        const offlineRecord: OfflineOrder = {
+          id: tempOrderId,
+          payload: orderPayload,
+          status: 'pending',
+          createdAt: Date.now()
+        };
+        
+        await saveOfflineOrder(offlineRecord);
+        await checkPendingOrders(); 
+
+        finalOrderForReceipt = {
+          id: tempOrderId,
+          shopId: shopId,
+          orderType: orderPayload.orderType,
+          tableNumber: orderPayload.tableNumber,
+          deliveryAgent: orderPayload.deliveryAgent,
+          subtotal: subtotal,
+          discount: discountAmount,
+          promoCode: orderPayload.promoCode,
+          tax: tax,
+          total: total,
+          paymentMethod: orderPayload.paymentMethod,
+          currency: orderPayload.currency,
+          status: 'COMPLETED',
+          isPaid: true,
+          createdAt: new Date(),
+          items: billingItems,
+          isOffline: true 
+        };
+      } finally {
+        isSyncingRef.current = false;
       }
-    }, 500);
+
+      setLatestOrder(finalOrderForReceipt);
+      setBillingItems([]);
+      setTableNumber("");
+      setIsMobileCartOpen(false);
+
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => setLatestOrder(null), 1000); 
+        if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
+          router.refresh();
+        }
+      }, 500);
+
+    } finally {
+      isCheckoutLocked.current = false;
+      setIsSavingOrder(false);
+    }
   };
 
   return (
