@@ -130,6 +130,7 @@ export async function getShopSettings() {
       address: "", 
       phone: "", 
       openingHours: null,
+      is24Hours: false,
       themeColor: "#000000",
       headerDesign: "design1",
       logo: null, 
@@ -516,7 +517,8 @@ export async function updateShopIdentity(formData: FormData) {
   const nameDisplay = formData.get('nameDisplay') as string || 'EN';
   const address = formData.get('address') as string || null;
   const phone = formData.get('phone') as string || null;
-  const openingHours = formData.get('openingHours') as string || null;
+  const is24Hours = formData.get('is24Hours') === 'true';
+  const openingHours = is24Hours ? null : (formData.get('openingHours') as string || null);
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -531,9 +533,9 @@ export async function updateShopIdentity(formData: FormData) {
 
   await prisma.shopSettings.upsert({
     where: { shopId },
-    update: { name, name_kh, nameDisplay, address, phone, openingHours },
+    update: { name, name_kh, nameDisplay, address, phone, openingHours, is24Hours },
     create: { 
-      shopId, name, name_kh, nameDisplay, address, phone, openingHours,
+      shopId, name, name_kh, nameDisplay, address, phone, openingHours, is24Hours,
       themeColor: '#000000',
       headerDesign: 'design1'
     }
@@ -1489,6 +1491,8 @@ export async function createPosOrder(data: {
   promoCode?: string;
   paymentMethod: string;
   currency?: string;
+  amountReceived?: number;
+  changeAmount?: number;
   isTaxEnabled: boolean; 
   items: any[];
 }) {
@@ -1561,6 +1565,8 @@ export async function createPosOrder(data: {
            tax: secureTax,
            total: secureTotal,
            currency: data.currency || "USD",
+           amountReceived: data.amountReceived ?? secureTotal,
+           changeAmount: data.changeAmount ?? 0,
            paymentMethod: data.paymentMethod as any,
            status: 'COMPLETED',
            isPaid: true,

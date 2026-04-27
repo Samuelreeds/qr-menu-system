@@ -220,6 +220,7 @@ model ShopSettings {
   address       String?
   phone         String?
   openingHours  String?
+  is24Hours     Boolean @default(false)
   themeColor    String  @default("#000000")
   headerDesign  String  @default("design1")
   logo          String?
@@ -332,7 +333,9 @@ model Order {
   promoCode       String?
   tax             Float         @default(0)
   total           Float
-  currency        String        @default("USD") // ADDED EXPLICIT CURRENCY
+  currency        String        @default("USD")
+  amountReceived  Float         @default(0)
+  changeAmount    Float         @default(0)
   
   // Status & Payment
   paymentMethod   PaymentMethod @default(CASH)

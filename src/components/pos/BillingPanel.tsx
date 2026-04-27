@@ -9,7 +9,7 @@ import { BillingItem, OrderType } from './AdminPosSection';
 const TAX_RATE = 0.1;
 const EXCHANGE_RATE = 4000;
 
-export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
+export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string, amountReceived: number, changeAmount: number) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
   const [deliveryAgent, setDeliveryAgent] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -86,15 +86,20 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   };
 
   const handleConfirmCashPayment = () => {
+    if (!isPaymentSufficient) return;
     setIsCashModalOpen(false);
+    
     // Explicit tracking: If they typed 0 USD and typed KHR, we record the transaction as KHR. Otherwise default to USD.
     const currency = (parsedUSD === 0 && parsedKHR > 0) ? "KHR" : "USD";
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency);
+    
+    // Pass the calculated received amount and change up to Phase 2 processing
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, totalReceivedInUSD, changeDueUSD);
   };
 
   const handleConfirmKhqrPayment = (currency: "USD" | "KHR") => {
     setIsKhqrModalOpen(false);
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency);
+    // KHQR is exact exact change by default
+    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, total, 0);
   };
 
   return (
@@ -375,7 +380,7 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               </div>
             </div>
 
-            <div className="space-y-4 mb-8">
+            <div className="space-y-4 mb-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
@@ -426,6 +431,13 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
                 </div>
               </div>
             </div>
+
+            {/* Validation Message */}
+            {!isPaymentSufficient && totalReceivedInUSD > 0 && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">
+                Received amount is less than total
+              </div>
+            )}
 
             <button 
               onClick={handleConfirmCashPayment}

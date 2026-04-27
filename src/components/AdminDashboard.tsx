@@ -39,7 +39,7 @@ export interface Category { id: string; name: string; name_kh?: string | null; n
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
-export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; }
+export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
@@ -121,6 +121,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const initialHours = getInitialHours();
   const [openTime, setOpenTime] = useState(initialHours.open);
   const [closeTime, setCloseTime] = useState(initialHours.close);
+  const [is24Hours, setIs24Hours] = useState(settings?.is24Hours || false);
 
   const [prepTime, setPrepTime] = useState('15');
   const [isHotSale, setIsHotSale] = useState(false);
@@ -305,8 +306,22 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const handleTabClick = (tab: any) => { if (activeTab === tab) return; if (activeTab === 'settings' && openSection && dirtySections[openSection]) { setPendingNav({ type: 'tab', payload: tab, source: openSection }); } else { executeNav('tab', tab); } };
   const handleSectionClick = (section: string) => { if (openSection && dirtySections[openSection]) { setPendingNav({ type: 'section', payload: openSection === section ? null : section, source: openSection }); } else { executeNav('section', section); } };
   
-  const discardChanges = (source: string) => { if (source === 'identity') { setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); setPhone(settings?.phone || ''); const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); } else if (source === 'branding') { setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); } else if (source === 'socials') { try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } } else if (source === 'notifications') { setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); } };
-  const saveIdentityForm = async () => { const fd = new FormData(); fd.set('name', !previewNameEn.trim() && previewNameKh.trim() ? previewNameKh.trim() : previewNameEn.trim()); if (previewNameKh.trim()) fd.set('name_kh', previewNameKh.trim()); fd.set('nameDisplay', previewDisplay); fd.set('address', address); fd.set('phone', phone); fd.set('openingHours', `${openTime} - ${closeTime}`); try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information."); return false; } };
+  const discardChanges = (source: string) => { if (source === 'identity') { setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); setPhone(settings?.phone || ''); const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); setIs24Hours(settings?.is24Hours || false); } else if (source === 'branding') { setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); } else if (source === 'socials') { try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } } else if (source === 'notifications') { setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); } };
+  
+  const saveIdentityForm = async () => { 
+    const fd = new FormData(); 
+    fd.set('name', !previewNameEn.trim() && previewNameKh.trim() ? previewNameKh.trim() : previewNameEn.trim()); 
+    if (previewNameKh.trim()) fd.set('name_kh', previewNameKh.trim()); 
+    fd.set('nameDisplay', previewDisplay); 
+    fd.set('address', address); 
+    fd.set('phone', phone); 
+    fd.set('is24Hours', String(is24Hours));
+    if (!is24Hours) {
+       fd.set('openingHours', `${openTime} - ${closeTime}`); 
+    }
+    try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information."); return false; } 
+  };
+  
   const saveBrandingForm = async () => { if (isCurrentDesignLocked) return false; const fd = new FormData(); fd.set('headerDesign', headerDesign); fd.set('themeColor', themeColorPreview); fd.set('logoType', logoType); if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp'); try { await updateShopBranding(fd); return true; } catch (e) { showToast("Error saving branding."); return false; } };
   const saveSocialsForm = async () => { const fd = new FormData(); fd.set('socials', JSON.stringify(socialLinks)); try { const res = await updateShopSocials(fd); if (res?.error) { showToast(res.error); return false; } return true; } catch (e) { showToast("Error saving socials."); return false; } };
   const saveNotificationsForm = async () => { try { const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId); if (!res.success) { showToast(res.message || "Error saving"); return false; } return true; } catch (e) { return false; } };
@@ -537,8 +552,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 
                 <NavItem id="menu" icon={LayoutGrid} label="Menu" />
                 <NavItem id="categories" icon={List} label="Categories" />
-                <NavItem id="inventory" icon={Package} label="Inventory" />
-                <NavItem id="team" icon={Users} label="Staff & Team" />
+                {featPos && <NavItem id="inventory" icon={Package} label="Inventory" />}
+                {featPos && <NavItem id="team" icon={Users} label="Staff & Team" />}
                 <NavItem id="settings" icon={Settings} label="Settings" />
               </div>
             )}
@@ -763,14 +778,14 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
 
         {/* INVENTORY */}
-        {isAdmin && (
+        {isAdmin && featPos && (
            <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}>
              <InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} />
            </div>
         )}
 
         {/* TEAM TAB */}
-        {isAdmin && (
+        {isAdmin && featPos && (
           <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
@@ -1055,11 +1070,17 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                     <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Address</label><input name="address" value={address} onChange={e => { setAddress(e.target.value); markDirty('identity'); }} placeholder="e.g. Street 123, Phnom Penh" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
                     <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Phone Number</label><input name="phone" value={phone} onChange={e => { setPhone(e.target.value); markDirty('identity'); }} placeholder="e.g. 012 345 678" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
                     <div className="pt-2">
-                      <label className="block text-sm font-semibold text-gray-800 mb-3">Operating Hours</label>
-                      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Opening Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" value={openTime} onChange={(e) => { setOpenTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer"/></div></div>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-semibold text-gray-800">Operating Hours</label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={is24Hours} onChange={(e) => { setIs24Hours(e.target.checked); markDirty('identity'); }} className="w-4 h-4 cursor-pointer accent-gray-900" />
+                          <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Open 24 Hours</span>
+                        </label>
+                      </div>
+                      <div className={`flex flex-col sm:flex-row sm:items-end gap-3 transition-opacity ${is24Hours ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Opening Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" disabled={is24Hours} value={openTime} onChange={(e) => { setOpenTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer disabled:bg-gray-50"/></div></div>
                         <span className="hidden sm:block text-gray-400 font-medium text-sm text-center mb-3.5">to</span>
-                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Closing Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" value={closeTime} onChange={(e) => { setCloseTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer"/></div></div>
+                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Closing Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" disabled={is24Hours} value={closeTime} onChange={(e) => { setCloseTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer disabled:bg-gray-50"/></div></div>
                       </div>
                       <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
                     </div>

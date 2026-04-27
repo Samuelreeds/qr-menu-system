@@ -20,6 +20,7 @@ interface ShopSettings {
   address?: string;
   phone?: string;
   openingHours?: string | null;
+  is24Hours?: boolean;
   themeColor: string;
   headerDesign?: string;
   logo?: string;
@@ -280,12 +281,18 @@ export default function MenuClient({
   const selectedEffDiscount = featCampaign === false ? 0 : (selectedRawDiscount > 0 ? selectedRawDiscount : selectedCatDiscount);
   const activeDiscPrice = selectedEffDiscount > 0 ? activeBasePrice * (1 - selectedEffDiscount / 100) : activeBasePrice;
 
+  // Compute final display settings for the modal overriding the hours if 24/7 is enabled
+  const displaySettings = {
+    ...shopSettings,
+    openingHours: shopSettings?.is24Hours ? 'Open 24 Hours' : shopSettings?.openingHours
+  };
+
   return (
     <main 
       className="font-sans min-h-screen bg-white w-full relative pb-24"
       style={{ '--brand-color': themeColor } as React.CSSProperties}
     >
-      <ShopInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} settings={shopSettings} />
+      <ShopInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} settings={displaySettings} />
 
       {/* --- SYNCED DYNAMIC HEADER --- */}
       <header className="relative overflow-hidden min-h-[160px]" style={{ background: themeColor }}>

@@ -70,10 +70,23 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
         <span>${order.tax.toFixed(2)}</span>
       </div>
       
-      <div className="flex justify-between font-bold text-sm border-t border-black border-dashed pt-1.5 mb-3">
+      <div className={`flex justify-between font-bold text-sm border-t border-black border-dashed pt-1.5 ${order.amountReceived !== undefined ? 'mb-1' : 'mb-3'}`}>
         <span>TOTAL:</span>
         <span>${order.total.toFixed(2)}</span>
       </div>
+
+      {order.amountReceived !== undefined && (
+        <>
+          <div className="flex justify-between text-[11px] mb-0.5">
+            <span>Received:</span>
+            <span>${order.amountReceived.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-[11px] mb-3">
+            <span>Change:</span>
+            <span>${(order.changeAmount || 0).toFixed(2)}</span>
+          </div>
+        </>
+      )}
 
       {/* FOOTER */}
       <div className="text-center text-[10px]">

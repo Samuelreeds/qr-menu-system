@@ -179,7 +179,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  const handleProceedToConfirm = async (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string = "USD") => {
+  const handleProceedToConfirm = async (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string = "USD", amountReceived: number = 0, changeAmount: number = 0) => {
     if (billingItems.length === 0) return;
     if (orderType === "table" && !tableNumber) {
       alert("Please select a table number first.");
@@ -198,6 +198,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
       const total = afterDiscount + tax;
 
+      // Add amountReceived and changeAmount to the payload 
       const orderPayload = {
         shopId,
         orderType: orderType.toUpperCase(),
@@ -208,6 +209,8 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         isTaxEnabled: isTaxEnabled,
         paymentMethod: paymentMethod.toUpperCase(),
         currency: currency,
+        amountReceived: amountReceived,
+        changeAmount: changeAmount,
         items: billingItems.map(i => ({
           productId: i.productId,
           name: i.name,
@@ -250,6 +253,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         await saveOfflineOrder(offlineRecord);
         await checkPendingOrders(); 
 
+        // Update the mock order for printing with the new values
         finalOrderForReceipt = {
           id: tempOrderId,
           shopId: shopId,
@@ -263,6 +267,8 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           total: total,
           paymentMethod: orderPayload.paymentMethod,
           currency: orderPayload.currency,
+          amountReceived: orderPayload.amountReceived,
+          changeAmount: orderPayload.changeAmount,
           status: 'COMPLETED',
           isPaid: true,
           createdAt: new Date(),
