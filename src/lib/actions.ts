@@ -130,7 +130,6 @@ export async function getShopSettings() {
       address: "", 
       phone: "", 
       openingHours: null,
-      is24Hours: false,
       themeColor: "#000000",
       headerDesign: "design1",
       logo: null, 
@@ -517,8 +516,7 @@ export async function updateShopIdentity(formData: FormData) {
   const nameDisplay = formData.get('nameDisplay') as string || 'EN';
   const address = formData.get('address') as string || null;
   const phone = formData.get('phone') as string || null;
-  const is24Hours = formData.get('is24Hours') === 'true';
-  const openingHours = is24Hours ? null : (formData.get('openingHours') as string || null);
+  const openingHours = formData.get('openingHours') as string || null;
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -533,9 +531,9 @@ export async function updateShopIdentity(formData: FormData) {
 
   await prisma.shopSettings.upsert({
     where: { shopId },
-    update: { name, name_kh, nameDisplay, address, phone, openingHours, is24Hours },
+    update: { name, name_kh, nameDisplay, address, phone, openingHours },
     create: { 
-      shopId, name, name_kh, nameDisplay, address, phone, openingHours, is24Hours,
+      shopId, name, name_kh, nameDisplay, address, phone, openingHours,
       themeColor: '#000000',
       headerDesign: 'design1'
     }

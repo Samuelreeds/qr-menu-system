@@ -7,7 +7,80 @@ import { deleteOrder, updateOrderStatus } from '@/lib/actions';
 
 const EXCHANGE_RATE = 4000;
 
-export default function OrderHistoryCard({ order, onPrint }: { order: any, onPrint: () => void }) {
+// --- RECEIPT GENERATOR (MODIFIED FOR REPRINTS) ---
+function generateReceiptText(order: any, shopName: string): string {
+  const MAX_LEN = 32;
+  const padRight = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padEnd(len, ' ');
+  const padLeft = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padStart(len, ' ');
+  const center = (str: string, len: number) => {
+    if (str.length >= len) return str.substring(0, len);
+    const leftPad = Math.floor((len + str.length) / 2);
+    return str.padStart(leftPad, ' ').padEnd(len, ' ');
+  };
+
+  let text = '\n';
+  text += center('** REPRINT **', MAX_LEN) + '\n';
+  text += center(shopName.toUpperCase(), MAX_LEN) + '\n';
+  text += center('Receipt / Tax Invoice', MAX_LEN) + '\n';
+  text += `Date: ${new Date(order.createdAt).toLocaleString()}\n`;
+  text += `Order ID: #${(order.orderNumber || order.id).slice(-6).toUpperCase()}\n`;
+  
+  const orderTypeStr = order.orderType === 'TAKEAWAY' ? 'WALK-IN' : order.orderType;
+  const tableStr = order.tableNumber ? ` - ${order.tableNumber}` : '';
+  text += `Type: ${orderTypeStr}${tableStr}\n`;
+  
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('Qty', 4)}${padRight('Item', 20)}${padLeft('Total', 8)}\n`;
+  text += '-'.repeat(MAX_LEN) + '\n';
+  
+  order.items?.forEach((item: any) => {
+    const qty = item.qty || item.quantity;
+    const qtyStr = `${qty}x`; 
+    const nameStr = item.name;
+    const totalStr = `$${(item.price * qty).toFixed(2)}`;
+    
+    text += `${padRight(qtyStr, 4)}${padRight(nameStr, 20)}${padLeft(totalStr, 8)}\n`;
+    
+    if (item.customization) {
+       let mods = [];
+       if (item.customization.size && item.customization.size !== 'Default') mods.push(item.customization.size);
+       if (item.customization.mood) mods.push(item.customization.mood);
+       if (item.customization.sugar) mods.push(`${item.customization.sugar} sug`);
+       if (item.customization.ice) mods.push(`${item.customization.ice} ice`);
+       
+       if (mods.length > 0) {
+         const modsStr = mods.join(', ');
+         const chunks = modsStr.match(/.{1,28}(\s|$)/g) || [modsStr];
+         chunks.forEach(chunk => {
+           text += `    ${chunk.trim()}\n`;
+         });
+       }
+    }
+  });
+  
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('Subtotal:', 24)}${padLeft('$' + order.subtotal.toFixed(2), 8)}\n`;
+  if (order.discount > 0) text += `${padRight('Discount:', 24)}${padLeft('-$' + order.discount.toFixed(2), 8)}\n`;
+  if (order.tax > 0) text += `${padRight('Tax (10%):', 24)}${padLeft('$' + order.tax.toFixed(2), 8)}\n`;
+  
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('TOTAL:', 24)}${padLeft('$' + order.total.toFixed(2), 8)}\n`;
+  
+  if (order.amountReceived !== undefined) {
+    text += `${padRight('Received:', 24)}${padLeft('$' + order.amountReceived.toFixed(2), 8)}\n`;
+    text += `${padRight('Change:', 24)}${padLeft('$' + (order.changeAmount || 0).toFixed(2), 8)}\n`;
+  }
+  
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
+  text += center('Thank you for your visit!', MAX_LEN) + '\n';
+  text += center('Powered by Scandine', MAX_LEN) + '\n';
+  text += '\n\n\n\n';
+  return text;
+}
+// ----------------------------------------------
+
+export default function OrderHistoryCard({ order, shopName = "Store", printerUrl }: { order: any, shopName?: string, printerUrl?: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -15,7 +88,7 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
   const [isOptimisticallyDeleted, setIsOptimisticallyDeleted] = useState(false);
   const [modalAction, setModalAction] = useState<'delete' | 'cancel' | null>(null);
 
-  const itemSummary = order.items?.map((i: any) => `${i.name} ×${i.quantity}`).join(', ') || 'No items';
+  const itemSummary = order.items?.map((i: any) => `${i.name} ×${i.quantity || i.qty}`).join(', ') || 'No items';
   const isCancelled = optimisticStatus === 'CANCELLED';
 
   if (isOptimisticallyDeleted) return null; 
@@ -36,12 +109,31 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
     }
   };
 
-  const handlePrint = (e: React.MouseEvent) => {
+  // --- CONNECTED PRINT HANDLER ---
+  const handlePrint = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    onPrint(); 
+    
+    if (!printerUrl) {
+      alert("⚠️ Printer URL not configured for this shop. Please add your local print server IP in Settings.");
+      return;
+    }
+
+    try {
+      const receiptText = generateReceiptText(order, shopName);
+      
+      // Dynamically use the passed-in printer URL
+      await fetch(`${printerUrl}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: receiptText })
+      });
+      console.log("✅ Reprint sent successfully");
+    } catch (err) {
+      console.error("🖨️ Printer server not reachable:", err);
+      alert(`❌ Failed to connect to printer server at ${printerUrl}. Make sure the Node server is running on that IP.`);
+    }
   };
 
-  // HELPER: Formats any USD value into the correct currency format based on what was saved
   const formatMoney = (usdAmount: number) => {
     if (order.currency === 'KHR') {
       return `៛${(usdAmount * EXCHANGE_RATE).toLocaleString()}`;
@@ -128,7 +220,7 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
                         <div className="w-full h-full flex items-center justify-center"><ImageIcon size={14} className="text-gray-300" /></div>
                       </div>
                       <div className="flex-1 min-w-0 pt-0.5">
-                        <p className="text-xs font-bold text-gray-900 leading-tight pr-2">{item.name} <span className="text-gray-400 font-medium">×{item.quantity}</span></p>
+                        <p className="text-xs font-bold text-gray-900 leading-tight pr-2">{item.name} <span className="text-gray-400 font-medium">×{item.quantity || item.qty}</span></p>
                         {item.customization && (
                           <p className="text-[10px] text-gray-500 mt-1">
                             {item.customization.size} 
@@ -140,7 +232,7 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
                         )}
                       </div>
                       <span className={`text-xs font-bold pt-0.5 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                        {formatMoney(item.price * item.quantity)}
+                        {formatMoney(item.price * (item.quantity || item.qty))}
                       </span>
                     </div>
                   ))}
@@ -159,8 +251,8 @@ export default function OrderHistoryCard({ order, onPrint }: { order: any, onPri
                     <span className={`font-black text-xl ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatMoney(order.total)}</span>
                   </div>
                   <div className="space-y-2 pt-4 border-t border-gray-50">
-                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Order Type</span><span className="font-bold text-gray-700 capitalize">{order.orderType === 'TAKEAWAY' ? 'Walk-in' : order.orderType.toLowerCase()} {order.tableNumber ? `(${order.tableNumber})` : ''}</span></div>
-                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Payment</span><span className="font-bold text-gray-700 capitalize">{order.paymentMethod.toLowerCase()}</span></div>
+                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Order Type</span><span className="font-bold text-gray-700 capitalize">{order.orderType === 'TAKEAWAY' ? 'Walk-in' : order.orderType?.toLowerCase()} {order.tableNumber ? `(${order.tableNumber})` : ''}</span></div>
+                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Payment</span><span className="font-bold text-gray-700 capitalize">{order.paymentMethod?.toLowerCase()}</span></div>
                     <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Date</span><span className="font-bold text-gray-700">{new Date(order.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
                   </div>
                 </div>

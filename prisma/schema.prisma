@@ -232,6 +232,7 @@ model ShopSettings {
   showInstagram Boolean @default(false)
   telegram      String?
   showTelegram  Boolean @default(false)
+  printerUrl    String? // <--- ADDED DYNAMIC PRINTER URL FIELD
 
   shopId String @unique
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)

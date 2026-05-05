@@ -39,7 +39,7 @@ export interface Category { id: string; name: string; name_kh?: string | null; n
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
-export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; }
+export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
@@ -106,6 +106,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [previewDisplay, setPreviewDisplay] = useState(settings?.nameDisplay || 'EN');
   const [address, setAddress] = useState(settings?.address || '');
   const [phone, setPhone] = useState(settings?.phone || '');
+  const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); // Added State
 
   const [isStaffEnabled, setIsStaffEnabled] = useState(callStaffEnabled);
   const [tgChatId, setTgChatId] = useState(telegramChatId || '');
@@ -306,7 +307,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const handleTabClick = (tab: any) => { if (activeTab === tab) return; if (activeTab === 'settings' && openSection && dirtySections[openSection]) { setPendingNav({ type: 'tab', payload: tab, source: openSection }); } else { executeNav('tab', tab); } };
   const handleSectionClick = (section: string) => { if (openSection && dirtySections[openSection]) { setPendingNav({ type: 'section', payload: openSection === section ? null : section, source: openSection }); } else { executeNav('section', section); } };
   
-  const discardChanges = (source: string) => { if (source === 'identity') { setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); setPhone(settings?.phone || ''); const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); setIs24Hours(settings?.is24Hours || false); } else if (source === 'branding') { setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); } else if (source === 'socials') { try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } } else if (source === 'notifications') { setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); } };
+  const discardChanges = (source: string) => { if (source === 'identity') { setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); setPhone(settings?.phone || ''); setPrinterUrl(settings?.printerUrl || ''); const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); setIs24Hours(settings?.is24Hours || false); } else if (source === 'branding') { setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); } else if (source === 'socials') { try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } } else if (source === 'notifications') { setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); } };
   
   const saveIdentityForm = async () => { 
     const fd = new FormData(); 
@@ -315,6 +316,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     fd.set('nameDisplay', previewDisplay); 
     fd.set('address', address); 
     fd.set('phone', phone); 
+    fd.set('printerUrl', printerUrl); // Added Dynamic URL
     fd.set('is24Hours', String(is24Hours));
     if (!is24Hours) {
        fd.set('openingHours', `${openTime} - ${closeTime}`); 
@@ -713,7 +715,15 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}>
             <ToastProvider>
               <OrderProvider>
-                <AdminPosSection dashboardCategories={optCategories} dashboardProducts={optProducts} shopId={shopId} userEmail={userEmail} userRole={userRole} shopName={settings?.name || "Shop"} />
+                <AdminPosSection 
+                  dashboardCategories={optCategories} 
+                  dashboardProducts={optProducts} 
+                  shopId={shopId} 
+                  userEmail={userEmail} 
+                  userRole={userRole} 
+                  shopName={settings?.name || "Shop"} 
+                  printerUrl={printerUrl} // Dynamic URL passed
+                />
               </OrderProvider>
             </ToastProvider>
           </div>
@@ -755,7 +765,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                   <OrderHistoryCard 
                     key={order.id} 
                     order={order} 
-                    onPrint={() => handleReprintOrder(order)} 
+                    shopName={settings?.name || "Shop"} 
+                    printerUrl={printerUrl} // Dynamic URL passed
                   />
                 ))}
                 
@@ -1063,6 +1074,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                           </label>
                         ))}
                       </div>
+                    </div>
+                    <div className="pt-2">
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
+                      <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
+                      <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing.</p>
                     </div>
                   </div>
                   <hr className="border-gray-100" />

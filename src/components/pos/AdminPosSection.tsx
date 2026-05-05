@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, WifiOff, CloudOff, RefreshCcw } from 'lucide-react';
 import { useOrder } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
-import PosReceipt from "@/components/PosReceipt";
 import { createPosOrder } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 
@@ -26,12 +25,95 @@ export type OrderType = "walk-in" | "table" | "delivery";
 
 const TAX_RATE = 0.1;
 
-export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string }) {
+// FORMAT RECEIPT FOR IP PRINTER
+function generateReceiptText(order: any, shopName: string): string {
+  const MAX_LEN = 32;
+  const padRight = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padEnd(len, ' ');
+  const padLeft = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padStart(len, ' ');
+  const center = (str: string, len: number) => {
+    if (str.length >= len) return str.substring(0, len);
+    const leftPad = Math.floor((len + str.length) / 2);
+    return str.padStart(leftPad, ' ').padEnd(len, ' ');
+  };
+
+  let text = '\n';
+  
+  // HEADER
+  text += center(shopName.toUpperCase(), MAX_LEN) + '\n';
+  text += center('Receipt / Tax Invoice', MAX_LEN) + '\n';
+  text += `Date: ${new Date(order.createdAt).toLocaleString()}\n`;
+  text += `Order ID: #${(order.orderNumber || order.id).slice(-6).toUpperCase()}\n`;
+  
+  const orderTypeStr = order.orderType === 'TAKEAWAY' ? 'WALK-IN' : order.orderType;
+  const tableStr = order.tableNumber ? ` - ${order.tableNumber}` : '';
+  text += `Type: ${orderTypeStr}${tableStr}\n`;
+  
+  // ITEMS TABLE
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('Qty', 4)}${padRight('Item', 20)}${padLeft('Total', 8)}\n`;
+  text += '-'.repeat(MAX_LEN) + '\n';
+  
+  order.items.forEach((item: any) => {
+    const qty = item.qty || item.quantity;
+    const qtyStr = `${qty}x`; 
+    const nameStr = item.name;
+    const totalStr = `$${(item.price * qty).toFixed(2)}`;
+    
+    text += `${padRight(qtyStr, 4)}${padRight(nameStr, 20)}${padLeft(totalStr, 8)}\n`;
+    
+    if (item.customization) {
+       let mods = [];
+       if (item.customization.size && item.customization.size !== 'Default') mods.push(item.customization.size);
+       if (item.customization.mood) mods.push(item.customization.mood);
+       if (item.customization.sugar) mods.push(`${item.customization.sugar} sug`);
+       if (item.customization.ice) mods.push(`${item.customization.ice} ice`);
+       
+       if (mods.length > 0) {
+         const modsStr = mods.join(', ');
+         // Split into chunks if too long, indented by 4 spaces
+         const chunks = modsStr.match(/.{1,28}(\s|$)/g) || [modsStr];
+         chunks.forEach(chunk => {
+           text += `    ${chunk.trim()}\n`;
+         });
+       }
+    }
+  });
+  
+  // TOTALS
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('Subtotal:', 24)}${padLeft('$' + order.subtotal.toFixed(2), 8)}\n`;
+  if (order.discount > 0) {
+    text += `${padRight('Discount:', 24)}${padLeft('-$' + order.discount.toFixed(2), 8)}\n`;
+  }
+  if (order.tax > 0) {
+    text += `${padRight('Tax (10%):', 24)}${padLeft('$' + order.tax.toFixed(2), 8)}\n`;
+  }
+  
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `${padRight('TOTAL:', 24)}${padLeft('$' + order.total.toFixed(2), 8)}\n`;
+  
+  if (order.amountReceived !== undefined) {
+    text += `${padRight('Received:', 24)}${padLeft('$' + order.amountReceived.toFixed(2), 8)}\n`;
+    text += `${padRight('Change:', 24)}${padLeft('$' + (order.changeAmount || 0).toFixed(2), 8)}\n`;
+  }
+  
+  // FOOTER
+  text += '-'.repeat(MAX_LEN) + '\n';
+  text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
+  text += center('Thank you for your visit!', MAX_LEN) + '\n';
+  text += center('Powered by Scandine', MAX_LEN) + '\n';
+  text += '\n\n\n\n';
+  
+  return text;
+}
+
+export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string }) {
   const router = useRouter();
   
   const [menuLoading, setMenuLoading] = useState(true);
-  const [latestOrder, setLatestOrder] = useState<any>(null);
   const [selectedModalProduct, setSelectedModalProduct] = useState<PosProduct | null>(null);
+  
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
   // Offline Sync State
   const [pendingSyncCount, setPendingCount] = useState(0);
@@ -177,7 +259,27 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     );
   };
 
-  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  // --- PHASE 1: TEST PRINT HANDLER ---
+  const handleTestPrint = async () => {
+    if (!printerUrl) {
+      alert("⚠️ Printer URL not configured for this shop. Please add your local print server IP in Settings.");
+      return;
+    }
+
+    try {
+      const testText = `\n         TEST PRINT         \n================================\nIf you are reading this,\nyour IP printer is connected\nand working perfectly!\n================================\n\n\n\n`;
+      // Dynamically use the passed-in printer URL
+      await fetch(`${printerUrl}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: testText })
+      });
+      alert("✅ Test print sent successfully!");
+    } catch (err) {
+      console.error("🖨️ Printer server not reachable:", err);
+      alert(`❌ Failed to connect to printer server at ${printerUrl}. Make sure the Node server is running on that IP.`);
+    }
+  };
 
   const handleProceedToConfirm = async (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string = "USD", amountReceived: number = 0, changeAmount: number = 0) => {
     if (billingItems.length === 0) return;
@@ -198,7 +300,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
       const total = afterDiscount + tax;
 
-      // Add amountReceived and changeAmount to the payload 
       const orderPayload = {
         shopId,
         orderType: orderType.toUpperCase(),
@@ -253,7 +354,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         await saveOfflineOrder(offlineRecord);
         await checkPendingOrders(); 
 
-        // Update the mock order for printing with the new values
         finalOrderForReceipt = {
           id: tempOrderId,
           shopId: shopId,
@@ -279,18 +379,32 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         isSyncingRef.current = false;
       }
 
-      setLatestOrder(finalOrderForReceipt);
       setBillingItems([]);
       setTableNumber("");
       setIsMobileCartOpen(false);
 
-      setTimeout(() => {
-        window.print();
-        setTimeout(() => setLatestOrder(null), 1000); 
-        if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
-          router.refresh();
+      // --- POS IP Printer Integration ---
+      if (printerUrl) {
+        try {
+          const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
+          fetch(`${printerUrl}/print`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: receiptText }) 
+          }).catch((err) => {
+            console.error("🖨️ Printer server not reachable:", err);
+          });
+        } catch (printErr) {
+          console.error("🖨️ Failed to send print job:", printErr);
         }
-      }, 500);
+      } else {
+        console.warn("🖨️ Printer URL not set for this shop, skipping automatic print.");
+      }
+      // ----------------------------------
+
+      if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
+        router.refresh();
+      }
 
     } finally {
       isCheckoutLocked.current = false;
@@ -300,42 +414,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
   return (
     <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative min-w-0">
-      
-      {/* INVISIBLE RECEIPT FOR PRINTING */}
-      {latestOrder && (
-        <>
-          <style>{`
-          @media print {
-            @page { 
-              margin: 0 !important; 
-              padding: 0 !important;
-            }
-            html, body, #__next, main {
-              background: white !important;
-              height: max-content !important; 
-              min-height: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: hidden !important;
-            }
-            aside, header, nav, #pos-left-pane, #pos-right-pane, #pos-mobile-fab, .md\\:hidden { 
-              display: none !important; 
-            }
-            #pos-receipt-print-area, #dashboard-receipt-print-area { 
-              display: block !important; 
-              position: relative !important; 
-              width: 57mm !important; 
-              margin: 0 auto !important; 
-              padding: 0 !important; 
-              page-break-after: always;
-            }
-          }
-        `}</style>
-          <div id="pos-receipt-print-area" className="hidden print:block bg-white z-[99999]">
-             <PosReceipt order={latestOrder} shopName={shopName} />
-          </div>
-        </>
-      )}
 
       {/* POPUP MODAL */}
       {selectedModalProduct && (
@@ -347,13 +425,23 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
       
       {/* LEFT PANE: MENU */}
-      <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 print:hidden pb-28 md:pb-6 min-w-0 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
+      <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 pb-28 md:pb-6 min-w-0 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0 min-w-0">
           <div className="flex items-center gap-4 min-w-0">
             <h1 className="text-2xl font-bold text-gray-900 truncate" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
               Select Products
             </h1>
+            
+            {/* PHASE 1: TEST PRINT BUTTON */}
+            <button 
+              onClick={handleTestPrint}
+              className="bg-gray-200 text-gray-700 hover:bg-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+              title="Send Test Print"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              <span className="hidden sm:inline-block">Test Print</span>
+            </button>
             
             {/* OFFLINE SYNC INDICATOR */}
             {pendingSyncCount > 0 && (
@@ -428,7 +516,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
       {/* MOBILE VIEW CART FAB */}
       {!isMobileCartOpen && (
-        <div id="pos-mobile-fab" className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 print:hidden animate-in slide-in-from-bottom-10 min-w-0">
+        <div id="pos-mobile-fab" className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40 animate-in slide-in-from-bottom-10 min-w-0">
           <button 
             onClick={() => setIsMobileCartOpen(true)}
             className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all min-w-0"
@@ -452,7 +540,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       )}
 
       {/* RIGHT PANE: CART & ORDER CONFIG */}
-      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full print:hidden shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
+      <div id="pos-right-pane" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}>
         <BillingPanel
           items={billingItems}
           onRemove={handleRemove}
