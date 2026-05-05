@@ -106,7 +106,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [previewDisplay, setPreviewDisplay] = useState(settings?.nameDisplay || 'EN');
   const [address, setAddress] = useState(settings?.address || '');
   const [phone, setPhone] = useState(settings?.phone || '');
-  const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); // Added State
+  const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); 
 
   const [isStaffEnabled, setIsStaffEnabled] = useState(callStaffEnabled);
   const [tgChatId, setTgChatId] = useState(telegramChatId || '');
@@ -333,14 +333,102 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const onSocialsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); };
   const onNotificationsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!"); startTransition(async () => { await saveNotificationsForm(); }); };
   
-  const handleMoveBanner = async (index: number, direction: number) => { if (index + direction < 0 || index + direction >= optBanners.length) return; const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); const tempOrder = newBanners[index].sortOrder; newBanners[index].sortOrder = newBanners[index + direction].sortOrder; newBanners[index + direction].sortOrder = tempOrder; newBanners.sort((a,b) => a.sortOrder - b.sortOrder); startTransition(() => { dispatchOptBanners({ type: 'set', payload: newBanners }); }); startTransition(async () => { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); }); };
+  const handleMoveBanner = async (index: number, direction: number) => { 
+    if (index + direction < 0 || index + direction >= optBanners.length) return; 
+    const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); 
+    const tempOrder = newBanners[index].sortOrder; 
+    newBanners[index].sortOrder = newBanners[index + direction].sortOrder; 
+    newBanners[index + direction].sortOrder = tempOrder; 
+    newBanners.sort((a,b) => a.sortOrder - b.sortOrder); 
+
+    startTransition(async () => { 
+      dispatchOptBanners({ type: 'set', payload: newBanners }); 
+      try {
+        await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); 
+        showToast("Banners reordered!"); 
+      } catch (e) {
+        showToast("Failed to reorder banners");
+      }
+    }); 
+  };
+
   const handleDragStart = (e: React.DragEvent, index: number) => { setDraggedBannerIndex(index); e.dataTransfer.effectAllowed = "move"; };
   const handleDragOver = (e: React.DragEvent, index: number) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleDrop = async (e: React.DragEvent, dropIndex: number) => { e.preventDefault(); if (draggedBannerIndex === null || draggedBannerIndex === dropIndex) { setDraggedBannerIndex(null); return; } const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); const draggedItem = newBanners[draggedBannerIndex]; newBanners.splice(draggedBannerIndex, 1); newBanners.splice(dropIndex, 0, draggedItem); newBanners.forEach((b, i) => b.sortOrder = i + 1); startTransition(() => { dispatchOptBanners({ type: 'set', payload: newBanners }); }); setDraggedBannerIndex(null); startTransition(async () => { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); }); };
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => { 
+    e.preventDefault(); 
+    if (draggedBannerIndex === null || draggedBannerIndex === dropIndex) { setDraggedBannerIndex(null); return; } 
+    const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); 
+    const draggedItem = newBanners[draggedBannerIndex]; 
+    newBanners.splice(draggedBannerIndex, 1); 
+    newBanners.splice(dropIndex, 0, draggedItem); 
+    newBanners.forEach((b, i) => b.sortOrder = i + 1); 
+    
+    setDraggedBannerIndex(null); 
+    startTransition(async () => { 
+      dispatchOptBanners({ type: 'set', payload: newBanners }); 
+      try {
+        await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); 
+        showToast("Banners reordered!"); 
+      } catch (e) {
+        showToast("Failed to drop banner");
+      }
+    }); 
+  };
   
-  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => { if (e.target.files && e.target.files.length > 0) { const file = e.target.files[0]; const reader = new FileReader(); reader.addEventListener('load', () => { setCropImageSrc(reader.result as string); setCropTarget(target); setZoom(1); setCropAspect(target === 'banner' ? 16 / 9 : 1); }); reader.readAsDataURL(file); e.target.value = ''; } };
+  // FIX: Using URL.createObjectURL instead of FileReader to prevent UI blocking
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => { 
+    if (e.target.files && e.target.files.length > 0) { 
+      const file = e.target.files[0]; 
+      const objectUrl = URL.createObjectURL(file);
+      
+      setCropImageSrc(objectUrl); 
+      setCropTarget(target); 
+      setZoom(1); 
+      setCropAspect(target === 'banner' ? 16 / 9 : 1); 
+      
+      e.target.value = ''; 
+    } 
+  };
+
   const onCropComplete = (_: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels);
-  const showCroppedImage = async () => { if (!cropImageSrc || !croppedAreaPixels) return; try { const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels); if (croppedBlob) { const objectUrl = URL.createObjectURL(croppedBlob); const currentTarget = cropTarget; setCropImageSrc(null); setCropTarget(null); if (currentTarget === 'logo') { setLogoFileBlob(croppedBlob); setLogoPreview(objectUrl); setIsDirtyLogo(true); markDirty('branding'); } else if (currentTarget === 'product') { setProductFileBlob(croppedBlob); setProductPreview(objectUrl); } else if (currentTarget === 'banner') { const fd = new FormData(); fd.append('image', croppedBlob, 'banner.webp'); const tempId = `temp-${Date.now()}`; const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1; startTransition(() => { dispatchOptBanners({ type: 'add', payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } }); }); startTransition(async () => { const res = await addBanner(fd); if (res?.error) { showToast(res.error); startTransition(() => { dispatchOptBanners({ type: 'delete', payload: tempId }); }); } else { showToast("Banner added!"); } }); } } } catch (e) { console.error(e); } };
+  const showCroppedImage = async () => { 
+    if (!cropImageSrc || !croppedAreaPixels) return; 
+    try { 
+      const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels); 
+      if (croppedBlob) { 
+        const objectUrl = URL.createObjectURL(croppedBlob); 
+        const currentTarget = cropTarget; 
+        setCropImageSrc(null); 
+        setCropTarget(null); 
+        
+        if (currentTarget === 'logo') { 
+          setLogoFileBlob(croppedBlob); 
+          setLogoPreview(objectUrl); 
+          setIsDirtyLogo(true); 
+          markDirty('branding'); 
+        } else if (currentTarget === 'product') { 
+          setProductFileBlob(croppedBlob); 
+          setProductPreview(objectUrl); 
+        } else if (currentTarget === 'banner') { 
+          const fd = new FormData(); 
+          fd.append('image', croppedBlob, 'banner.webp'); 
+          const tempId = `temp-${Date.now()}`; 
+          const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1; 
+
+          // Full Optimistic Banner Add
+          startTransition(async () => { 
+            dispatchOptBanners({ type: 'add', payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } }); 
+            const res = await addBanner(fd); 
+            if (res?.error) { 
+              showToast(res.error); 
+            } else { 
+              showToast("Banner added!"); 
+            } 
+          }); 
+        } 
+      } 
+    } catch (e) { console.error(e); } 
+  };
   
   const cancelLogoChange = () => { setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); };
   const addSocialLink = () => { setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]); markDirty('socials'); };
@@ -353,7 +441,70 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const filteredProducts = optProducts.filter(p => (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) && p.id !== pendingDelete?.productId);
   const confirmDelete = (type: 'product' | 'category', id: string, name: string, fd: FormData) => { setDeleteConfirmation({ isOpen: true, type, id, name, actionFormData: fd }); };
-  const handleConfirmDeleteAction = () => { if (!deleteConfirmation.actionFormData || !deleteConfirmation.type || !deleteConfirmation.id) return; const fd = deleteConfirmation.actionFormData; const type = deleteConfirmation.type; const id = deleteConfirmation.id; const name = deleteConfirmation.name || 'Item'; if (type === 'product') { if (pendingDeleteRef.current) { const prev = pendingDeleteRef.current; clearTimeout(prev.timeoutId); clearInterval(prev.intervalId); startTransition(() => dispatchOptProducts({ type: 'delete', payload: prev.productId })); startTransition(async () => { await deleteProduct(prev.actionFormData); }); } const snapshot = optProducts.find(p => p.id === id); if (!snapshot) return; const expiresAt = Date.now() + 5000; const intervalId = setInterval(() => { setPendingDelete(curr => { if (!curr) return null; const left = Math.ceil((curr.expiresAt - Date.now()) / 1000); if (left <= 0) { clearInterval(curr.intervalId); } return { ...curr, timeLeft: left }; }); }, 1000); const timeoutId = setTimeout(() => { if (pendingDeleteRef.current?.productId === id) { clearInterval(pendingDeleteRef.current.intervalId); startTransition(() => dispatchOptProducts({ type: 'delete', payload: id })); startTransition(async () => { await deleteProduct(fd); }); setPendingDelete(null); pendingDeleteRef.current = null; } }, 5000); const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name, actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; setPendingDelete(newPending); pendingDeleteRef.current = newPending; } else if (type === 'category') { startTransition(() => dispatchOptCategories({ type: 'delete', payload: id })); startTransition(async () => { await deleteCategory(fd); showToast("Category deleted"); }); } setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); };
+  
+  const handleConfirmDeleteAction = () => { 
+    if (!deleteConfirmation.actionFormData || !deleteConfirmation.type || !deleteConfirmation.id) return; 
+    const fd = deleteConfirmation.actionFormData; 
+    const type = deleteConfirmation.type; 
+    const id = deleteConfirmation.id; 
+    const name = deleteConfirmation.name || 'Item'; 
+    
+    if (type === 'product') { 
+      if (pendingDeleteRef.current) { 
+        const prev = pendingDeleteRef.current; 
+        clearTimeout(prev.timeoutId); 
+        clearInterval(prev.intervalId); 
+        startTransition(async () => { 
+          dispatchOptProducts({ type: 'delete', payload: prev.productId });
+          await deleteProduct(prev.actionFormData); 
+        }); 
+      } 
+      const snapshot = optProducts.find(p => p.id === id); 
+      if (!snapshot) return; 
+      const expiresAt = Date.now() + 5000; 
+      
+      const intervalId = setInterval(() => { 
+        setPendingDelete(curr => { 
+          if (!curr) return null; 
+          const left = Math.ceil((curr.expiresAt - Date.now()) / 1000); 
+          if (left <= 0) { clearInterval(curr.intervalId); } 
+          return { ...curr, timeLeft: left }; 
+        }); 
+      }, 1000); 
+      
+      const timeoutId = setTimeout(() => { 
+        if (pendingDeleteRef.current?.productId === id) { 
+          clearInterval(pendingDeleteRef.current.intervalId); 
+          // Unified transition for deletion
+          startTransition(async () => { 
+            dispatchOptProducts({ type: 'delete', payload: id });
+            await deleteProduct(fd); 
+          }); 
+          setPendingDelete(null); 
+          pendingDeleteRef.current = null; 
+        } 
+      }, 5000); 
+      
+      const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name, actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; 
+      setPendingDelete(newPending); 
+      pendingDeleteRef.current = newPending; 
+      
+    } else if (type === 'category') { 
+      setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
+      // Unified transition for category deletion
+      startTransition(async () => { 
+        dispatchOptCategories({ type: 'delete', payload: id });
+        try {
+          await deleteCategory(fd); 
+          showToast("Category deleted"); 
+        } catch(e) {
+          showToast("Failed to delete category");
+        }
+      }); 
+      return; // Return early because we already cleared the modal state above
+    } 
+    setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); 
+  };
 
   // Update Recipe functions
   const addRecipeItem = () => setProductRecipe([...productRecipe, { ingredientId: '', quantityUsed: '' }]);
@@ -366,7 +517,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     
     const payload = {
       name: prodName.en,
@@ -386,17 +536,54 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       image: productFileBlob || undefined
     };
 
-    if (editingProduct) {
-      await updateProduct({ ...payload, id: editingProduct.id });
-      showToast("Product updated successfully!");
-    } else {
-      await createProduct(payload);
-      showToast("Product created successfully!");
-    }
-    
-    setIsSaving(false);
+    const isUpdate = !!editingProduct;
+    const currentEditingId = editingProduct?.id;
+    const tempId = `temp-${Date.now()}`;
+
+    // OPTIMISTIC: Close modal instantly
     setIsFormOpen(false);
     setEditingProduct(null);
+    setWasFormOpen(false);
+    setWasEditingProduct(null);
+
+    // FULL OPTIMISTIC UPDATE / CREATE
+    startTransition(async () => {
+      if (isUpdate) {
+        const optimisticProduct = {
+          ...editingProduct,
+          ...payload,
+          category: { name: optCategories.find(c => c.id === payload.categoryId)?.name || '' },
+          image: productPreview || editingProduct.image,
+        } as Product;
+        
+        dispatchOptProducts({ type: 'update', payload: optimisticProduct });
+
+        try {
+          const res = await updateProduct({ ...payload, id: currentEditingId as string }); // FIX APPLIED HERE
+          if (res?.error) showToast(res.error || "Failed to update product");
+          else showToast("Product updated successfully!");
+        } catch (e) {
+          showToast("Failed to update product.");
+        }
+      } else {
+        const optimisticProduct = {
+          ...payload,
+          id: tempId,
+          category: { name: optCategories.find(c => c.id === payload.categoryId)?.name || '' },
+          image: productPreview || '',
+        } as Product;
+
+        dispatchOptProducts({ type: 'add', payload: optimisticProduct });
+
+        try {
+          const res = await createProduct(payload);
+          if (res?.error) showToast(res.error || "Failed to create product");
+          else showToast("Product created successfully!");
+        } catch (e) {
+          showToast("Failed to create product.");
+        }
+      }
+    });
   };
 
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => {
@@ -1192,7 +1379,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                        <div key={b.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-200'} shadow-sm group bg-gray-50 flex items-center justify-center cursor-move`}>
                          <LazyImage src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                          <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button><button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button></div>
-                         <form action={(fd) => { startTransition(() => dispatchOptBanners({ type: 'delete', payload: b.id })); startTransition(async () => { await deleteBanner(fd); showToast("Banner deleted"); }); }}><input type="hidden" name="id" value={b.id} /><button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600"><Trash2 size={14}/></button></form>
+                         <form action={(fd) => { startTransition(async () => { dispatchOptBanners({ type: 'delete', payload: b.id }); await deleteBanner(fd); showToast("Banner deleted"); }); }}><input type="hidden" name="id" value={b.id} /><button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600"><Trash2 size={14}/></button></form>
                        </div>
                      ))}
                    </div>
@@ -1509,12 +1696,35 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                <button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
              </div>
              <form action={(fd) => {
-               setIsSaving(true);
+               const name = fd.get("name") as string;
+               const sortOrder = Number(fd.get("sortOrder"));
+               const isDrink = fd.get("isDrink") === 'true';
+
                if (editingCategory) {
-                 fd.append("id", editingCategory.id);
-                 startTransition(async () => { await updateCategory(fd); setIsSaving(false); setIsCatFormOpen(false); setEditingCategory(null); showToast("Category updated!"); });
+                 const id = editingCategory.id;
+                 fd.append("id", id);
+                 setIsCatFormOpen(false);
+                 setEditingCategory(null);
+                 startTransition(async () => { 
+                   dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, sortOrder, isDrink } as Category });
+                   try {
+                     await updateCategory(fd); 
+                     showToast("Category updated!"); 
+                   } catch (e) {
+                     showToast("Failed to update category.");
+                   }
+                 });
                } else {
-                 startTransition(async () => { await createCategory(fd); setIsSaving(false); setIsCatFormOpen(false); showToast("Category created!"); });
+                 setIsCatFormOpen(false);
+                 startTransition(async () => { 
+                   dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder, isDrink, discount: 0, shopId: shopId } as Category });
+                   try {
+                     await createCategory(fd); 
+                     showToast("Category created!"); 
+                   } catch (e) {
+                     showToast("Failed to create category.");
+                   }
+                 });
                }
              }} className="space-y-4">
                <div>
