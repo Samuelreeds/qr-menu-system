@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import MenuClient from '@/components/MenuClient';
-import CustomerEntryGate from '@/components/CustomerEntryGate';
+import MenuClient from '@/components/shared/MenuClient';
+import CustomerEntryGate from '@/components/shared/CustomerEntryGate';
 import { getShopLimitsAndFeatures } from '@/lib/shop-guard';
 
 export const revalidate = 0; 

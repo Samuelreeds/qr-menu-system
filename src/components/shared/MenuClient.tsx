@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import SearchBar from '@/components/SearchBar';
-import LangSwitcher from '@/components/LangSwitcher';
-import FoodCard from '@/components/FoodCard';
-import ShopInfoModal from '@/components/ShopInfoModal';
-import CartFloat from '@/components/CartFloat'; 
+import SearchBar from '@/components/ui/SearchBar';
+import LangSwitcher from '@/components/ui/LangSwitcher';
+import FoodCard from '@/components/shared/FoodCard';
+import ShopInfoModal from '@/components/shared/ShopInfoModal';
+import CartFloat from '@/components/ui/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
 import { Menu, X, Star, Bell, Loader2, CheckCircle } from 'lucide-react';
 import { requestStaffAssistance } from "@/lib/staff-actions";

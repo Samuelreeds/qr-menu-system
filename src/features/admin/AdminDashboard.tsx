@@ -1,9 +1,9 @@
 // src/components/AdminDashboard.tsx
 'use client';
 import Link from 'next/link';
-import TableManager from "@/components/TableManager";
-import LocalizedInput from "@/components/LocalizedInput"; 
-import { useState, useRef, useEffect, useOptimistic, startTransition } from 'react';
+import TableManager from "@/components/shared/TableManager";
+import LocalizedInput from "@/components/ui/LocalizedInput"; 
+import { useState, useRef, useEffect, useOptimistic, startTransition, useMemo } from 'react';
 import { signOut } from "next-auth/react"; 
 import Cropper from 'react-easy-crop'; 
 import getCroppedImg from '@/lib/cropImage'; 
@@ -25,16 +25,17 @@ import {
   Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users
 } from 'lucide-react';
 
-import LazyImage from "./ui/LazyImage";
-import StockSwitchButton from "./ui/StockSwitchButton";
-import AdminPosSection from "./pos/AdminPosSection";
-import OrderHistoryCard from "./pos/OrderHistoryCard";
-import DashboardOverview from "./pos/DashboardOverview";
-import InventoryManager from "./InventoryManager";
-import PosReceipt from "@/components/PosReceipt"; 
+import LazyImage from "../../components/ui/LazyImage";
+import StockSwitchButton from "../../components/ui/StockSwitchButton";
+import AdminPosSection from "../pos/AdminPosSection";
+import OrderHistoryCard from "../pos/OrderHistoryCard";
+import DashboardOverview from "../pos/DashboardOverview";
+import InventoryManager from "../../components/shared/InventoryManager";
+import PosReceipt from "@/components/shared/PosReceipt"; 
 import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
 
+// FIX: Made sortOrder required (number) to match AdminPosSection's expectations
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
@@ -162,7 +163,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   }));
 
   const [optProducts, dispatchOptProducts] = useOptimistic(mappedProducts, (state: Product[], action: OptimisticAction<Product>) => { switch (action.type) { case 'add': return [action.payload, ...state]; case 'update': return state.map(p => p.id === action.payload.id ? action.payload : p); case 'delete': return state.filter(p => p.id !== action.payload); default: return state; } });
-  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(c => c.id !== action.payload); default: return state; } });
+  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'delete': return state.filter(c => c.id !== action.payload); default: return state; } });
   const [optBanners, dispatchOptBanners] = useOptimistic(banners, (state: Banner[], action: OptimisticBannerAction) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(b => b.id !== action.payload); case 'set': return action.payload; default: return state; } });
 
   const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | null>(null);
@@ -183,7 +184,16 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [productFileBlob, setProductFileBlob] = useState<Blob | null>(null);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => { try { return settings?.socials ? JSON.parse(settings.socials) : []; } catch { return []; } });
 
-  const hasCategory = optCategories.length > 0;
+  // OPTIMIZED: Stable sort categories by sortOrder ascending before they touch the UI
+  const sortedCategories = useMemo(() => {
+    return [...optCategories].sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : 999999;
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : 999999;
+      return orderA - orderB;
+    });
+  }, [optCategories]);
+
+  const hasCategory = sortedCategories.length > 0;
   const hasProduct = optProducts.length > 0;
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
@@ -221,7 +231,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setIsHotSale(editingProduct.isPopular || false); 
         setIsSoldOutState(editingProduct.isSoldOut || false);
         setProductDiscount(editingProduct.discount || ''); 
-        setProductCategoryId(optCategories.find(c => c.name === editingProduct.category.name)?.id || optCategories[0]?.id || '');
+        setProductCategoryId(sortedCategories.find(c => c.name === editingProduct.category.name)?.id || sortedCategories[0]?.id || '');
         
         const rawDept = (editingProduct.department || 'coffee').toLowerCase();
         const fallbackDept = editingProduct.description?.includes('[PUB]') ? 'pub' : 'coffee';
@@ -250,7 +260,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setIsSoldOutState(false); 
         setProductDiscount('');
         setProductDepartment('coffee');
-        setProductCategoryId(optCategories[0]?.id || '');
+        setProductCategoryId(sortedCategories[0]?.id || '');
         setProductVariants([{name: 'Default', price: ''}]);
         setProductRecipe([]);
         setWasFormOpen(true);
@@ -260,7 +270,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       setWasEditingProduct(null);
       setWasFormOpen(false);
     }
-  }, [editingProduct, isFormOpen, optCategories]);
+  }, [editingProduct, isFormOpen, sortedCategories]);
 
   useEffect(() => {
     if (activeTab === 'team' && !hasFetchedTeam.current) {
@@ -552,7 +562,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         const optimisticProduct = {
           ...editingProduct,
           ...payload,
-          category: { name: optCategories.find(c => c.id === payload.categoryId)?.name || '' },
+          category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' },
           image: productPreview || editingProduct.image,
         } as Product;
         
@@ -569,7 +579,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         const optimisticProduct = {
           ...payload,
           id: tempId,
-          category: { name: optCategories.find(c => c.id === payload.categoryId)?.name || '' },
+          category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' },
           image: productPreview || '',
         } as Product;
 
@@ -903,7 +913,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
             <ToastProvider>
               <OrderProvider>
                 <AdminPosSection 
-                  dashboardCategories={optCategories} 
+                  dashboardCategories={sortedCategories} 
                   dashboardProducts={optProducts} 
                   shopId={shopId} 
                   userEmail={userEmail} 
@@ -1204,7 +1214,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
               <table className="w-full text-left border-collapse min-w-[500px]">
                 <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Name</th><th className="p-5">Sort Order</th><th className="p-5">Discount</th><th className="p-5 text-right">Action</th></tr></thead>
                 <tbody className="divide-y divide-gray-50">
-                  {optCategories.map((cat) => (
+                  {sortedCategories.map((cat) => (
                     <tr key={cat.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 font-bold text-gray-700">{cat.name}</td>
                       <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
@@ -1220,7 +1230,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                       </td>
                     </tr>
                   ))}
-                  {optCategories.length === 0 && <tr><td colSpan={4} className="py-12 text-center text-gray-400 font-medium">No categories created yet</td></tr>}
+                  {sortedCategories.length === 0 && <tr><td colSpan={4} className="py-12 text-center text-gray-400 font-medium">No categories created yet</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1602,7 +1612,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    <div>
                      <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Category</label>
                      <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm appearance-none cursor-pointer">
-                       {optCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                       {sortedCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                      </select>
                    </div>
                 </div>

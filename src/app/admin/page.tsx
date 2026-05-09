@@ -1,7 +1,7 @@
 // src/app/admin/page.tsx
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
-import AdminDashboard from '@/components/AdminDashboard';
+import AdminDashboard from '@/features/admin/AdminDashboard';
 import { getShopPlanState, getShopLimitsAndFeatures } from '@/lib/shop-guard';
 import { redirect } from 'next/navigation';
 
