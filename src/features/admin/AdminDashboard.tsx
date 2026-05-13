@@ -1,4 +1,4 @@
-// src/components/AdminDashboard.tsx
+// src/features/admin/AdminDashboard.tsx
 'use client';
 import Link from 'next/link';
 import TableManager from "@/components/shared/TableManager";
@@ -7,6 +7,8 @@ import { useState, useRef, useEffect, useOptimistic, startTransition, useMemo } 
 import { signOut } from "next-auth/react"; 
 import Cropper from 'react-easy-crop'; 
 import getCroppedImg from '@/lib/cropImage'; 
+import { arrayMove } from '@dnd-kit/sortable'; // ADDED DND KIT
+
 import { 
   createProduct, deleteProduct, updateProduct, 
   createCategory, updateCategory, deleteCategory,
@@ -16,6 +18,8 @@ import {
   getUserActivity
 } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
+import { updateCategoryOrders } from '@/lib/category-order-actions'; // ADDED NEW ACTION
+
 import { 
   Plus, X, Trash2, UploadCloud, CheckCircle, AlertTriangle,
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
@@ -25,17 +29,18 @@ import {
   Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users
 } from 'lucide-react';
 
-import LazyImage from "../../components/ui/LazyImage";
-import StockSwitchButton from "../../components/ui/StockSwitchButton";
-import AdminPosSection from "../pos/AdminPosSection";
-import OrderHistoryCard from "../pos/OrderHistoryCard";
-import DashboardOverview from "../pos/DashboardOverview";
-import InventoryManager from "../../components/shared/InventoryManager";
+import LazyImage from "@/components/ui/LazyImage";
+import StockSwitchButton from "@/components/ui/StockSwitchButton";
+import AdminPosSection from "@/features/pos/AdminPosSection";
+import OrderHistoryCard from "@/features/pos/OrderHistoryCard";
+import DashboardOverview from "@/features/pos/DashboardOverview";
+import InventoryManager from "@/components/shared/InventoryManager";
 import PosReceipt from "@/components/shared/PosReceipt"; 
+import CategorySortableList from "@/features/admin/components/CategorySortableList"; // ADDED DND LIST
+
 import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
 
-// FIX: Made sortOrder required (number) to match AdminPosSection's expectations
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
@@ -53,7 +58,9 @@ const getDisplayPrice = (product: Product) => {
 };
 
 interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; }
-type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string };
+
+// UPDATED OptimisticAction to support 'set' operations for array reordering
+type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string } | { type: 'set'; payload: T[] };
 type OptimisticBannerAction = | { type: 'add'; payload: Banner } | { type: 'delete'; payload: string } | { type: 'set'; payload: Banner[] };
 interface PendingDelete { productId: string; productSnapshot: Product; name: string; actionFormData: FormData; timeoutId: NodeJS.Timeout; intervalId: NodeJS.Timeout; expiresAt: number; timeLeft: number; }
 
@@ -89,10 +96,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
-  const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
-  const [catName, setCatName] = useState({ en: '', kh: '', zh: '' });
-  const [catIsDrink, setCatIsDrink] = useState(false);
 
+  const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
+  
   const [productVariants, setProductVariants] = useState<{name: string, price: number | string}[]>([{name: 'Default', price: ''}]);
   const [productRecipe, setProductRecipe] = useState<{ingredientId: string, quantityUsed: number | string}[]>([]);
   const [productDepartment, setProductDepartment] = useState<'coffee' | 'pub'>('coffee');
@@ -163,7 +169,18 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   }));
 
   const [optProducts, dispatchOptProducts] = useOptimistic(mappedProducts, (state: Product[], action: OptimisticAction<Product>) => { switch (action.type) { case 'add': return [action.payload, ...state]; case 'update': return state.map(p => p.id === action.payload.id ? action.payload : p); case 'delete': return state.filter(p => p.id !== action.payload); default: return state; } });
-  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'delete': return state.filter(c => c.id !== action.payload); default: return state; } });
+  
+  // UPDATED: Reducer handles 'set' to instantly process the DND reorder state correctly
+  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { 
+    switch (action.type) { 
+      case 'add': return [...state, action.payload].sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); 
+      case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); 
+      case 'delete': return state.filter(c => c.id !== action.payload); 
+      case 'set': return action.payload as Category[]; 
+      default: return state; 
+    } 
+  });
+  
   const [optBanners, dispatchOptBanners] = useOptimistic(banners, (state: Banner[], action: OptimisticBannerAction) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(b => b.id !== action.payload); case 'set': return action.payload; default: return state; } });
 
   const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | null>(null);
@@ -285,7 +302,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     }
   }, [activeTab]);
 
-  useEffect(() => { if (editingCategory) { setCatName({ en: editingCategory.name || '', kh: editingCategory.name_kh || '', zh: editingCategory.name_zh || '' }); setCatIsDrink(editingCategory.isDrink || false); } else if (isCatFormOpen) { setCatName({ en: '', kh: '', zh: '' }); setCatIsDrink(false); } }, [editingCategory, isCatFormOpen]);
+  // Clean up when opening Category Form Modal
+  useEffect(() => { 
+    if (!editingCategory && isCatFormOpen) { 
+      // Reset logic implicitly happens because we don't bind state to variables anymore for the form inputs
+    } 
+  }, [editingCategory, isCatFormOpen]);
 
   const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
   const getPreviewScale = () => { if (previewFormat === 'portrait') return paperSize === 'A4' ? 'scale(0.28)' : paperSize === 'A5' ? 'scale(0.24)' : 'scale(0.22)'; return paperSize === 'A4' ? 'scale(0.3)' : paperSize === 'A5' ? 'scale(0.26)' : 'scale(0.24)'; };
@@ -293,14 +315,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
   const handleGeneratePDF = (format: 'portrait' | 'landscape') => { setPrintFormat(format); setTimeout(() => { window.print(); }, 500); };
   
-  const handleReprintOrder = (order: any) => {
-    setReceiptToPrint(order);
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setReceiptToPrint(null), 1000);
-    }, 300);
-  };
-
   const fetchUserActivity = async (member: any) => {
     setActivityUser(member);
     setIsActivityLoading(true);
@@ -326,7 +340,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     fd.set('nameDisplay', previewDisplay); 
     fd.set('address', address); 
     fd.set('phone', phone); 
-    fd.set('printerUrl', printerUrl); // Added Dynamic URL
+    fd.set('printerUrl', printerUrl);
     fd.set('is24Hours', String(is24Hours));
     if (!is24Hours) {
        fd.set('openingHours', `${openTime} - ${closeTime}`); 
@@ -343,6 +357,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const onSocialsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); };
   const onNotificationsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!"); startTransition(async () => { await saveNotificationsForm(); }); };
   
+  // DND Handlers for Banners
   const handleMoveBanner = async (index: number, direction: number) => { 
     if (index + direction < 0 || index + direction >= optBanners.length) return; 
     const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); 
@@ -384,8 +399,30 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       }
     }); 
   };
+
+  // DND Handlers for Categories
+  const handleReorderCategories = (activeId: string, overId: string) => {
+    const oldIndex = sortedCategories.findIndex(c => c.id === activeId);
+    const newIndex = sortedCategories.findIndex(c => c.id === overId);
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrder = arrayMove(sortedCategories, oldIndex, newIndex);
+      const reorderedCategories = newOrder.map((cat, index) => ({ ...cat, sortOrder: index + 1 }));
+
+      startTransition(async () => {
+         dispatchOptCategories({ type: 'set', payload: reorderedCategories });
+         try {
+            const res = await updateCategoryOrders(reorderedCategories.map(c => c.id));
+            if (!res.success) {
+               showToast("Failed to reorder categories.");
+            }
+         } catch (e) {
+            showToast("Failed to reorder categories.");
+         }
+      });
+    }
+  };
   
-  // FIX: Using URL.createObjectURL instead of FileReader to prevent UI blocking
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => { 
     if (e.target.files && e.target.files.length > 0) { 
       const file = e.target.files[0]; 
@@ -511,12 +548,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           showToast("Failed to delete category");
         }
       }); 
-      return; // Return early because we already cleared the modal state above
+      return; 
     } 
     setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); 
   };
 
-  // Update Recipe functions
   const addRecipeItem = () => setProductRecipe([...productRecipe, { ingredientId: '', quantityUsed: '' }]);
   const removeRecipeItem = (index: number) => setProductRecipe(productRecipe.filter((_, i) => i !== index));
   const updateRecipeItem = (index: number, field: 'ingredientId' | 'quantityUsed', value: any) => {
@@ -550,13 +586,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     const currentEditingId = editingProduct?.id;
     const tempId = `temp-${Date.now()}`;
 
-    // OPTIMISTIC: Close modal instantly
     setIsFormOpen(false);
     setEditingProduct(null);
     setWasFormOpen(false);
     setWasEditingProduct(null);
 
-    // FULL OPTIMISTIC UPDATE / CREATE
     startTransition(async () => {
       if (isUpdate) {
         const optimisticProduct = {
@@ -569,7 +603,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         dispatchOptProducts({ type: 'update', payload: optimisticProduct });
 
         try {
-          const res = await updateProduct({ ...payload, id: currentEditingId as string }); // FIX APPLIED HERE
+          const res = await updateProduct({ ...payload, id: currentEditingId as string }); 
           if (res?.error) showToast(res.error || "Failed to update product");
           else showToast("Product updated successfully!");
         } catch (e) {
@@ -613,7 +647,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
   const showText = !isSidebarCollapsed || isMobileMenuOpen;
 
-  // Modern SaaS NavItem with Tooltip
   const NavItem = ({ id, icon: Icon, label }: { id: string, icon: any, label: string }) => {
     const isActive = activeTab === id;
     return (
@@ -625,7 +658,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           <Icon size={20} className="shrink-0" />
           {showText && <span className="font-medium truncate">{label}</span>}
         </button>
-        {/* Tooltip visible only when collapsed */}
         {!showText && (
           <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-lg opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-all z-50 whitespace-nowrap shadow-xl flex items-center">
             {label}
@@ -644,31 +676,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         <>
           <style>{`
             @media print {
-              @page { 
-                margin: 0; 
-                size: 57mm auto; 
-              }
-              html, body {
-                background: white !important;
-                height: auto !important;
-                min-height: 0 !important;
-              }
-              .min-h-screen, .h-screen, .h-full, .min-h-[100dvh], .h-[100dvh] {
-                min-height: 0 !important;
-                height: auto !important;
-              }
-              aside, header, nav, main, .md\\:hidden, .lg\\:hidden { 
-                display: none !important; 
-              }
-              #dashboard-receipt-print-area { 
-                display: block !important; 
-                position: absolute !important; 
-                top: 0 !important; 
-                left: 0 !important; 
-                width: 57mm !important; 
-                margin: 0 !important; 
-                padding: 0 !important; 
-              }
+              @page { margin: 0; size: 57mm auto; }
+              html, body { background: white !important; height: auto !important; min-height: 0 !important; }
+              .min-h-screen, .h-screen, .h-full, .min-h-[100dvh], .h-[100dvh] { min-height: 0 !important; height: auto !important; }
+              aside, header, nav, main, .md\\:hidden, .lg\\:hidden { display: none !important; }
+              #dashboard-receipt-print-area { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 57mm !important; margin: 0 !important; padding: 0 !important; }
             }
           `}</style>
           <div id="dashboard-receipt-print-area" className="hidden print:block bg-white z-[99999]">
@@ -708,7 +720,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         </button>
 
         <div className={`pb-6 pt-20 lg:pt-8 h-full flex flex-col overflow-hidden transition-all duration-300 ${isSidebarCollapsed && !isMobileMenuOpen ? 'px-3' : 'px-6'}`}>
-          
           <div className={`mb-6 hidden lg:flex items-center ${isSidebarCollapsed && !isMobileMenuOpen ? 'justify-center' : 'justify-start'}`}>
             {!isSidebarCollapsed || isMobileMenuOpen ? (
               <div className="flex flex-col min-w-0 animate-in fade-in duration-300">
@@ -728,7 +739,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
 
           <nav className="space-y-2 flex-1 min-h-0 overflow-y-auto no-scrollbar [-webkit-overflow-scrolling:touch]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            
             {featPos && (
               <>
                 <NavItem id="overview" icon={Activity} label="Overview" />
@@ -1201,39 +1211,33 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
            </div>
         )}
 
-        {/* CATEGORIES TAB */}
+        {/* CATEGORIES TAB WITH NEW SORTABLE DND UX */}
         {isAdmin && (
            <div className={`${activeTab === 'categories' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex justify-between items-center gap-4 mb-6">
-                 <h3 className="font-bold text-gray-800 hidden sm:block">Manage Categories</h3>
+                 <div>
+                   <h3 className="font-bold text-gray-900 text-xl sm:text-2xl hidden sm:block">Manage Categories</h3>
+                   <p className="text-sm text-gray-500 mt-1 hidden sm:block">Drag and drop to reorder. The live menu will follow this order.</p>
+                 </div>
                 <button onClick={() => setIsCatFormOpen(true)} className={`hidden lg:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}>
                   <Plus size={18} strokeWidth={3}/> Add New
                 </button>
              </div>
-             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-              <table className="w-full text-left border-collapse min-w-[500px]">
-                <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Name</th><th className="p-5">Sort Order</th><th className="p-5">Discount</th><th className="p-5 text-right">Action</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">
-                  {sortedCategories.map((cat) => (
-                    <tr key={cat.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="p-4 font-bold text-gray-700">{cat.name}</td>
-                      <td className="p-4 text-sm text-gray-500">{cat.sortOrder}</td>
-                      <td className="p-4 text-sm text-gray-500">{cat.discount ? `${cat.discount}%` : '-'}</td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => setEditingCategory(cat)} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95"><Pencil size={18} /></button>
-                          <form action={(fd) => { confirmDelete('category', cat.id, cat.name, fd); }}>
-                            <input type="hidden" name="id" value={cat.id} />
-                            <button type="submit" className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95"><Trash2 size={18} /></button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {sortedCategories.length === 0 && <tr><td colSpan={4} className="py-12 text-center text-gray-400 font-medium">No categories created yet</td></tr>}
-                </tbody>
-              </table>
-            </div>
+             
+             {sortedCategories.length === 0 ? (
+                <div className="py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No categories created yet</div>
+             ) : (
+                <CategorySortableList 
+                  categories={sortedCategories} 
+                  onReorder={handleReorderCategories} 
+                  onEdit={(cat) => setEditingCategory(cat)} 
+                  onDelete={(id, name) => {
+                     const fd = new FormData();
+                     fd.append('id', id);
+                     confirmDelete('category', id, name, fd);
+                  }} 
+                />
+             )}
             <button onClick={() => setIsCatFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"><Plus size={24} strokeWidth={3} /></button>
            </div>
         )}
@@ -1707,16 +1711,17 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
              </div>
              <form action={(fd) => {
                const name = fd.get("name") as string;
-               const sortOrder = Number(fd.get("sortOrder"));
                const isDrink = fd.get("isDrink") === 'true';
 
                if (editingCategory) {
                  const id = editingCategory.id;
                  fd.append("id", id);
+                 // Preserve original sortOrder when editing via standard form
+                 fd.append("sortOrder", (editingCategory.sortOrder || 1).toString());
                  setIsCatFormOpen(false);
                  setEditingCategory(null);
                  startTransition(async () => { 
-                   dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, sortOrder, isDrink } as Category });
+                   dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, isDrink } as Category });
                    try {
                      await updateCategory(fd); 
                      showToast("Category updated!"); 
@@ -1726,8 +1731,13 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                  });
                } else {
                  setIsCatFormOpen(false);
+                 // Auto-calculate sortOrder for brand new categories (put at the end)
+                 const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0;
+                 const newSortOrder = maxSort + 1;
+                 fd.append("sortOrder", newSortOrder.toString());
+
                  startTransition(async () => { 
-                   dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder, isDrink, discount: 0, shopId: shopId } as Category });
+                   dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder: newSortOrder, isDrink, discount: 0, shopId: shopId } as Category });
                    try {
                      await createCategory(fd); 
                      showToast("Category created!"); 
@@ -1741,13 +1751,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category Name</label>
                  <input type="text" name="name" defaultValue={editingCategory?.name} placeholder="e.g. Coffee" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
                </div>
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Sort Order</label>
-                 <input type="number" name="sortOrder" defaultValue={editingCategory?.sortOrder || 1} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-               </div>
+               {/* SORT ORDER INPUT HAS BEEN REMOVED FOR BETTER UX */}
                <div className="pt-2">
                  <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
-                   <input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer"/> This is a Drink Category
+                   <input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer accent-gray-900"/> This is a Drink Category
                  </label>
                </div>
                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">

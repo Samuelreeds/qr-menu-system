@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Poppins, Chenla, Noto_Sans_TC } from "next/font/google";
+import { Poppins, Chenla } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { LanguageProvider } from "@/context/LanguageContext";
@@ -16,11 +16,7 @@ const chenla = Chenla({
   variable: "--font-chenla",
 });
 
-const notoTc = Noto_Sans_TC({
-  weight: ["400", "500", "700"],
-  variable: "--font-noto-tc",
-  preload: false,
-});
+// Noto_Sans_TC removed from next/font/google to prevent Turbopack CJK crash
 
 export const metadata: Metadata = {
   title: 'Menu',
@@ -34,7 +30,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${poppins.variable} ${chenla.variable} ${notoTc.variable} antialiased`} suppressHydrationWarning>
+      <head>
+        {/* Load massive CJK font directly from Google CDN to bypass local build limits */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+      </head>
+      <body 
+        className={`${poppins.variable} ${chenla.variable} antialiased`} 
+        style={{ '--font-noto-tc': '"Noto Sans TC", sans-serif' } as React.CSSProperties}
+        suppressHydrationWarning
+      >
         <LanguageProvider>
           <CartProvider>
             {children}
