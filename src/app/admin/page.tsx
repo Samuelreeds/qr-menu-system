@@ -57,7 +57,8 @@ export default async function AdminPage() {
     dbSettings,
     dbPlan,
     orders,
-    ingredients // FETCH INGREDIENTS FOR MAPPING
+    ingredients,
+    toppings // <--- ADDED: FETCH TOPPINGS
   ] = await Promise.all([
     getShopPlanState(shopId),
     getShopLimitsAndFeatures(shopId),
@@ -93,6 +94,11 @@ export default async function AdminPage() {
     prisma.ingredient.findMany({
       where: { shopId },
       orderBy: { name: 'asc' }
+    }),
+    // --- ADDED: DATABASE QUERY FOR TOPPINGS ---
+    (prisma as any).topping.findMany({
+      where: { shopId },
+      orderBy: { name: 'asc' }
     })
   ]);
 
@@ -119,7 +125,7 @@ export default async function AdminPage() {
     name_zh: p.name_zh,
     price: p.price,
     variants: p.variants, 
-    ingredients: p.ingredients, // PASS RECIPE MAPPING
+    ingredients: p.ingredients, 
     image: p.image,
     category: {
       id: p.categoryId,
@@ -169,6 +175,7 @@ export default async function AdminPage() {
       userRole={shopUser.role}
       orders={orders}
       ingredients={ingredients}
+      toppings={toppings} // <--- ADDED: PASS TOPPINGS TO DASHBOARD
     />
   );
 }

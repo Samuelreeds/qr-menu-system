@@ -1,3 +1,4 @@
+// src/components/pos/BillingPanel.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -256,11 +257,13 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
                     <p className="text-xs sm:text-sm font-extrabold text-gray-900 leading-tight truncate pr-2 sm:pr-4">
                       {item.name}
                     </p>
+                    
+                    {/* --- PHASE 3: UPDATED TO RENDER MULTIPLE TOPPINGS --- */}
                     <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold truncate mt-0.5">
                       {[
-                        item.customization.size ? `Size ${item.customization.size}` : null,
+                        item.customization.size && item.customization.size !== 'Default' ? `Size ${item.customization.size}` : null,
                         item.customization.sugar ? `${item.customization.sugar}% Sug` : null,
-                        (item.customization.topping && item.customization.topping !== 'None') ? `+${item.customization.topping}` : null
+                        ...(item.customization.toppings || []).map(t => t.qty > 0 ? `+${t.qty}x ${t.name}` : null)
                       ].filter(Boolean).join(' • ')}
                     </p>
                   </div>
@@ -297,7 +300,7 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
       {/* FOOTER TOTALS & CHECKOUT */}
       <div className="border-t border-gray-100 bg-white shrink-0 z-20 min-w-0">
         
-        {/* NEW: DISCOUNT PANEL UI */}
+        {/* DISCOUNT PANEL UI */}
         <div className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50/80 border-b border-gray-100 flex items-center gap-2 min-w-0">
            <span className="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider shrink-0">Discount:</span>
            <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden shrink-0 shadow-sm">

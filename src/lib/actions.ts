@@ -2062,3 +2062,63 @@ export async function ensureDemoAccountExists(demoId: string = 'default') {
     return { success: false, error: String(error) };
   }
 }
+
+// ==========================================
+// TOPPING MANAGEMENT ACTIONS
+// ==========================================
+
+export async function getToppings() {
+  const shopId = await getActiveShopId();
+  if (!shopId) return [];
+  
+  // Using (prisma as any) to avoid typescript errors before prisma generate finishes
+  return await (prisma as any).topping.findMany({ 
+    where: { shopId },
+    orderBy: { name: 'asc' } 
+  });
+}
+
+export async function createTopping(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
+  const shopId = await getActiveShopId();
+  if (!shopId) return { error: "No active shop" };
+
+  const name = formData.get('name') as string;
+  const price = parseFloat(formData.get('price') as string) || 0;
+  const isDrink = formData.get('isDrink') === 'true'; // <-- ADDED
+  
+  await (prisma as any).topping.create({ 
+    data: { name, price, isDrink, shopId } 
+  });
+  await revalidateActiveShop();
+  return { success: true };
+}
+
+export async function updateTopping(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
+  const id = formData.get('id') as string;
+  const name = formData.get('name') as string;
+  const price = parseFloat(formData.get('price') as string) || 0;
+  const isDrink = formData.get('isDrink') === 'true'; // <-- ADDED
+  
+  await (prisma as any).topping.update({ 
+    where: { id }, 
+    data: { name, price, isDrink } 
+  });
+  await revalidateActiveShop();
+  return { success: true };
+}
+
+export async function deleteTopping(formData: FormData) {
+  if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
+  const id = formData.get('id') as string;
+  try { 
+    await (prisma as any).topping.delete({ where: { id } }); 
+  } catch (e) {}
+  
+  await revalidateActiveShop();
+  return { success: true };
+}

@@ -17,13 +17,14 @@ import { saveOfflineOrder, getPendingOrders, markOrderSynced, OfflineOrder } fro
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
+export interface Topping { id: string; name: string; price: number; isDrink: boolean; }
 
-// --- PHASE 1: UPDATED CUSTOMIZATION INTERFACE ---
+// --- PHASE 1: UPDATED CUSTOMIZATION TO SUPPORT MULTIPLE TOPPINGS ---
 export interface ProductCustomization { 
   size: string; 
   sugar: '0' | '50' | '100'; 
   ice: 'Normal'; 
-  topping: string; 
+  toppings: { name: string; price: number; qty: number }[]; 
 }
 
 export interface BillingItem { id: string; productId: string; name: string; price: number; qty: number; notes: string; img: string; customization: ProductCustomization; }
@@ -45,7 +46,6 @@ function generateReceiptText(order: any, shopName: string): string {
 
   let text = '\n';
   
-  // HEADER
   text += center(shopName.toUpperCase(), MAX_LEN) + '\n';
   text += center('Receipt / Tax Invoice', MAX_LEN) + '\n';
   text += `Date: ${new Date(order.createdAt).toLocaleString()}\n`;
@@ -55,7 +55,6 @@ function generateReceiptText(order: any, shopName: string): string {
   const tableStr = order.tableNumber ? ` - ${order.tableNumber}` : '';
   text += `Type: ${orderTypeStr}${tableStr}\n`;
   
-  // ITEMS TABLE
   text += '-'.repeat(MAX_LEN) + '\n';
   text += `${padRight('Qty', 4)}${padRight('Item', 20)}${padLeft('Total', 8)}\n`;
   text += '-'.repeat(MAX_LEN) + '\n';
@@ -72,14 +71,17 @@ function generateReceiptText(order: any, shopName: string): string {
        let mods = [];
        if (item.customization.size && item.customization.size !== 'Default') mods.push(item.customization.size);
        
-       // --- PHASE 1: RECEIPT LOGIC UPDATED ---
        if (item.customization.sugar) mods.push(`${item.customization.sugar}% sug`);
-       // Note: We skip printing ice since it is always "Normal" now
-       if (item.customization.topping && item.customization.topping !== 'None' && item.customization.topping !== '') mods.push(`+ ${item.customization.topping}`);
+       
+       // --- PHASE 1: DYNAMIC MULTIPLE TOPPING RECEIPT LOGIC ---
+       if (item.customization.toppings && Array.isArray(item.customization.toppings)) {
+         item.customization.toppings.forEach((t: any) => {
+           if (t.qty > 0) mods.push(`+ ${t.qty}x ${t.name}`);
+         });
+       }
        
        if (mods.length > 0) {
          const modsStr = mods.join(', ');
-         // Split into chunks if too long, indented by 4 spaces
          const chunks = modsStr.match(/.{1,28}(\s|$)/g) || [modsStr];
          chunks.forEach(chunk => {
            text += `    ${chunk.trim()}\n`;
@@ -88,7 +90,6 @@ function generateReceiptText(order: any, shopName: string): string {
     }
   });
   
-  // TOTALS
   text += '-'.repeat(MAX_LEN) + '\n';
   text += `${padRight('Subtotal:', 24)}${padLeft('$' + order.subtotal.toFixed(2), 8)}\n`;
   if (order.discount > 0) {
@@ -106,7 +107,6 @@ function generateReceiptText(order: any, shopName: string): string {
     text += `${padRight('Change:', 24)}${padLeft('$' + (order.changeAmount || 0).toFixed(2), 8)}\n`;
   }
   
-  // FOOTER
   text += '-'.repeat(MAX_LEN) + '\n';
   text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
   text += center('Thank you for your visit!', MAX_LEN) + '\n';
@@ -116,7 +116,7 @@ function generateReceiptText(order: any, shopName: string): string {
   return text;
 }
 
-export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl, qrImage }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string, qrImage?: string | null }) {
+export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl, qrImage, toppings = [] }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string, qrImage?: string | null, toppings?: Topping[] }) {
   const router = useRouter();
   
   const [menuLoading, setMenuLoading] = useState(true);
@@ -124,7 +124,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
   
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  // Offline Sync State
   const [pendingSyncCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false); 
@@ -403,8 +402,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
         } catch (printErr) {
           console.error("🖨️ Failed to send print job:", printErr);
         }
-      } else {
-        console.warn("🖨️ Printer URL not set for this shop, skipping automatic print.");
       }
 
       if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
@@ -420,10 +417,11 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
   return (
     <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative min-w-0">
 
-      {/* POPUP MODAL */}
+      {/* POPUP MODAL WITH DYNAMIC TOPPINGS */}
       {selectedModalProduct && (
         <PosCustomizationModal 
           product={selectedModalProduct} 
+          toppings={toppings} 
           onClose={() => setSelectedModalProduct(null)} 
           onAdd={handleAddToBilling} 
         />
@@ -447,7 +445,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
               <span className="hidden sm:inline-block">Test Print</span>
             </button>
             
-            {/* OFFLINE SYNC INDICATOR */}
             {pendingSyncCount > 0 && (
               <div 
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 ${isSyncing ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}

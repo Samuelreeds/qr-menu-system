@@ -15,7 +15,8 @@ import {
   updateShopIdentity, updateShopBranding, updateShopSocials, 
   addBanner, deleteBanner, reorderBanners, toggleProductSoldOut,
   getTeamMembers, createTeamMember, updateTeamMemberRole, deleteTeamMember,
-  getUserActivity
+  getUserActivity,
+  createTopping, updateTopping, deleteTopping
 } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { updateCategoryOrders } from '@/lib/category-order-actions'; 
@@ -26,7 +27,7 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users
+  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users, Layers
 } from 'lucide-react';
 
 import LazyImage from "@/components/ui/LazyImage";
@@ -47,6 +48,9 @@ export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; }
 
+// --- UPDATED TOPPING INTERFACE ---
+export interface Topping { id: string; name: string; price: number; isDrink: boolean; }
+
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
@@ -57,7 +61,7 @@ const getDisplayPrice = (product: Product) => {
   return product.price || 0;
 };
 
-interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; }
+interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; toppings?: Topping[]; }
 
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string } | { type: 'set'; payload: T[] };
 type OptimisticBannerAction = | { type: 'add'; payload: Banner } | { type: 'delete'; payload: string } | { type: 'set'; payload: Banner[] };
@@ -65,8 +69,9 @@ interface PendingDelete { productId: string; productSnapshot: Product; name: str
 
 const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
 
-export default function AdminDashboard({ shopId, categories, products: initialProducts, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [], ingredients = [], stockLogs = [] }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos' | 'team'>(featPos ? 'overview' : 'menu');
+export default function AdminDashboard({ shopId, categories, products: initialProducts, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [], ingredients = [], stockLogs = [], toppings = [] }: AdminDashboardProps) {
+  
+  const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'toppings' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos' | 'team'>(featPos ? 'overview' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
   const [isCatFormOpen, setIsCatFormOpen] = useState(false); 
@@ -94,6 +99,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
 
+  const [isToppingFormOpen, setIsToppingFormOpen] = useState(false);
+  const [editingTopping, setEditingTopping] = useState<Topping | null>(null);
+
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
   
   const [productVariants, setProductVariants] = useState<{name: string, price: number | string}[]>([{name: 'Default', price: ''}]);
@@ -112,7 +120,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [phone, setPhone] = useState(settings?.phone || '');
   const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); 
   
-  // --- QR STATE ---
   const qrInputRef = useRef<HTMLInputElement>(null);
   const [qrImagePreview, setQrImagePreview] = useState(settings?.qrImage || '');
   const [qrFileBlob, setQrFileBlob] = useState<Blob | null>(null);
@@ -124,7 +131,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [tgNewOrderTopicId, setTgNewOrderTopicId] = useState(newOrderTopicId || '');
   const [isTestingTg, setIsTestingTg] = useState(false);
 
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean; type: 'product' | 'category' | null; id: string | null; name: string | null; actionFormData: FormData | null;}>({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean; type: 'product' | 'category' | 'topping' | null; id: string | null; name: string | null; actionFormData: FormData | null;}>({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const pendingDeleteRef = useRef<PendingDelete | null>(null);
 
@@ -142,7 +149,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
-  // Click-Outside Refs & Logic
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileMenuBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -208,6 +214,15 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   });
   
   const [optBanners, dispatchOptBanners] = useOptimistic(banners, (state: Banner[], action: OptimisticBannerAction) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(b => b.id !== action.payload); case 'set': return action.payload; default: return state; } });
+
+  const [optToppings, dispatchOptToppings] = useOptimistic(toppings, (state: Topping[], action: OptimisticAction<Topping>) => { 
+    switch (action.type) { 
+      case 'add': return [...state, action.payload].sort((a, b) => a.name.localeCompare(b.name)); 
+      case 'update': return state.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => a.name.localeCompare(b.name)); 
+      case 'delete': return state.filter(t => t.id !== action.payload); 
+      default: return state; 
+    } 
+  });
 
   const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | 'qr' | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
@@ -325,10 +340,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       });
     }
   }, [activeTab]);
-
-  useEffect(() => { 
-    if (!editingCategory && isCatFormOpen) { } 
-  }, [editingCategory, isCatFormOpen]);
 
   const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
   const getPreviewScale = () => { if (previewFormat === 'portrait') return paperSize === 'A4' ? 'scale(0.28)' : paperSize === 'A5' ? 'scale(0.24)' : 'scale(0.22)'; return paperSize === 'A4' ? 'scale(0.3)' : paperSize === 'A5' ? 'scale(0.26)' : 'scale(0.24)'; };
@@ -539,7 +550,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const handleNextDesign = (e?: React.MouseEvent) => { if (e) e.stopPropagation(); const idx = allDesigns.indexOf(headerDesign); setHeaderDesign(allDesigns[(idx + 1) % allDesigns.length]); markDirty('branding'); };
   
   const filteredProducts = optProducts.filter(p => (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) && p.id !== pendingDelete?.productId);
-  const confirmDelete = (type: 'product' | 'category', id: string, name: string, fd: FormData) => { setDeleteConfirmation({ isOpen: true, type, id, name, actionFormData: fd }); };
+  const confirmDelete = (type: 'product' | 'category' | 'topping', id: string, name: string, fd: FormData) => { setDeleteConfirmation({ isOpen: true, type, id, name, actionFormData: fd }); };
   
   const handleConfirmDeleteAction = () => { 
     if (!deleteConfirmation.actionFormData || !deleteConfirmation.type || !deleteConfirmation.id) return; 
@@ -599,7 +610,19 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         }
       }); 
       return; 
-    } 
+    } else if (type === 'topping') {
+      setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
+      startTransition(async () => { 
+        dispatchOptToppings({ type: 'delete', payload: id });
+        try {
+          await deleteTopping(fd); 
+          showToast("Topping deleted"); 
+        } catch(e) {
+          showToast("Failed to delete topping");
+        }
+      }); 
+      return;
+    }
     setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); 
   };
 
@@ -808,6 +831,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 
                 <NavItem id="menu" icon={LayoutGrid} label="Menu" />
                 <NavItem id="categories" icon={List} label="Categories" />
+                <NavItem id="toppings" icon={Layers} label="Toppings" />
                 {featPos && <NavItem id="inventory" icon={Package} label="Inventory" />}
                 {featPos && <NavItem id="team" icon={Users} label="Staff & Team" />}
                 <NavItem id="settings" icon={Settings} label="Settings" />
@@ -973,8 +997,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                   userEmail={userEmail} 
                   userRole={userRole} 
                   shopName={settings?.name || "Shop"} 
-                  printerUrl={printerUrl}
-                  qrImage={settings?.qrImage || null}
+                  printerUrl={printerUrl} 
+                  toppings={optToppings} 
                 />
               </OrderProvider>
             </ToastProvider>
@@ -1113,7 +1137,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
         )}
 
-        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && (
+        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && activeTab !== 'toppings' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4 print:hidden">
              <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
              <div className="flex w-full sm:w-auto gap-3">
@@ -1123,7 +1147,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </header>
         )}
 
-        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && !isGuideComplete && !dismissGuide && (
+        {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && activeTab !== 'toppings' && !isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4 print:hidden min-w-0">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
             <div className="flex justify-between items-start mb-4">
@@ -1276,6 +1300,64 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 />
              )}
             <button onClick={() => setIsCatFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"><Plus size={24} strokeWidth={3} /></button>
+           </div>
+        )}
+
+        {/* --- TOPPINGS TAB UI --- */}
+        {isAdmin && (
+           <div className={`${activeTab === 'toppings' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
+             <div className="flex justify-between items-center gap-4 mb-6">
+                 <div>
+                   <h3 className="font-bold text-gray-900 text-xl sm:text-2xl hidden sm:block">Manage Toppings</h3>
+                   <p className="text-sm text-gray-500 mt-1 hidden sm:block">Create toppings that cashiers can add to drinks or food during checkout.</p>
+                 </div>
+                <button onClick={() => setIsToppingFormOpen(true)} className={`hidden lg:flex ml-auto shrink-0 bg-gray-900 text-white hover:bg-gray-800 px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}>
+                  <Plus size={18} strokeWidth={3}/> Add Topping
+                </button>
+             </div>
+             
+             {optToppings.length === 0 ? (
+                <div className="py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No toppings created yet</div>
+             ) : (
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                        <th className="p-5">Topping Name</th>
+                        <th className="p-5">Type</th>
+                        <th className="p-5">Extra Price</th>
+                        <th className="p-5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {optToppings.map(topping => (
+                        <tr key={topping.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-5 font-bold text-gray-900">{topping.name}</td>
+                          <td className="p-5">
+                            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md ${topping.isDrink ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-orange-50 text-orange-600 border border-orange-200'}`}>
+                              {topping.isDrink ? 'Drink' : 'Food'}
+                            </span>
+                          </td>
+                          <td className="p-5 font-bold text-gray-600">
+                            {topping.price > 0 ? `+$${topping.price.toFixed(2)}` : 'Free'}
+                          </td>
+                          <td className="p-5 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button onClick={() => { setEditingTopping(topping); setIsToppingFormOpen(true); }} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95"><Pencil size={18} /></button>
+                              <button onClick={() => {
+                                 const fd = new FormData();
+                                 fd.append('id', topping.id);
+                                 confirmDelete('topping', topping.id, topping.name, fd);
+                              }} className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95"><Trash2 size={18} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+             )}
+            <button onClick={() => setIsToppingFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"><Plus size={24} strokeWidth={3} /></button>
            </div>
         )}
 
@@ -1524,6 +1606,69 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
       </main>
 
+      {/* --- ADDED TOPPING FORM MODAL --- */}
+      {(isToppingFormOpen || editingTopping) && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }}>
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-6">
+               <h2 className="text-2xl font-bold">{editingTopping ? "Edit Topping" : "Add Topping"}</h2>
+               <button type="button" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
+             </div>
+             <form action={(fd) => {
+               const name = fd.get("name") as string;
+               const price = parseFloat(fd.get("price") as string) || 0;
+               const isDrink = fd.get("isDrink") === 'true'; // <--- NEW
+
+               if (editingTopping) {
+                 const id = editingTopping.id;
+                 fd.append("id", id);
+                 setIsToppingFormOpen(false);
+                 setEditingTopping(null);
+                 startTransition(async () => { 
+                   dispatchOptToppings({ type: 'update', payload: { ...editingTopping, name, price, isDrink } as Topping });
+                   try {
+                     await updateTopping(fd); 
+                     showToast("Topping updated!"); 
+                   } catch (e) {
+                     showToast("Failed to update topping.");
+                   }
+                 });
+               } else {
+                 setIsToppingFormOpen(false);
+                 startTransition(async () => { 
+                   dispatchOptToppings({ type: 'add', payload: { id: `temp-${Date.now()}`, name, price, isDrink } as Topping });
+                   try {
+                     await createTopping(fd); 
+                     showToast("Topping created!"); 
+                   } catch (e) {
+                     showToast("Failed to create topping.");
+                   }
+                 });
+               }
+             }} className="space-y-4">
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Topping Name</label>
+                 <input type="text" name="name" defaultValue={editingTopping?.name} placeholder="e.g. Pearl" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Extra Price ($)</label>
+                 <input type="number" step="0.01" min="0" name="price" defaultValue={editingTopping?.price || ''} placeholder="0.50" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
+               </div>
+               {/* --- ADDED TOGGLE FOR DRINK VS FOOD --- */}
+               <div className="pt-2">
+                 <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
+                   <input type="checkbox" name="isDrink" value="true" defaultChecked={editingTopping ? editingTopping.isDrink : true} className="w-4 h-4 cursor-pointer accent-gray-900"/> Available for Drinks (Uncheck for Food)
+                 </label>
+               </div>
+               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
+                 <button type="button" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
+                 <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button>
+               </div>
+             </form>
+          </div>
+        </div>
+      )}
+
       {isTeamFormOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }}>
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -1598,7 +1743,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
       {deleteConfirmation.isOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-5"><Trash2 size={24} className="text-red-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Delete {deleteConfirmation.type === 'product' ? 'Product' : 'Category'}?</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">Are you sure you want to delete <span className="font-semibold text-gray-700">"{deleteConfirmation.name}"</span>? This action cannot be undone after confirmation.</p><div className="flex gap-3 w-full"><button onClick={() => setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null })} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">Cancel</button><button onClick={handleConfirmDeleteAction} className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">Confirm</button></div></div>
+          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-5"><Trash2 size={24} className="text-red-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Delete {deleteConfirmation.type === 'product' ? 'Product' : deleteConfirmation.type === 'topping' ? 'Topping' : 'Category'}?</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">Are you sure you want to delete <span className="font-semibold text-gray-700">"{deleteConfirmation.name}"</span>? This action cannot be undone after confirmation.</p><div className="flex gap-3 w-full"><button onClick={() => setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null })} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">Cancel</button><button onClick={handleConfirmDeleteAction} className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">Confirm</button></div></div>
         </div>
       )}
 
