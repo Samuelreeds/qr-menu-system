@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useOptimistic, startTransition, useMemo } 
 import { signOut } from "next-auth/react"; 
 import Cropper from 'react-easy-crop'; 
 import getCroppedImg from '@/lib/cropImage'; 
-import { arrayMove } from '@dnd-kit/sortable'; // ADDED DND KIT
+import { arrayMove } from '@dnd-kit/sortable';
 
 import { 
   createProduct, deleteProduct, updateProduct, 
@@ -18,7 +18,7 @@ import {
   getUserActivity
 } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
-import { updateCategoryOrders } from '@/lib/category-order-actions'; // ADDED NEW ACTION
+import { updateCategoryOrders } from '@/lib/category-order-actions'; 
 
 import { 
   Plus, X, Trash2, UploadCloud, CheckCircle, AlertTriangle,
@@ -36,7 +36,7 @@ import OrderHistoryCard from "@/features/pos/OrderHistoryCard";
 import DashboardOverview from "@/features/pos/DashboardOverview";
 import InventoryManager from "@/components/shared/InventoryManager";
 import PosReceipt from "@/components/shared/PosReceipt"; 
-import CategorySortableList from "@/features/admin/components/CategorySortableList"; // ADDED DND LIST
+import CategorySortableList from "@/features/admin/components/CategorySortableList"; 
 
 import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
@@ -45,7 +45,7 @@ export interface Category { id: string; name: string; name_kh?: string | null; n
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
 export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
-export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; }
+export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
@@ -59,7 +59,6 @@ const getDisplayPrice = (product: Product) => {
 
 interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; }
 
-// UPDATED OptimisticAction to support 'set' operations for array reordering
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string } | { type: 'set'; payload: T[] };
 type OptimisticBannerAction = | { type: 'add'; payload: Banner } | { type: 'delete'; payload: string } | { type: 'set'; payload: Banner[] };
 interface PendingDelete { productId: string; productSnapshot: Product; name: string; actionFormData: FormData; timeoutId: NodeJS.Timeout; intervalId: NodeJS.Timeout; expiresAt: number; timeLeft: number; }
@@ -77,14 +76,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null); 
 
-  // Team State
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isTeamLoading, setIsTeamLoading] = useState(false);
   const [isTeamFormOpen, setIsTeamFormOpen] = useState(false);
   const [editingTeamMember, setEditingTeamMember] = useState<any>(null);
   const hasFetchedTeam = useRef(false);
 
-  // User Activity View State
   const [activityUser, setActivityUser] = useState<any>(null);
   const [userActivityData, setUserActivityData] = useState<any>(null);
   const [isActivityLoading, setIsActivityLoading] = useState(false);
@@ -114,6 +111,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [address, setAddress] = useState(settings?.address || '');
   const [phone, setPhone] = useState(settings?.phone || '');
   const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); 
+  
+  // --- QR STATE ---
+  const qrInputRef = useRef<HTMLInputElement>(null);
+  const [qrImagePreview, setQrImagePreview] = useState(settings?.qrImage || '');
+  const [qrFileBlob, setQrFileBlob] = useState<Blob | null>(null);
+  const [removeQr, setRemoveQr] = useState(false);
 
   const [isStaffEnabled, setIsStaffEnabled] = useState(callStaffEnabled);
   const [tgChatId, setTgChatId] = useState(telegramChatId || '');
@@ -137,45 +140,32 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [isSaving, setIsSaving] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Sidebar Collapse State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
-  // --- NEW: Click-Outside Refs & Logic ---
+  // Click-Outside Refs & Logic
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileMenuBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node;
-
-      // Ensure the refs are attached and the click was outside BOTH the sidebar and the mobile toggle button
       if (
         sidebarRef.current && 
         !sidebarRef.current.contains(target) &&
         mobileMenuBtnRef.current && 
         !mobileMenuBtnRef.current.contains(target)
       ) {
-        // 1. Close mobile menu if it's open
-        if (isMobileMenuOpen) {
-          setIsMobileMenuOpen(false);
-        }
-        // 2. Collapse desktop sidebar if it's expanded
-        if (!isSidebarCollapsed) {
-          setIsSidebarCollapsed(true);
-        }
+        if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+        if (!isSidebarCollapsed) setIsSidebarCollapsed(true);
       }
     };
-
-    // Listen for both mouse clicks and mobile touches
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [isMobileMenuOpen, isSidebarCollapsed]);
-  // --- END NEW LOGIC ---
 
   const [openSection, setOpenSection] = useState<string | null>('identity');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
@@ -219,7 +209,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const [optBanners, dispatchOptBanners] = useOptimistic(banners, (state: Banner[], action: OptimisticBannerAction) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(b => b.id !== action.payload); case 'set': return action.payload; default: return state; } });
 
-  const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | null>(null);
+  const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | 'qr' | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -252,7 +242,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const isNoBg = logoType === 'withoutBackground';
   const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN' || userRole === 'admin';
 
-  // Auto-collapse on tablet
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1280) {
@@ -338,9 +327,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   }, [activeTab]);
 
   useEffect(() => { 
-    if (!editingCategory && isCatFormOpen) { 
-      // Reset logic implicitly happens because we don't bind state to variables anymore for the form inputs
-    } 
+    if (!editingCategory && isCatFormOpen) { } 
   }, [editingCategory, isCatFormOpen]);
 
   const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
@@ -365,7 +352,23 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const handleTabClick = (tab: any) => { if (activeTab === tab) return; if (activeTab === 'settings' && openSection && dirtySections[openSection]) { setPendingNav({ type: 'tab', payload: tab, source: openSection }); } else { executeNav('tab', tab); } };
   const handleSectionClick = (section: string) => { if (openSection && dirtySections[openSection]) { setPendingNav({ type: 'section', payload: openSection === section ? null : section, source: openSection }); } else { executeNav('section', section); } };
   
-  const discardChanges = (source: string) => { if (source === 'identity') { setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); setPhone(settings?.phone || ''); setPrinterUrl(settings?.printerUrl || ''); const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); setIs24Hours(settings?.is24Hours || false); } else if (source === 'branding') { setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); } else if (source === 'socials') { try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } } else if (source === 'notifications') { setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); } };
+  const discardChanges = (source: string) => { 
+    if (source === 'identity') { 
+      setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); 
+      setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); 
+      setPhone(settings?.phone || ''); setPrinterUrl(settings?.printerUrl || ''); 
+      const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); 
+      setIs24Hours(settings?.is24Hours || false); 
+      setQrImagePreview(settings?.qrImage || ''); setQrFileBlob(null); setRemoveQr(false);
+    } else if (source === 'branding') { 
+      setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); 
+      setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); 
+    } else if (source === 'socials') { 
+      try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } 
+    } else if (source === 'notifications') { 
+      setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); 
+    } 
+  };
   
   const saveIdentityForm = async () => { 
     const fd = new FormData(); 
@@ -379,6 +382,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (!is24Hours) {
        fd.set('openingHours', `${openTime} - ${closeTime}`); 
     }
+    if (qrFileBlob) fd.set('qrImage', qrFileBlob, 'qr.webp');
+    if (removeQr) fd.set('removeQr', 'true');
+
     try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information."); return false; } 
   };
   
@@ -386,12 +392,21 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const saveSocialsForm = async () => { const fd = new FormData(); fd.set('socials', JSON.stringify(socialLinks)); try { const res = await updateShopSocials(fd); if (res?.error) { showToast(res.error); return false; } return true; } catch (e) { showToast("Error saving socials."); return false; } };
   const saveNotificationsForm = async () => { try { const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId); if (!res.success) { showToast(res.message || "Error saving"); return false; } return true; } catch (e) { return false; } };
   const handleTestTelegram = async (type: 'General' | 'Staff Call' | 'New Order', specificTopicId?: string) => { if (!tgChatId.trim()) { showToast("Please enter a Chat ID first."); return; } setIsTestingTg(true); const res = await sendTestTelegramNotification(shopId, tgChatId, settings?.name || 'Your Shop', specificTopicId, type); showToast(res.message || (res.success ? "Test message sent!" : "Failed to send message.")); setIsTestingTg(false); };
-  const onIdentitySubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name."); return; } clearDirty('identity'); showToast("Basic information saved!"); startTransition(async () => { await saveIdentityForm(); }); };
+  
+  const onIdentitySubmit = (e?: React.FormEvent) => { 
+    if (e) e.preventDefault(); 
+    if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name."); return; } 
+    clearDirty('identity'); showToast("Basic information saved!"); 
+    startTransition(async () => { 
+      await saveIdentityForm(); 
+      setQrFileBlob(null); setRemoveQr(false);
+    }); 
+  };
+
   const onBrandingSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); if (isCurrentDesignLocked) return; clearDirty('branding'); setIsDirtyLogo(false); showToast("Branding updated!"); startTransition(async () => { await saveBrandingForm(); setLogoFileBlob(null); }); };
   const onSocialsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); };
   const onNotificationsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!"); startTransition(async () => { await saveNotificationsForm(); }); };
   
-  // DND Handlers for Banners
   const handleMoveBanner = async (index: number, direction: number) => { 
     if (index + direction < 0 || index + direction >= optBanners.length) return; 
     const newBanners = [...optBanners].sort((a,b) => a.sortOrder - b.sortOrder); 
@@ -434,7 +449,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     }); 
   };
 
-  // DND Handlers for Categories
   const handleReorderCategories = (activeId: string, overId: string) => {
     const oldIndex = sortedCategories.findIndex(c => c.id === activeId);
     const newIndex = sortedCategories.findIndex(c => c.id === overId);
@@ -457,7 +471,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     }
   };
   
-  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner') => { 
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'logo' | 'product' | 'banner' | 'qr') => { 
     if (e.target.files && e.target.files.length > 0) { 
       const file = e.target.files[0]; 
       const objectUrl = URL.createObjectURL(file);
@@ -496,7 +510,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           const tempId = `temp-${Date.now()}`; 
           const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1; 
 
-          // Full Optimistic Banner Add
           startTransition(async () => { 
             dispatchOptBanners({ type: 'add', payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } }); 
             const res = await addBanner(fd); 
@@ -506,6 +519,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
               showToast("Banner added!"); 
             } 
           }); 
+        } else if (currentTarget === 'qr') { 
+          setQrFileBlob(croppedBlob); 
+          setQrImagePreview(objectUrl); 
+          setRemoveQr(false);
+          markDirty('identity'); 
         } 
       } 
     } catch (e) { console.error(e); } 
@@ -556,7 +574,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       const timeoutId = setTimeout(() => { 
         if (pendingDeleteRef.current?.productId === id) { 
           clearInterval(pendingDeleteRef.current.intervalId); 
-          // Unified transition for deletion
           startTransition(async () => { 
             dispatchOptProducts({ type: 'delete', payload: id });
             await deleteProduct(fd); 
@@ -572,7 +589,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       
     } else if (type === 'category') { 
       setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
-      // Unified transition for category deletion
       startTransition(async () => { 
         dispatchOptCategories({ type: 'delete', payload: id });
         try {
@@ -705,7 +721,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   return (
     <div className={`flex min-h-[100dvh] bg-[#F9FAFB] font-sans text-gray-800 relative`} style={{ '--theme-color': settings?.themeColor || '#000000' } as React.CSSProperties}>
       
-      {/* INVISIBLE RECEIPT FOR HISTORICAL PRINTING */}
       {receiptToPrint && (
         <>
           <style>{`
@@ -723,7 +738,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         </>
       )}
 
-      {/* Pending Delete Undo Toast */}
       {pendingDelete && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] w-[90vw] max-w-sm bg-gray-900 shadow-2xl p-2 rounded-2xl flex flex-row items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300 print:hidden">
           <div className="flex items-center flex-1 min-w-0 overflow-hidden pl-2"><span className="text-sm text-gray-300 truncate w-full flex items-center gap-2"><span>Deleted <span className="font-bold text-white">"{pendingDelete.name}"</span></span></span></div>
@@ -745,7 +759,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
       <aside ref={sidebarRef} className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:static flex-shrink-0 flex flex-col ${isMobileMenuOpen ? 'translate-x-0 w-64' : `-translate-x-full lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`} print:hidden`}>
         
-        {/* Toggle Button for Desktop */}
         <button 
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           className="hidden lg:flex absolute -right-4 top-8 w-8 h-8 bg-gray-900 text-white border-2 border-white rounded-full items-center justify-center shadow-md hover:bg-gray-800 hover:scale-110 z-50 transition-all active:scale-95 cursor-pointer ring-4 ring-white"
@@ -821,7 +834,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden print:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      {/* USER ACTIVITY MODAL */}
       {activityUser && (
         <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm p-4 flex justify-center items-center">
           <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95">
@@ -944,14 +956,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
         )}
 
-        {/* OVERVIEW */}
         {featPos && (
           <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}>
             <DashboardOverview orders={orders} products={optProducts} />
           </div>
         )}
 
-        {/* POS */}
         {featPos && (
           <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}>
             <ToastProvider>
@@ -963,14 +973,14 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                   userEmail={userEmail} 
                   userRole={userRole} 
                   shopName={settings?.name || "Shop"} 
-                  printerUrl={printerUrl} // Dynamic URL passed
+                  printerUrl={printerUrl}
+                  qrImage={settings?.qrImage || null}
                 />
               </OrderProvider>
             </ToastProvider>
           </div>
         )}
 
-        {/* ORDERS */}
         {featPos && (
            <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}>
               <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -979,7 +989,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                   <p className="text-sm text-gray-500 mt-1">Review past transactions generated from the POS.</p>
                 </div>
                 
-                {/* Quick Filters */}
                 <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 w-full sm:w-auto overflow-x-auto no-scrollbar [-webkit-overflow-scrolling:touch]">
                   {['All', 'Today', 'Completed', 'Cancelled'].map(f => (
                     <button 
@@ -1007,7 +1016,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                     key={order.id} 
                     order={order} 
                     shopName={settings?.name || "Shop"} 
-                    printerUrl={printerUrl} // Dynamic URL passed
+                    printerUrl={printerUrl} 
                   />
                 ))}
                 
@@ -1029,14 +1038,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
            </div>
         )}
 
-        {/* INVENTORY */}
         {isAdmin && featPos && (
            <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}>
              <InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} />
            </div>
         )}
 
-        {/* TEAM TAB */}
         {isAdmin && featPos && (
           <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1106,7 +1113,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
         )}
 
-        {/* Shared Header for standard tabs */}
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4 print:hidden">
              <h2 className="text-2xl font-bold capitalize hidden sm:block">{activeTab}</h2>
@@ -1117,7 +1123,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </header>
         )}
 
-        {/* Onboarding Guide */}
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && !isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4 print:hidden min-w-0">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
@@ -1133,7 +1138,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
         )}
 
-        {/* MENU TAB */}
         {isAdmin && (
            <div className={`${activeTab === 'menu' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
@@ -1245,7 +1249,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
            </div>
         )}
 
-        {/* CATEGORIES TAB WITH NEW SORTABLE DND UX */}
         {isAdmin && (
            <div className={`${activeTab === 'categories' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
              <div className="flex justify-between items-center gap-4 mb-6">
@@ -1276,14 +1279,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
            </div>
         )}
 
-        {/* TABLES & QR TAB */}
         {!isFreePlan && (
            <div className={`${activeTab === 'tables' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden`}>
              <TableManager shopId={shopId} shopSlug={shopSlug} />
            </div>
         )}
 
-        {/* SETTINGS TAB */}
         {isAdmin && (
           <div className={`${activeTab === 'settings' ? 'block animate-in slide-in-from-right-4 duration-300' : 'hidden'} max-w-2xl mx-auto space-y-6 pb-12 print:hidden`}>
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1336,6 +1337,37 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                       <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
                     </div>
                   </div>
+                  
+                  <hr className="border-gray-100" />
+                  <div>
+                     <div className="mb-4">
+                       <h4 className="text-sm font-semibold text-gray-800">Shop Payment QR</h4>
+                       <p className="text-xs text-gray-500 mt-1">Upload your bank or payment QR code so customers can easily scan to pay.</p>
+                     </div>
+                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <div 
+                          onClick={() => qrInputRef.current?.click()}
+                          className={`w-32 h-32 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all overflow-hidden relative group shrink-0 ${qrImagePreview ? 'border-gray-200 bg-white' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
+                        >
+                          {qrImagePreview ? (
+                            <>
+                              <LazyImage src={qrImagePreview} alt="QR Code" className="w-full h-full object-contain p-2" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><span className="text-white text-xs font-bold">Change</span></div>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-gray-400 gap-1.5"><UploadCloud size={24} strokeWidth={1.5} /><span className="text-[10px] font-bold uppercase tracking-wider">Upload QR</span></div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                           <button type="button" onClick={() => qrInputRef.current?.click()} className="text-[16px] md:text-sm font-semibold bg-white border border-gray-300 px-4 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 transition-all text-gray-700 w-max">Choose Image</button>
+                           {qrImagePreview && (
+                             <button type="button" onClick={() => { setQrImagePreview(''); setQrFileBlob(null); setRemoveQr(true); markDirty('identity'); }} className="text-[16px] md:text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2.5 rounded-xl transition-all w-max">Remove QR</button>
+                           )}
+                        </div>
+                     </div>
+                     <input type="file" accept="image/*" ref={qrInputRef} onChange={(e) => onFileSelect(e, 'qr')} className="hidden" />
+                  </div>
+
                   <div className="flex justify-end pt-4 border-t border-gray-100">
                      <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
                   </div>
@@ -1492,7 +1524,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
       </main>
 
-      {/* TEAM MODAL */}
       {isTeamFormOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }}>
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -1559,7 +1590,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         </div>
       )}
 
-      {/* PENDING NAV & DELETE WARNING MODALS */}
       {pendingNav && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-5"><AlertTriangle size={24} className="text-orange-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Unsaved Changes</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">You have unsaved changes in this section. Do you want to save them before leaving?</p><div className="flex gap-3 w-full"><button onClick={() => { discardChanges(pendingNav.source); clearDirty(pendingNav.source); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); }} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">No, Discard</button><button onClick={async () => { setIsSaving(true); let success = false; if (pendingNav.source === 'identity') success = await saveIdentityForm(); else if (pendingNav.source === 'branding') success = await saveBrandingForm(); else if (pendingNav.source === 'socials') success = await saveSocialsForm(); else if (pendingNav.source === 'notifications') success = await saveNotificationsForm(); setIsSaving(false); if (success) { clearDirty(pendingNav.source); if (pendingNav.source === 'branding') setLogoFileBlob(null); showToast("Changes saved!"); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); } }} className="flex-1 py-3.5 px-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">{isSaving ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Save'}</button></div></div>
@@ -1584,7 +1614,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
          </div>
       )}
 
-      {/* STANDARD PRODUCT FORM MODAL */}
       {(isFormOpen || editingProduct) && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto print:hidden" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
           <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl p-6 sm:p-8 md:p-10 my-auto max-h-[90vh] overflow-y-auto no-scrollbar relative flex flex-col" onClick={e => e.stopPropagation()}>
@@ -1595,7 +1624,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
              
              <form onSubmit={handleSaveProduct} className="space-y-5 md:space-y-6 flex-1 overflow-y-auto no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 
-                {/* IMAGE UPLOAD */}
                 <div 
                   onClick={() => productInputRef.current?.click()}
                   className="w-full h-36 md:h-48 border-2 border-dashed border-gray-200 rounded-[24px] flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 transition-colors overflow-hidden relative group bg-gray-50/30 shrink-0"
@@ -1614,7 +1642,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 </div>
                 <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
 
-                {/* PRODUCT NAME */}
                 <div>
                    <div className="flex justify-between items-center mb-2">
                      <label className="block text-xs md:text-sm font-extrabold text-gray-500">Product Name</label>
@@ -1626,7 +1653,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    )}
                 </div>
 
-                {/* SIZES & PRICING */}
                 <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
                    <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-3 md:mb-4">Sizes & Pricing</h3>
                    {productVariants.map((v, idx) => (
@@ -1641,7 +1667,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Size</button>
                 </div>
 
-                {/* DISCOUNT & CATEGORY */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                    <div>
                      <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Discount (%)</label>
@@ -1655,7 +1680,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    </div>
                 </div>
 
-                {/* PREP TIME */}
                 <div>
                    <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Preparation Time</label>
                    <div className="relative">
@@ -1664,7 +1688,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    </div>
                 </div>
 
-                {/* RECIPE MAPPING (Styled to match the rest) */}
                 <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
                    <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-1.5">Recipe Mapping</h3>
                    <p className="text-[11px] md:text-xs text-gray-500 mb-4 font-medium">Auto-deduct inventory stock</p>
@@ -1676,14 +1699,13 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                       </select>
                       <div className="flex w-full sm:w-auto gap-3">
                          <input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-full sm:w-24 md:w-32 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
-                         <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-500 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>
+                         <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-50 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>
                       </div>
                     </div>
                    ))}
                    <button type="button" onClick={addRecipeItem} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Ingredient</button>
                 </div>
 
-                {/* HOT SALE TOGGLE */}
                 <div className="p-5 md:p-6 bg-orange-50/50 border border-orange-100 rounded-[24px] flex justify-between items-center mt-4">
                    <div>
                      <h4 className="font-extrabold text-orange-600 text-sm md:text-base">Hot Sale Item</h4>
@@ -1695,20 +1717,17 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                    </label>
                 </div>
 
-                {/* AVAILABLE TOGGLE */}
                 <div className="p-5 md:p-6 bg-emerald-50/50 border border-emerald-100 rounded-[24px] flex justify-between items-center mt-3 mb-1">
                    <div>
                      <h4 className="font-extrabold text-emerald-600 text-sm md:text-base tracking-wide">AVAILABLE</h4>
                    </div>
                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      {/* Note: Inverted logic because 'isSoldOut' is the internal state */}
                       <input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer" />
                       <div className="w-12 h-7 md:w-14 md:h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-emerald-500"></div>
                    </label>
                 </div>
                 <p className="text-[11px] md:text-xs text-gray-400 font-medium px-2 mb-8">Toggle to mark item as currently unavailable.</p>
 
-                {/* BUTTONS */}
                 <div className="flex flex-col gap-3 sm:gap-4 pt-4 shrink-0">
                    <button type="submit" disabled={isSaving} className="w-full py-4 sm:py-5 bg-[#111827] text-white rounded-[20px] font-extrabold text-sm md:text-base active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                      {isSaving && <Loader2 size={20} className="animate-spin"/>} {editingProduct ? "Update Product" : "Create Product"}
@@ -1735,7 +1754,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         </div>
       )}
 
-      {/* CATEGORY FORM MODAL */}
       {(isCatFormOpen || editingCategory) && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -1750,7 +1768,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                if (editingCategory) {
                  const id = editingCategory.id;
                  fd.append("id", id);
-                 // Preserve original sortOrder when editing via standard form
                  fd.append("sortOrder", (editingCategory.sortOrder || 1).toString());
                  setIsCatFormOpen(false);
                  setEditingCategory(null);
@@ -1765,7 +1782,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                  });
                } else {
                  setIsCatFormOpen(false);
-                 // Auto-calculate sortOrder for brand new categories (put at the end)
                  const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0;
                  const newSortOrder = maxSort + 1;
                  fd.append("sortOrder", newSortOrder.toString());
@@ -1785,7 +1801,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category Name</label>
                  <input type="text" name="name" defaultValue={editingCategory?.name} placeholder="e.g. Coffee" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
                </div>
-               {/* SORT ORDER INPUT HAS BEEN REMOVED FOR BETTER UX */}
                <div className="pt-2">
                  <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
                    <input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer accent-gray-900"/> This is a Drink Category
@@ -1800,7 +1815,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         </div>
       )}
 
-      {/* CROPPER MODAL */}
       {cropImageSrc && cropTarget && (
         <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur flex flex-col print:hidden animate-in fade-in">
            <div className="flex-1 relative">

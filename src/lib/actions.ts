@@ -517,6 +517,12 @@ export async function updateShopIdentity(formData: FormData) {
   const address = formData.get('address') as string || null;
   const phone = formData.get('phone') as string || null;
   const openingHours = formData.get('openingHours') as string || null;
+  const printerUrl = formData.get('printerUrl') as string || null;
+  const is24Hours = formData.get('is24Hours') === 'true';
+  const removeQr = formData.get('removeQr') === 'true'; // Allow deleting the QR
+  
+  const qrFile = formData.get('qrImage') as File | null;
+
   const shopId = await getActiveShopId();
   if (!shopId) return;
 
@@ -529,13 +535,34 @@ export async function updateShopIdentity(formData: FormData) {
     });
   } catch (error) {}
 
+  // Handle QR Image Upload
+  let newQrPath: string | undefined;
+  if (qrFile && qrFile.size > 0 && qrFile.name !== 'undefined') {
+    newQrPath = await uploadToSupabase(qrFile, 'branding'); // Using branding folder for shop assets
+  }
+
+  const dataToUpdate: any = { 
+    name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl 
+  };
+
+  if (newQrPath) {
+    const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { qrImage: true } });
+    if (currentSettings?.qrImage) await deleteFromSupabase(currentSettings.qrImage);
+    dataToUpdate.qrImage = newQrPath;
+  } else if (removeQr) {
+    const currentSettings = await prisma.shopSettings.findUnique({ where: { shopId }, select: { qrImage: true } });
+    if (currentSettings?.qrImage) await deleteFromSupabase(currentSettings.qrImage);
+    dataToUpdate.qrImage = null;
+  }
+
   await prisma.shopSettings.upsert({
     where: { shopId },
-    update: { name, name_kh, nameDisplay, address, phone, openingHours },
+    update: dataToUpdate,
     create: { 
-      shopId, name, name_kh, nameDisplay, address, phone, openingHours,
+      shopId, name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl,
       themeColor: '#000000',
-      headerDesign: 'design1'
+      headerDesign: 'design1',
+      qrImage: newQrPath || null
     }
   });
   await revalidateActiveShop();

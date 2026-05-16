@@ -18,7 +18,14 @@ import { saveOfflineOrder, getPendingOrders, markOrderSynced, OfflineOrder } fro
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
 
-export interface ProductCustomization { mood: string; size: string; sugar: string; ice: string; }
+// --- PHASE 1: UPDATED CUSTOMIZATION INTERFACE ---
+export interface ProductCustomization { 
+  size: string; 
+  sugar: '0' | '50' | '100'; 
+  ice: 'Normal'; 
+  topping: string; 
+}
+
 export interface BillingItem { id: string; productId: string; name: string; price: number; qty: number; notes: string; img: string; customization: ProductCustomization; }
 export interface PosProduct { id: string; name: string; description: string; price: number; variants?: {id?: string, name: string, price: number}[]; category: string; img: string; isDrink?: boolean; }
 export type OrderType = "walk-in" | "table" | "delivery";
@@ -64,9 +71,11 @@ function generateReceiptText(order: any, shopName: string): string {
     if (item.customization) {
        let mods = [];
        if (item.customization.size && item.customization.size !== 'Default') mods.push(item.customization.size);
-       if (item.customization.mood) mods.push(item.customization.mood);
-       if (item.customization.sugar) mods.push(`${item.customization.sugar} sug`);
-       if (item.customization.ice) mods.push(`${item.customization.ice} ice`);
+       
+       // --- PHASE 1: RECEIPT LOGIC UPDATED ---
+       if (item.customization.sugar) mods.push(`${item.customization.sugar}% sug`);
+       // Note: We skip printing ice since it is always "Normal" now
+       if (item.customization.topping && item.customization.topping !== 'None' && item.customization.topping !== '') mods.push(`+ ${item.customization.topping}`);
        
        if (mods.length > 0) {
          const modsStr = mods.join(', ');
@@ -107,7 +116,7 @@ function generateReceiptText(order: any, shopName: string): string {
   return text;
 }
 
-export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string }) {
+export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl, qrImage }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string, qrImage?: string | null }) {
   const router = useRouter();
   
   const [menuLoading, setMenuLoading] = useState(true);
@@ -259,7 +268,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
     );
   };
 
-  // --- PHASE 1: TEST PRINT HANDLER ---
   const handleTestPrint = async () => {
     if (!printerUrl) {
       alert("⚠️ Printer URL not configured for this shop. Please add your local print server IP in Settings.");
@@ -268,7 +276,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
     try {
       const testText = `\n         TEST PRINT         \n================================\nIf you are reading this,\nyour IP printer is connected\nand working perfectly!\n================================\n\n\n\n`;
-      // Dynamically use the passed-in printer URL
       await fetch(`${printerUrl}/print`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -383,7 +390,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       setTableNumber("");
       setIsMobileCartOpen(false);
 
-      // --- POS IP Printer Integration ---
       if (printerUrl) {
         try {
           const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
@@ -400,7 +406,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       } else {
         console.warn("🖨️ Printer URL not set for this shop, skipping automatic print.");
       }
-      // ----------------------------------
 
       if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
         router.refresh();
@@ -433,7 +438,6 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
               Select Products
             </h1>
             
-            {/* PHASE 1: TEST PRINT BUTTON */}
             <button 
               onClick={handleTestPrint}
               className="bg-gray-200 text-gray-700 hover:bg-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
@@ -556,6 +560,7 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
           onCloseMobile={() => setIsMobileCartOpen(false)}
           isTableModalOpen={isTableModalOpen}
           setIsTableModalOpen={setIsTableModalOpen}
+          qrImage={qrImage}
         />
       </div>
     </div>

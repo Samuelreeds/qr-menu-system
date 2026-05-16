@@ -1,3 +1,4 @@
+// src/app/[shopSlug]/page.tsx
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import MenuClient from '@/components/shared/MenuClient';
@@ -37,7 +38,7 @@ export default async function ShopMenuPage({
       products: {
         include: {
           category: true,
-          variants: true, // <-- ADDED: Fetch variants from the DB
+          variants: true, 
         },
       },
     },
@@ -104,6 +105,7 @@ export default async function ShopMenuPage({
     telegram: '',
     showTelegram: false,
     socials: '[]', 
+    qrImage: null, // <--- ADDED QR IMAGE FALLBACK
   };
 
   const formattedSettings = {
@@ -124,6 +126,7 @@ export default async function ShopMenuPage({
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
     socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
+    qrImage: safeSettings.qrImage || null, // <--- ADDED QR IMAGE PAYLOAD
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
@@ -140,7 +143,7 @@ export default async function ShopMenuPage({
     name_kh: product.name_kh || null,
     name_zh: product.name_zh || null,
     price: product.price,
-    variants: product.variants, // <-- ADDED: Pass variants to the client
+    variants: product.variants, 
     rating: product.rating || 5.0, 
     time: product.time || '10-15 min', 
     image: product.image || '', 

@@ -1,4 +1,3 @@
-// src/components/pos/BillingPanel.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,7 +8,7 @@ import { BillingItem, OrderType } from './AdminPosSection';
 const TAX_RATE = 0.1;
 const EXCHANGE_RATE = 4000;
 
-export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string, amountReceived: number, changeAmount: number) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; }) {
+export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen, qrImage }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string, amountReceived: number, changeAmount: number) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; qrImage?: string | null; }) {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
   const [deliveryAgent, setDeliveryAgent] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -88,23 +87,17 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   const handleConfirmCashPayment = () => {
     if (!isPaymentSufficient) return;
     setIsCashModalOpen(false);
-    
-    // Explicit tracking: If they typed 0 USD and typed KHR, we record the transaction as KHR. Otherwise default to USD.
     const currency = (parsedUSD === 0 && parsedKHR > 0) ? "KHR" : "USD";
-    
-    // Pass the calculated received amount and change up to Phase 2 processing
     onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, totalReceivedInUSD, changeDueUSD);
   };
 
   const handleConfirmKhqrPayment = (currency: "USD" | "KHR") => {
     setIsKhqrModalOpen(false);
-    // KHQR is exact exact change by default
     onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, total, 0);
   };
 
   return (
     <>
-      {/* HEADER SECTION */}
       <div className="p-3 sm:p-4 border-b border-gray-100 shrink-0 bg-white z-20 min-w-0">
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -152,7 +145,6 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
         </div>
       </div>
 
-      {/* CONFIGURATION SECTION (Order Type, Table, Delivery) */}
       <div className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-gray-100 bg-white shrink-0 z-10 shadow-sm relative min-w-0">
         <div className="flex bg-gray-50 p-1 rounded-[14px] mb-3 sm:mb-4 border border-gray-100 min-w-0">
           <button 
@@ -265,7 +257,11 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
                       {item.name}
                     </p>
                     <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold truncate mt-0.5">
-                      Size {item.customization.size}
+                      {[
+                        item.customization.size ? `Size ${item.customization.size}` : null,
+                        item.customization.sugar ? `${item.customization.sugar}% Sug` : null,
+                        (item.customization.topping && item.customization.topping !== 'None') ? `+${item.customization.topping}` : null
+                      ].filter(Boolean).join(' • ')}
                     </p>
                   </div>
                   
@@ -300,12 +296,38 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
 
       {/* FOOTER TOTALS & CHECKOUT */}
       <div className="border-t border-gray-100 bg-white shrink-0 z-20 min-w-0">
+        
+        {/* NEW: DISCOUNT PANEL UI */}
+        <div className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50/80 border-b border-gray-100 flex items-center gap-2 min-w-0">
+           <span className="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider shrink-0">Discount:</span>
+           <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden shrink-0 shadow-sm">
+              <button onClick={() => setDiscountType('percent')} className={`px-2.5 py-1.5 text-xs font-black transition-colors ${discountType === 'percent' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>%</button>
+              <button onClick={() => setDiscountType('fixed')} className={`px-2.5 py-1.5 text-xs font-black transition-colors ${discountType === 'fixed' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>$</button>
+           </div>
+           <input
+              type="number"
+              min="0"
+              step={discountType === 'percent' ? "1" : "0.01"}
+              placeholder={discountType === 'percent' ? "e.g. 10" : "e.g. 2.50"}
+              value={discountValue}
+              onChange={(e) => setDiscountValue(e.target.value)}
+              className="flex-1 px-3 py-1.5 text-xs sm:text-sm font-black border border-gray-200 rounded-lg outline-none focus:border-gray-900 shadow-sm min-w-0"
+           />
+        </div>
+
         <div className="p-3 sm:p-4 space-y-2 sm:space-y-3 border-b border-gray-100 min-w-0">
           <div className="flex justify-between text-[11px] sm:text-xs min-w-0">
             <span className="text-gray-500 font-bold truncate pr-2">Subtotal</span>
             <span className="font-black text-gray-900 shrink-0">${subtotal.toFixed(2)}</span>
           </div>
           
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-[11px] sm:text-xs min-w-0">
+              <span className="text-red-500 font-bold truncate pr-2">Discount ({discountType === 'percent' ? `${discountValue}%` : `$${discountValue}`})</span>
+              <span className="font-black text-red-600 shrink-0">-${discountAmount.toFixed(2)}</span>
+            </div>
+          )}
+
           <div className="flex justify-between items-center text-[11px] sm:text-xs min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-gray-500 font-bold truncate">Tax (10%)</span>
@@ -432,7 +454,6 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               </div>
             </div>
 
-            {/* Validation Message */}
             {!isPaymentSufficient && totalReceivedInUSD > 0 && (
               <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">
                 Received amount is less than total
@@ -472,11 +493,19 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
             </div>
 
             <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-8 w-full flex justify-center shadow-sm relative overflow-hidden">
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${total}`)}`} 
-                alt="KHQR Code" 
-                className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply"
-              />
+              {qrImage ? (
+                <img 
+                  src={qrImage} 
+                  alt="Shop KHQR Code" 
+                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10"
+                />
+              ) : (
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${total}`)}`} 
+                  alt="Default KHQR Code" 
+                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50"
+                />
+              )}
             </div>
 
             <div className="w-full flex gap-3">

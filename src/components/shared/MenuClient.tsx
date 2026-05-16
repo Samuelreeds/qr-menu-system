@@ -1,3 +1,4 @@
+// src/components/shared/MenuClient.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -7,7 +8,7 @@ import FoodCard from '@/components/shared/FoodCard';
 import ShopInfoModal from '@/components/shared/ShopInfoModal';
 import CartFloat from '@/components/ui/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
-import { Menu, X, Star, Bell, Loader2, CheckCircle } from 'lucide-react';
+import { Menu, X, Star, Bell, Loader2, CheckCircle, QrCode } from 'lucide-react'; // <-- Added QrCode Icon
 import { requestStaffAssistance } from "@/lib/staff-actions";
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -29,6 +30,7 @@ interface ShopSettings {
   instagram?: string; showInstagram: boolean;
   telegram?: string; showTelegram: boolean;
   socials: string; 
+  qrImage?: string | null; // <-- Added qrImage property
 }
 
 interface ProductVariant {
@@ -118,11 +120,11 @@ export default function MenuClient({
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isQrPaymentOpen, setIsQrPaymentOpen] = useState(false); // <-- Added QR Modal State
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0);
   const [currentBanner, setCurrentBanner] = useState(0);
   
-  // Floating Staff Call State
   const [callState, setCallState] = useState<'IDLE' | 'CONFIRM' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [callError, setCallError] = useState('');
 
@@ -164,7 +166,6 @@ export default function MenuClient({
       const offset = 140; 
       const scrollPosition = window.scrollY + offset;
 
-      // Include Hot Sale in the check if it exists
       const categoriesToCheck = hasPopularProducts 
         ? [{ id: 'hot-sale', name: 'Hot Sale' }, ...categories] 
         : categories;
@@ -272,7 +273,6 @@ export default function MenuClient({
     );
   };
 
-  // Dynamic Price Calculations for Modal
   const hasVariants = selectedItem?.variants && selectedItem.variants.length > 0 && !(selectedItem.variants.length === 1 && selectedItem.variants[0].name === 'Default');
   const activeBasePrice = selectedItem?.variants?.[selectedVariantIndex]?.price ?? selectedItem?.price ?? 0;
   
@@ -281,7 +281,6 @@ export default function MenuClient({
   const selectedEffDiscount = featCampaign === false ? 0 : (selectedRawDiscount > 0 ? selectedRawDiscount : selectedCatDiscount);
   const activeDiscPrice = selectedEffDiscount > 0 ? activeBasePrice * (1 - selectedEffDiscount / 100) : activeBasePrice;
 
-  // Compute final display settings for the modal overriding the hours if 24/7 is enabled
   const displaySettings = {
     ...shopSettings,
     openingHours: shopSettings?.is24Hours ? 'Open 24 Hours' : shopSettings?.openingHours
@@ -294,6 +293,26 @@ export default function MenuClient({
     >
       <ShopInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} settings={displaySettings} />
 
+      {/* --- QR PAYMENT MODAL --- */}
+      {isQrPaymentOpen && shopSettings.qrImage && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsQrPaymentOpen(false)}>
+          <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col p-6 items-center text-center animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsQrPaymentOpen(false)} className="absolute top-4 right-4 bg-gray-100 text-gray-500 p-2 rounded-full z-10 hover:bg-gray-200 transition-transform duration-200 active:scale-95"><X size={20} /></button>
+            
+            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 text-gray-900 border border-gray-100 shadow-sm" style={{ color: themeColor }}>
+               <QrCode size={24} />
+            </div>
+            
+            <h2 className="text-2xl font-bold text-gray-900 mb-1 leading-tight">Scan to Pay</h2>
+            <p className="text-sm text-gray-500 mb-6">Use your banking app to scan and complete your payment.</p>
+            
+            <div className="w-full aspect-square bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 flex items-center justify-center p-3 mb-2 relative overflow-hidden">
+               <img src={shopSettings.qrImage} alt="Payment QR" className="w-full h-full object-contain rounded-2xl shadow-sm bg-white" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- SYNCED DYNAMIC HEADER --- */}
       <header className="relative overflow-hidden min-h-[160px]" style={{ background: themeColor }}>
         <div className="absolute inset-0 bg-black/10 z-0" />
@@ -302,13 +321,28 @@ export default function MenuClient({
         <div className="absolute pointer-events-none z-0" style={{ top: -20, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, background: 'radial-gradient(ellipse, rgba(255,255,255,0.2) 0%, transparent 70%)' }} />
 
         <div className="relative z-10 flex flex-col items-center justify-center pt-12 pb-8 px-4 h-full">
+          
           <div className="absolute top-4 left-0 right-0 px-4 flex justify-between items-center w-full max-w-7xl mx-auto z-20 pointer-events-none">
-              <button 
-                onClick={() => setIsInfoOpen(true)} 
-                className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white active:scale-95 transition-transform duration-200 flex-shrink-0 pointer-events-auto shadow-sm"
-              >
-                <Menu size={20} />
-              </button>
+              <div className="flex items-center gap-2 pointer-events-auto">
+                <button 
+                  onClick={() => setIsInfoOpen(true)} 
+                  className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white active:scale-95 transition-transform duration-200 flex-shrink-0 shadow-sm"
+                >
+                  <Menu size={20} />
+                </button>
+                
+                {/* NEW QR PAYMENT BUTTON */}
+                {shopSettings.qrImage && (
+                  <button 
+                    onClick={() => setIsQrPaymentOpen(true)} 
+                    className="px-3 py-2.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white active:scale-95 transition-transform duration-200 flex-shrink-0 shadow-sm flex items-center gap-2"
+                  >
+                    <QrCode size={18} />
+                    <span className="text-xs font-bold hidden sm:block tracking-wide">Pay</span>
+                  </button>
+                )}
+              </div>
+
               <div className="flex-shrink-0 pointer-events-auto">
                 <LangSwitcher />
               </div>
@@ -370,7 +404,6 @@ export default function MenuClient({
                 <h1 className="text-white tracking-wide text-center text-xl sm:text-2xl font-bold drop-shadow-sm flex-1 truncate px-2">{displayShopName}</h1>
               </div>
             ) : (
-              // Default design1
               <div className="flex flex-col items-center gap-2">
                 <div className={`flex-shrink-0 flex items-center justify-center relative ${isNoBg ? 'w-20 h-20 mb-3 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5 mb-3'}`}>
                    {!logoLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
@@ -556,7 +589,6 @@ export default function MenuClient({
                 <div className="flex items-center gap-1"><Star size={14} className="text-yellow-400 fill-yellow-400" /><span>{selectedItem.rating}</span></div>
               </div>
 
-              {/* Variant Selector */}
               {hasVariants && (
                 <div className="mb-6">
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Select Size</label>
@@ -640,7 +672,6 @@ export default function MenuClient({
               className="w-14 h-14 bg-white text-gray-800 rounded-full shadow-2xl flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-all duration-200 active:scale-90 group relative"
             >
               <Bell size={24} className="text-gray-700 group-hover:text-black transition-colors" />
-              {/* Optional tiny notification dot */}
               <div className="absolute top-3.5 right-4 w-2 h-2 rounded-full border border-white" style={{ backgroundColor: themeColor }}></div>
             </button>
           )}

@@ -15,12 +15,14 @@ export default function PosCustomizationModal({
 }) {
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
+  // Updated strictly to the new ProductCustomization interface
   const [customization, setCustomization] = useState<ProductCustomization>({
-    mood: "hot",
     size: "", 
-    sugar: "50%",
-    ice: "50%",
+    sugar: "50",
+    ice: "Normal",
+    topping: "None",
   });
+  
   const [notes, setNotes] = useState("");
   
   const isDrink = product.isDrink;
@@ -46,79 +48,69 @@ export default function PosCustomizationModal({
            <p className="font-black text-2xl text-gray-900 mb-6">${activeBasePrice.toFixed(2)}</p>
 
            <div className="space-y-6">
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-               
-               {isDrink && (
-                 <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Mood</p>
-                   <div className="flex flex-wrap gap-2">
+             {hasVariants && (
+               <div>
+                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Size</p>
+                 <div className="flex flex-wrap gap-2">
+                   {product.variants!.map((v, idx) => (
                      <button 
-                       className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.mood === "hot" ? "border-red-500 bg-red-50 text-red-600 shadow-sm" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                       onClick={() => setCustomization((c) => ({ ...c, mood: "hot" }))}
+                       key={idx} 
+                       className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 whitespace-nowrap ${selectedVariantIndex === idx ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                       onClick={() => setSelectedVariantIndex(idx)}
                      >
-                       Hot
+                       {v.name}
                      </button>
-                     <button 
-                       className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.mood === "cold" ? "border-blue-500 bg-blue-50 text-blue-600 shadow-sm" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                       onClick={() => setCustomization((c) => ({ ...c, mood: "cold" }))}
-                     >
-                       Cold
-                     </button>
-                   </div>
-                 </div>
-               )}
-               
-               {hasVariants && (
-                 <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Size</p>
-                   <div className="flex flex-wrap gap-2">
-                     {product.variants!.map((v, idx) => (
-                       <button 
-                         key={idx} 
-                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 whitespace-nowrap ${selectedVariantIndex === idx ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                         onClick={() => setSelectedVariantIndex(idx)}
-                       >
-                         {v.name}
-                       </button>
-                     ))}
-                   </div>
-                 </div>
-               )}
-
-             </div>
-
-             {isDrink && (
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                 <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Sugar</p>
-                   <div className="flex flex-wrap gap-2">
-                     {(["30%", "50%", "70%"] as const).map((v) => (
-                       <button 
-                         key={v} 
-                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.sugar === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                         onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
-                       >
-                         {v.replace('%', '')}
-                       </button>
-                     ))}
-                   </div>
-                 </div>
-                 
-                 <div>
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Ice</p>
-                   <div className="flex flex-wrap gap-2">
-                     {(["30%", "50%", "70%"] as const).map((v) => (
-                       <button 
-                         key={v} 
-                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.ice === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                         onClick={() => setCustomization((c) => ({ ...c, ice: v }))}
-                       >
-                         {v.replace('%', '')}
-                       </button>
-                     ))}
-                   </div>
+                   ))}
                  </div>
                </div>
+             )}
+
+             {isDrink && (
+               <>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                   <div>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Sugar</p>
+                     <div className="flex flex-wrap gap-2">
+                       {(["0", "50", "100"] as const).map((v) => (
+                         <button 
+                           key={v} 
+                           className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.sugar === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                           onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
+                         >
+                           {v}%
+                         </button>
+                       ))}
+                     </div>
+                   </div>
+                   
+                   <div>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Ice</p>
+                     <div className="flex flex-wrap gap-2">
+                        {/* Locked Ice Option */}
+                         <button 
+                           className="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-gray-900 bg-gray-900 text-white shadow-md cursor-default"
+                         >
+                           Normal
+                         </button>
+                     </div>
+                   </div>
+                 </div>
+
+                 <div>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Topping</p>
+                   <div className="flex flex-wrap gap-2">
+                     {(["None", "Pearl", "Coconut Jelly", "Aloe Vera"] as const).map((v) => (
+                       <button 
+                         key={v} 
+                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.topping === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
+                         onClick={() => setCustomization((c) => ({ ...c, topping: v }))}
+                       >
+                         {v}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+               </>
              )}
 
              <div>
@@ -126,7 +118,7 @@ export default function PosCustomizationModal({
                <textarea 
                  value={notes} 
                  onChange={(e) => setNotes(e.target.value)} 
-                 placeholder="e.g. Extra spicy, no onions..." 
+                 placeholder="e.g. Extra spicy, less foam..." 
                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-900 focus:outline-none focus:border-gray-900 focus:bg-white transition-colors resize-none shadow-sm" 
                  rows={2} 
                />
@@ -138,9 +130,11 @@ export default function PosCustomizationModal({
            <button 
              onClick={() => { 
                const finalSizeName = product.variants?.[selectedVariantIndex]?.name || "";
-               const finalCust = isDrink 
+               
+               // Ensure proper payload is sent back to Billing
+               const finalCust: ProductCustomization = isDrink 
                   ? { ...customization, size: finalSizeName } 
-                  : { mood: "", size: finalSizeName, sugar: "", ice: "" }; 
+                  : { size: finalSizeName, sugar: "50", ice: "Normal", topping: "None" }; 
                
                onAdd(product, finalCust, notes, activeBasePrice); 
                onClose(); 
