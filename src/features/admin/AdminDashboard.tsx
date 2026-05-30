@@ -2,38 +2,31 @@
 'use client';
 import Link from 'next/link';
 import TableManager from "@/components/shared/TableManager";
-import LocalizedInput from "@/components/ui/LocalizedInput"; 
 import { useState, useRef, useEffect, useOptimistic, startTransition, useMemo } from 'react';
 import { signOut } from "next-auth/react"; 
-import Cropper from 'react-easy-crop'; 
-import getCroppedImg from '@/lib/cropImage'; 
 import { arrayMove } from '@dnd-kit/sortable';
+import getCroppedImg from '@/lib/cropImage'; 
 
 import { 
   createProduct, deleteProduct, updateProduct, 
   createCategory, updateCategory, deleteCategory,
-  updateShopIdentity, updateShopBranding, updateShopSocials, 
-  addBanner, deleteBanner, reorderBanners, toggleProductSoldOut,
+  addBanner, deleteBanner, reorderBanners,
   getTeamMembers, createTeamMember, updateTeamMemberRole, deleteTeamMember,
-  getUserActivity,
-  createTopping, updateTopping, deleteTopping
+  getUserActivity, createTopping, updateTopping, deleteTopping
 } from '@/lib/actions';
-import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { updateCategoryOrders } from '@/lib/category-order-actions'; 
 
 import { 
-  Plus, X, Trash2, UploadCloud, CheckCircle, AlertTriangle,
+  Plus, X, Trash2, UploadCloud, CheckCircle,
   LayoutGrid, Settings, Search, Bell, Menu, LogOut, 
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
-  ZoomIn, Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users, Layers
-} from 'lucide-react';
+  Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
+  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users, Layers, DollarSign
+} from 'lucide-react'; 
 
 import LazyImage from "@/components/ui/LazyImage";
-import StockSwitchButton from "@/components/ui/StockSwitchButton";
 import AdminPosSection from "@/features/pos/AdminPosSection";
-import OrderHistoryCard from "@/features/pos/OrderHistoryCard";
 import DashboardOverview from "@/features/pos/DashboardOverview";
 import InventoryManager from "@/components/shared/InventoryManager";
 import PosReceipt from "@/components/shared/PosReceipt"; 
@@ -41,36 +34,53 @@ import CategorySortableList from "@/features/admin/components/CategorySortableLi
 
 import { ToastProvider } from "@/context/ToastContext";
 import { OrderProvider } from "@/context/OrderContext";
+import { useShift } from '@/context/ShiftContext';
+
+// Components & Tabs
+import AdminToast from './components/AdminToast';
+import PendingDeleteToast from './components/PendingDeleteToast';
+import DeleteConfirmationModal from './components/DeleteConfirmationModal';
+import UnsavedChangesModal from './components/UnsavedChangesModal';
+import TeamManagementModal from './components/TeamManagementModal';
+import ToppingFormModal from './components/ToppingFormModal';
+import UserActivityModal from './components/UserActivityModal';
+import QrPrintModal from './components/QrPrintModal';
+import ImageCropperModal from './components/ImageCropperModal';
+
+import OrdersTab from './tabs/OrdersTab';
+import TeamTab from './tabs/TeamTab';
+import ToppingsTab from './tabs/ToppingsTab';
+import MenuTab from './tabs/MenuTab';
+import SettingsTab from './tabs/SettingsTab'; 
+import { useSettingsManager } from './hooks/useSettingsManager';
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
-export interface SocialLink { id: string; platform: string; url: string; active: boolean; }
 export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; }
-
-// --- UPDATED TOPPING INTERFACE ---
 export interface Topping { id: string; name: string; price: number; isDrink: boolean; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
+const FALLBACK_LOGO = 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
+const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
+
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
 const getDisplayPrice = (product: Product) => {
-  if (product.variants && product.variants.length > 0) {
-    return Math.min(...product.variants.map((v: any) => v.price));
-  }
+  if (product.variants && product.variants.length > 0) return Math.min(...product.variants.map((v: any) => v.price));
   return product.price || 0;
 };
 
 interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; toppings?: Topping[]; }
-
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string } | { type: 'set'; payload: T[] };
 type OptimisticBannerAction = | { type: 'add'; payload: Banner } | { type: 'delete'; payload: string } | { type: 'set'; payload: Banner[] };
 interface PendingDelete { productId: string; productSnapshot: Product; name: string; actionFormData: FormData; timeoutId: NodeJS.Timeout; intervalId: NodeJS.Timeout; expiresAt: number; timeLeft: number; }
 
-const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
-
 export default function AdminDashboard({ shopId, categories, products: initialProducts, settings, shopSlug, banners = [], shopPlan, planLimits, callStaffEnabled = true, telegramChatId, staffCallTopicId, newOrderTopicId, telegramNotificationsEnabled = false, featCampaign = false, featPos = false, userEmail = "admin@scandine.xyz", userRole = "OWNER", orders = [], ingredients = [], stockLogs = [], toppings = [] }: AdminDashboardProps) {
   
+  const { shift, requireShift, initiateCloseShift } = useShift();
+
+  const [deletedItemIds, setDeletedItemIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'menu' | 'categories' | 'toppings' | 'inventory' | 'tables' | 'orders' | 'settings' | 'pos' | 'team'>(featPos ? 'overview' : 'menu');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); 
   const [isFormOpen, setIsFormOpen] = useState(false); 
@@ -78,7 +88,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [isQrModalOpen, setIsQrModalOpen] = useState(false); 
   const [previewFormat, setPreviewFormat] = useState<'portrait' | 'landscape'>('portrait'); 
   const [printFormat, setPrintFormat] = useState<'portrait' | 'landscape' | null>(null); 
-  
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null); 
 
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -98,103 +107,60 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
-
   const [isToppingFormOpen, setIsToppingFormOpen] = useState(false);
   const [editingTopping, setEditingTopping] = useState<Topping | null>(null);
 
   const [prodName, setProdName] = useState({ en: '', kh: '', zh: '' });
-  
   const [productVariants, setProductVariants] = useState<{name: string, price: number | string}[]>([{name: 'Default', price: ''}]);
   const [productRecipe, setProductRecipe] = useState<{ingredientId: string, quantityUsed: number | string}[]>([]);
   const [productDepartment, setProductDepartment] = useState<'coffee' | 'pub'>('coffee');
   const [productCategoryId, setProductCategoryId] = useState('');
   const [productDiscount, setProductDiscount] = useState<number | ''>('');
   const [showExtraLangs, setShowExtraLangs] = useState(false);
-  
   const hasInitializedProductRef = useRef(false);
 
-  const [previewNameEn, setPreviewNameEn] = useState(settings?.name || '');
-  const [previewNameKh, setPreviewNameKh] = useState(settings?.name_kh || '');
-  const [previewDisplay, setPreviewDisplay] = useState(settings?.nameDisplay || 'EN');
-  const [address, setAddress] = useState(settings?.address || '');
-  const [phone, setPhone] = useState(settings?.phone || '');
-  const [printerUrl, setPrinterUrl] = useState(settings?.printerUrl || ''); 
-  
-  const qrInputRef = useRef<HTMLInputElement>(null);
-  const [qrImagePreview, setQrImagePreview] = useState(settings?.qrImage || '');
-  const [qrFileBlob, setQrFileBlob] = useState<Blob | null>(null);
-  const [removeQr, setRemoveQr] = useState(false);
-
-  const [isStaffEnabled, setIsStaffEnabled] = useState(callStaffEnabled);
-  const [tgChatId, setTgChatId] = useState(telegramChatId || '');
-  const [tgStaffCallTopicId, setTgStaffCallTopicId] = useState(staffCallTopicId || '');
-  const [tgNewOrderTopicId, setTgNewOrderTopicId] = useState(newOrderTopicId || '');
-  const [isTestingTg, setIsTestingTg] = useState(false);
+  const [prepTime, setPrepTime] = useState('15');
+  const [isHotSale, setIsHotSale] = useState(false);
+  const [isSoldOutState, setIsSoldOutState] = useState(false);
 
   const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean; type: 'product' | 'category' | 'topping' | null; id: string | null; name: string | null; actionFormData: FormData | null;}>({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const pendingDeleteRef = useRef<PendingDelete | null>(null);
 
-  const getInitialHours = () => { if (!settings?.openingHours) return { open: '08:00', close: '22:00' }; const parts = settings.openingHours.split(' - '); if (parts.length === 2) return { open: parts[0], close: parts[1] }; return { open: '08:00', close: '22:00' }; };
-  const initialHours = getInitialHours();
-  const [openTime, setOpenTime] = useState(initialHours.open);
-  const [closeTime, setCloseTime] = useState(initialHours.close);
-  const [is24Hours, setIs24Hours] = useState(settings?.is24Hours || false);
-
-  const [prepTime, setPrepTime] = useState('15');
-  const [isHotSale, setIsHotSale] = useState(false);
-  const [isSoldOutState, setIsSoldOutState] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileMenuBtnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
-      if (
-        sidebarRef.current && 
-        !sidebarRef.current.contains(target) &&
-        mobileMenuBtnRef.current && 
-        !mobileMenuBtnRef.current.contains(target)
-      ) {
-        if (isMobileMenuOpen) setIsMobileMenuOpen(false);
-        if (!isSidebarCollapsed) setIsSidebarCollapsed(true);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [isMobileMenuOpen, isSidebarCollapsed]);
+  const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN' || userRole === 'admin';
 
   const [openSection, setOpenSection] = useState<string | null>('identity');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [dismissGuide, setDismissGuide] = useState(false);
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
-  
+
   const safeLimits = planLimits || { maxProducts: 0, maxCategories: 0, maxBanners: 0, overrideHeaderStyle: null, premiumThemes: false, customSocials: false, featMultipleLanguage: false, featAlertBarista: false };
   const canUsePremiumThemes = safeLimits.premiumThemes;
   const canUseCustomSocials = safeLimits.customSocials;
   const multiLanguageEnabled = !!safeLimits.featMultipleLanguage;
   const canUseTelegram = !!safeLimits.featAlertBarista;
   const isFreePlan = shopPlan === 'FREE' || shopPlan === 'STARTER'; 
-
-  const [headerDesign, setHeaderDesign] = useState(settings?.headerDesign || 'design1');
-  const [themeColorPreview, setThemeColorPreview] = useState(settings?.themeColor || '#000000');
-  const currentDesignIndex = allDesigns.indexOf(headerDesign);
-  const isCurrentDesignLocked = isFreePlan && currentDesignIndex > 3 && headerDesign !== safeLimits.overrideHeaderStyle;
+  
+  const currentDesignIndex = allDesigns.indexOf(settings?.headerDesign || 'design1');
+  const isCurrentDesignLocked = isFreePlan && currentDesignIndex > 3 && (settings?.headerDesign || 'design1') !== safeLimits.overrideHeaderStyle;
 
   const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({});
   const [pendingNav, setPendingNav] = useState<{ type: 'tab' | 'section', payload: any, source: string } | null>(null);
 
   const markDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: true }));
   const clearDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: false }));
+  const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
+
+  const settingsState = useSettingsManager({
+    shopId, settings, callStaffEnabled, telegramChatId, staffCallTopicId, newOrderTopicId,
+    showToast, startTransition, allDesigns, isCurrentDesignLocked, markDirty, clearDirty
+  });
 
   const mappedProducts: Product[] = initialProducts.map(p => ({
     ...p,
@@ -202,27 +168,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   }));
 
   const [optProducts, dispatchOptProducts] = useOptimistic(mappedProducts, (state: Product[], action: OptimisticAction<Product>) => { switch (action.type) { case 'add': return [action.payload, ...state]; case 'update': return state.map(p => p.id === action.payload.id ? action.payload : p); case 'delete': return state.filter(p => p.id !== action.payload); default: return state; } });
-  
-  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { 
-    switch (action.type) { 
-      case 'add': return [...state, action.payload].sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); 
-      case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); 
-      case 'delete': return state.filter(c => c.id !== action.payload); 
-      case 'set': return action.payload as Category[]; 
-      default: return state; 
-    } 
-  });
-  
+  const [optCategories, dispatchOptCategories] = useOptimistic(categories, (state: Category[], action: OptimisticAction<Category>) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'update': return state.map(c => c.id === action.payload.id ? action.payload : c).sort((a, b) => (a.sortOrder || 999999) - (b.sortOrder || 999999)); case 'delete': return state.filter(c => c.id !== action.payload); case 'set': return action.payload as Category[]; default: return state; } });
   const [optBanners, dispatchOptBanners] = useOptimistic(banners, (state: Banner[], action: OptimisticBannerAction) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.sortOrder - b.sortOrder); case 'delete': return state.filter(b => b.id !== action.payload); case 'set': return action.payload; default: return state; } });
-
-  const [optToppings, dispatchOptToppings] = useOptimistic(toppings, (state: Topping[], action: OptimisticAction<Topping>) => { 
-    switch (action.type) { 
-      case 'add': return [...state, action.payload].sort((a, b) => a.name.localeCompare(b.name)); 
-      case 'update': return state.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => a.name.localeCompare(b.name)); 
-      case 'delete': return state.filter(t => t.id !== action.payload); 
-      default: return state; 
-    } 
-  });
+  const [optToppings, dispatchOptToppings] = useOptimistic(toppings, (state: Topping[], action: OptimisticAction<Topping>) => { switch (action.type) { case 'add': return [...state, action.payload].sort((a, b) => a.name.localeCompare(b.name)); case 'update': return state.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => a.name.localeCompare(b.name)); case 'delete': return state.filter(t => t.id !== action.payload); default: return state; } });
 
   const [cropTarget, setCropTarget] = useState<'logo' | 'product' | 'banner' | 'qr' | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
@@ -231,16 +179,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const [cropAspect, setCropAspect] = useState<number>(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const [logoPreview, setLogoPreview] = useState(settings?.logo || '');
-  const [logoType, setLogoType] = useState(settings?.logoType || 'withBackground');
-  const [isDirtyLogo, setIsDirtyLogo] = useState(false);
-  const [logoFileBlob, setLogoFileBlob] = useState<Blob | null>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const productInputRef = useRef<HTMLInputElement>(null);
   const [productPreview, setProductPreview] = useState('');
   const [productFileBlob, setProductFileBlob] = useState<Blob | null>(null);
-  const [socialLinks, setSocialLinks] = useState<SocialLink[]>(() => { try { return settings?.socials ? JSON.parse(settings.socials) : []; } catch { return []; } });
 
   const sortedCategories = useMemo(() => {
     return [...optCategories].sort((a, b) => {
@@ -254,30 +196,71 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const hasProduct = optProducts.length > 0;
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
-  const isNoBg = logoType === 'withoutBackground';
-  const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN' || userRole === 'admin';
 
+  // --- CLICK OUTSIDE LISTENER FOR MOBILE MENU ---
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1280) {
-        setIsSidebarCollapsed(true);
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (window.innerWidth >= 1280 || !isMobileMenuOpen) return;
+      const target = event.target as Node;
+      if (
+        sidebarRef.current && 
+        !sidebarRef.current.contains(target) &&
+        mobileMenuBtnRef.current && 
+        !mobileMenuBtnRef.current.contains(target)
+      ) {
+        setIsMobileMenuOpen(false);
       }
     };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    if (activeTab === 'pos' && !isAdmin) requireShift();
+  }, [activeTab, requireShift, isAdmin]);
+
+  useEffect(() => {
+    const handleResize = () => { if (window.innerWidth < 1280) setIsSidebarCollapsed(true); };
     handleResize(); 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => { setOrigin(window.location.origin); const afterPrint = () => setPrintFormat(null); window.addEventListener('afterprint', afterPrint); return () => { window.removeEventListener('afterprint', afterPrint); if (pendingDeleteRef.current) { clearTimeout(pendingDeleteRef.current.timeoutId); clearInterval(pendingDeleteRef.current.intervalId); deleteProduct(pendingDeleteRef.current.actionFormData).catch(() => {}); } }; }, []);
-  useEffect(() => { setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); }, [settings?.logo, settings?.logoType]);
-  
+  const clearPendingDelete = () => {
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timeoutId);
+      clearInterval(pendingDeleteRef.current.intervalId);
+      setPendingDelete(null);
+      pendingDeleteRef.current = null;
+    }
+  };
+
+  useEffect(() => { 
+    setOrigin(window.location.origin); 
+    const afterPrint = () => setPrintFormat(null); 
+    window.addEventListener('afterprint', afterPrint); 
+    return () => { 
+      window.removeEventListener('afterprint', afterPrint); 
+      if (pendingDeleteRef.current) { 
+        clearTimeout(pendingDeleteRef.current.timeoutId); 
+        clearInterval(pendingDeleteRef.current.intervalId); 
+        deleteProduct(pendingDeleteRef.current.actionFormData).catch(() => {}); 
+      } 
+    }; 
+  }, []);
+
   const [wasEditingProduct, setWasEditingProduct] = useState<string | null>(null);
   const [wasFormOpen, setWasFormOpen] = useState(false);
 
   useEffect(() => { 
     if ((isFormOpen || editingProduct) && !hasInitializedProductRef.current) {
       hasInitializedProductRef.current = true;
-      
       if (editingProduct) { 
         setProductPreview(getValidImage(editingProduct.image) === PLACEHOLDER_IMAGE ? '' : editingProduct.image); 
         setProductFileBlob(null); 
@@ -288,23 +271,19 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setIsSoldOutState(editingProduct.isSoldOut || false);
         setProductDiscount(editingProduct.discount || ''); 
         setProductCategoryId(sortedCategories.find(c => c.name === editingProduct.category.name)?.id || sortedCategories[0]?.id || '');
-        
         const rawDept = (editingProduct.department || 'coffee').toLowerCase();
         const fallbackDept = editingProduct.description?.includes('[PUB]') ? 'pub' : 'coffee';
         setProductDepartment(rawDept === 'pub' ? 'pub' : (fallbackDept === 'pub' ? 'pub' : 'coffee')); 
-        
         if (editingProduct.variants && editingProduct.variants.length > 0) {
-          setProductVariants(editingProduct.variants.map(v => ({ name: v.name, price: v.price })));
+          setProductVariants(editingProduct.variants.map((v: any) => ({ name: v.name, price: v.price })));
         } else {
           setProductVariants([{name: 'Default', price: editingProduct.price ?? ''}]);
         }
-
         if (editingProduct.ingredients && editingProduct.ingredients.length > 0) {
-          setProductRecipe(editingProduct.ingredients.map(i => ({ ingredientId: i.ingredientId, quantityUsed: i.quantityUsed })));
+          setProductRecipe(editingProduct.ingredients.map((i: any) => ({ ingredientId: i.ingredientId, quantityUsed: i.quantityUsed })));
         } else {
           setProductRecipe([]);
         }
-
         setWasEditingProduct(editingProduct.id);
       } else { 
         setProductPreview(''); 
@@ -341,82 +320,21 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     }
   }, [activeTab]);
 
-  const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
   const getPreviewScale = () => { if (previewFormat === 'portrait') return paperSize === 'A4' ? 'scale(0.28)' : paperSize === 'A5' ? 'scale(0.24)' : 'scale(0.22)'; return paperSize === 'A4' ? 'scale(0.3)' : paperSize === 'A5' ? 'scale(0.26)' : 'scale(0.24)'; };
-  const getShopNamePreview = () => { if (previewDisplay === 'KH' && previewNameKh) return previewNameKh; if (previewDisplay === 'BOTH' && previewNameKh) return `${previewNameEn} ${previewNameKh}`; return previewNameEn || 'Shop Name'; };
-
   const handleGeneratePDF = (format: 'portrait' | 'landscape') => { setPrintFormat(format); setTimeout(() => { window.print(); }, 500); };
   
   const fetchUserActivity = async (member: any) => {
     setActivityUser(member);
     setIsActivityLoading(true);
     const res = await getUserActivity(member.id);
-    if (res.success) {
-      setUserActivityData(res.data);
-    } else {
-      showToast("Could not load activity");
-    }
+    if (res.success) setUserActivityData(res.data);
+    else showToast("Could not load activity");
     setIsActivityLoading(false);
   };
 
   const executeNav = (type: 'tab' | 'section', payload: any) => { if (type === 'tab') { setActiveTab(payload); setIsMobileMenuOpen(false); } else if (type === 'section') { setOpenSection(openSection === payload ? null : payload); } };
   const handleTabClick = (tab: any) => { if (activeTab === tab) return; if (activeTab === 'settings' && openSection && dirtySections[openSection]) { setPendingNav({ type: 'tab', payload: tab, source: openSection }); } else { executeNav('tab', tab); } };
   const handleSectionClick = (section: string) => { if (openSection && dirtySections[openSection]) { setPendingNav({ type: 'section', payload: openSection === section ? null : section, source: openSection }); } else { executeNav('section', section); } };
-  
-  const discardChanges = (source: string) => { 
-    if (source === 'identity') { 
-      setPreviewNameEn(settings?.name || ''); setPreviewNameKh(settings?.name_kh || ''); 
-      setPreviewDisplay(settings?.nameDisplay || 'EN'); setAddress(settings?.address || ''); 
-      setPhone(settings?.phone || ''); setPrinterUrl(settings?.printerUrl || ''); 
-      const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); 
-      setIs24Hours(settings?.is24Hours || false); 
-      setQrImagePreview(settings?.qrImage || ''); setQrFileBlob(null); setRemoveQr(false);
-    } else if (source === 'branding') { 
-      setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); 
-      setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); 
-    } else if (source === 'socials') { 
-      try { setSocialLinks(settings?.socials ? JSON.parse(settings.socials) : []); } catch { setSocialLinks([]); } 
-    } else if (source === 'notifications') { 
-      setIsStaffEnabled(callStaffEnabled); setTgChatId(telegramChatId || ''); setTgStaffCallTopicId(staffCallTopicId || ''); setTgNewOrderTopicId(newOrderTopicId || ''); 
-    } 
-  };
-  
-  const saveIdentityForm = async () => { 
-    const fd = new FormData(); 
-    fd.set('name', !previewNameEn.trim() && previewNameKh.trim() ? previewNameKh.trim() : previewNameEn.trim()); 
-    if (previewNameKh.trim()) fd.set('name_kh', previewNameKh.trim()); 
-    fd.set('nameDisplay', previewDisplay); 
-    fd.set('address', address); 
-    fd.set('phone', phone); 
-    fd.set('printerUrl', printerUrl);
-    fd.set('is24Hours', String(is24Hours));
-    if (!is24Hours) {
-       fd.set('openingHours', `${openTime} - ${closeTime}`); 
-    }
-    if (qrFileBlob) fd.set('qrImage', qrFileBlob, 'qr.webp');
-    if (removeQr) fd.set('removeQr', 'true');
-
-    try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information."); return false; } 
-  };
-  
-  const saveBrandingForm = async () => { if (isCurrentDesignLocked) return false; const fd = new FormData(); fd.set('headerDesign', headerDesign); fd.set('themeColor', themeColorPreview); fd.set('logoType', logoType); if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp'); try { await updateShopBranding(fd); return true; } catch (e) { showToast("Error saving branding."); return false; } };
-  const saveSocialsForm = async () => { const fd = new FormData(); fd.set('socials', JSON.stringify(socialLinks)); try { const res = await updateShopSocials(fd); if (res?.error) { showToast(res.error); return false; } return true; } catch (e) { showToast("Error saving socials."); return false; } };
-  const saveNotificationsForm = async () => { try { const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId); if (!res.success) { showToast(res.message || "Error saving"); return false; } return true; } catch (e) { return false; } };
-  const handleTestTelegram = async (type: 'General' | 'Staff Call' | 'New Order', specificTopicId?: string) => { if (!tgChatId.trim()) { showToast("Please enter a Chat ID first."); return; } setIsTestingTg(true); const res = await sendTestTelegramNotification(shopId, tgChatId, settings?.name || 'Your Shop', specificTopicId, type); showToast(res.message || (res.success ? "Test message sent!" : "Failed to send message.")); setIsTestingTg(false); };
-  
-  const onIdentitySubmit = (e?: React.FormEvent) => { 
-    if (e) e.preventDefault(); 
-    if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name."); return; } 
-    clearDirty('identity'); showToast("Basic information saved!"); 
-    startTransition(async () => { 
-      await saveIdentityForm(); 
-      setQrFileBlob(null); setRemoveQr(false);
-    }); 
-  };
-
-  const onBrandingSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); if (isCurrentDesignLocked) return; clearDirty('branding'); setIsDirtyLogo(false); showToast("Branding updated!"); startTransition(async () => { await saveBrandingForm(); setLogoFileBlob(null); }); };
-  const onSocialsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); };
-  const onNotificationsSubmit = (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!"); startTransition(async () => { await saveNotificationsForm(); }); };
   
   const handleMoveBanner = async (index: number, direction: number) => { 
     if (index + direction < 0 || index + direction >= optBanners.length) return; 
@@ -425,15 +343,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     newBanners[index].sortOrder = newBanners[index + direction].sortOrder; 
     newBanners[index + direction].sortOrder = tempOrder; 
     newBanners.sort((a,b) => a.sortOrder - b.sortOrder); 
-
     startTransition(async () => { 
       dispatchOptBanners({ type: 'set', payload: newBanners }); 
-      try {
-        await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); 
-        showToast("Banners reordered!"); 
-      } catch (e) {
-        showToast("Failed to reorder banners");
-      }
+      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); } 
+      catch (e) { showToast("Failed to reorder banners"); }
     }); 
   };
 
@@ -447,37 +360,24 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     newBanners.splice(draggedBannerIndex, 1); 
     newBanners.splice(dropIndex, 0, draggedItem); 
     newBanners.forEach((b, i) => b.sortOrder = i + 1); 
-    
     setDraggedBannerIndex(null); 
     startTransition(async () => { 
       dispatchOptBanners({ type: 'set', payload: newBanners }); 
-      try {
-        await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); 
-        showToast("Banners reordered!"); 
-      } catch (e) {
-        showToast("Failed to drop banner");
-      }
+      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); } 
+      catch (e) { showToast("Failed to drop banner"); }
     }); 
   };
 
   const handleReorderCategories = (activeId: string, overId: string) => {
     const oldIndex = sortedCategories.findIndex(c => c.id === activeId);
     const newIndex = sortedCategories.findIndex(c => c.id === overId);
-
     if (oldIndex !== -1 && newIndex !== -1) {
       const newOrder = arrayMove(sortedCategories, oldIndex, newIndex);
       const reorderedCategories = newOrder.map((cat, index) => ({ ...cat, sortOrder: index + 1 }));
-
       startTransition(async () => {
          dispatchOptCategories({ type: 'set', payload: reorderedCategories });
-         try {
-            const res = await updateCategoryOrders(reorderedCategories.map(c => c.id));
-            if (!res.success) {
-               showToast("Failed to reorder categories.");
-            }
-         } catch (e) {
-            showToast("Failed to reorder categories.");
-         }
+         try { const res = await updateCategoryOrders(reorderedCategories.map(c => c.id)); if (!res.success) showToast("Failed to reorder categories."); } 
+         catch (e) { showToast("Failed to reorder categories."); }
       });
     }
   };
@@ -486,12 +386,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (e.target.files && e.target.files.length > 0) { 
       const file = e.target.files[0]; 
       const objectUrl = URL.createObjectURL(file);
-      
       setCropImageSrc(objectUrl); 
       setCropTarget(target); 
       setZoom(1); 
       setCropAspect(target === 'banner' ? 16 / 9 : 1); 
-      
       e.target.value = ''; 
     } 
   };
@@ -508,9 +406,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         setCropTarget(null); 
         
         if (currentTarget === 'logo') { 
-          setLogoFileBlob(croppedBlob); 
-          setLogoPreview(objectUrl); 
-          setIsDirtyLogo(true); 
+          settingsState.setLogoFileBlob(croppedBlob); 
+          settingsState.setLogoPreview(objectUrl); 
+          settingsState.setIsDirtyLogo(true); 
           markDirty('branding'); 
         } else if (currentTarget === 'product') { 
           setProductFileBlob(croppedBlob); 
@@ -520,36 +418,30 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           fd.append('image', croppedBlob, 'banner.webp'); 
           const tempId = `temp-${Date.now()}`; 
           const nextOrder = optBanners.length > 0 ? Math.max(...optBanners.map(b => b.sortOrder)) + 1 : 1; 
-
           startTransition(async () => { 
             dispatchOptBanners({ type: 'add', payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } }); 
             const res = await addBanner(fd); 
-            if (res?.error) { 
-              showToast(res.error); 
-            } else { 
-              showToast("Banner added!"); 
-            } 
+            if (res?.error) showToast(res.error); else showToast("Banner added!"); 
           }); 
         } else if (currentTarget === 'qr') { 
-          setQrFileBlob(croppedBlob); 
-          setQrImagePreview(objectUrl); 
-          setRemoveQr(false);
+          settingsState.setQrFileBlob(croppedBlob); 
+          settingsState.setQrImagePreview(objectUrl); 
+          settingsState.setRemoveQr(false);
           markDirty('identity'); 
         } 
       } 
     } catch (e) { console.error(e); } 
   };
   
-  const cancelLogoChange = () => { setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); };
-  const addSocialLink = () => { setSocialLinks([...socialLinks, { id: Date.now().toString(), platform: 'website', url: '', active: true }]); markDirty('socials'); };
-  const removeSocialLink = (id: string) => { setSocialLinks(socialLinks.filter(l => l.id !== id)); markDirty('socials'); };
-  const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => { setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l)); markDirty('socials'); };
   const getPlatformIcon = (platform: string) => { switch (platform) { case 'facebook': return <Facebook size={18}/>; case 'instagram': return <Instagram size={18}/>; case 'telegram': return <Send size={18}/>; case 'youtube': return <Youtube size={18}/>; case 'twitter': return <Twitter size={18}/>; case 'linkedin': return <Linkedin size={18}/>; default: return <Globe size={18}/>; } };
   
-  const handlePrevDesign = (e?: React.MouseEvent) => { if (e) e.stopPropagation(); const idx = allDesigns.indexOf(headerDesign); setHeaderDesign(allDesigns[(idx - 1 + allDesigns.length) % allDesigns.length]); markDirty('branding'); };
-  const handleNextDesign = (e?: React.MouseEvent) => { if (e) e.stopPropagation(); const idx = allDesigns.indexOf(headerDesign); setHeaderDesign(allDesigns[(idx + 1) % allDesigns.length]); markDirty('branding'); };
-  
-  const filteredProducts = optProducts.filter(p => (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) && p.id !== pendingDelete?.productId);
+  // --- UPDATED FILTER TO PREVENT GHOST ITEMS ---
+  const filteredProducts = optProducts.filter(p => 
+    !deletedItemIds.includes(p.id) && 
+    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) && 
+    p.id !== pendingDelete?.productId
+  );
+
   const confirmDelete = (type: 'product' | 'category' | 'topping', id: string, name: string, fd: FormData) => { setDeleteConfirmation({ isOpen: true, type, id, name, actionFormData: fd }); };
   
   const handleConfirmDeleteAction = () => { 
@@ -565,7 +457,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         clearTimeout(prev.timeoutId); 
         clearInterval(prev.intervalId); 
         startTransition(async () => { 
-          dispatchOptProducts({ type: 'delete', payload: prev.productId });
+          setDeletedItemIds(prevIds => [...prevIds, prev.productId]);
+          dispatchOptProducts({ type: 'delete', payload: prev.productId }); 
           await deleteProduct(prev.actionFormData); 
         }); 
       } 
@@ -586,72 +479,39 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         if (pendingDeleteRef.current?.productId === id) { 
           clearInterval(pendingDeleteRef.current.intervalId); 
           startTransition(async () => { 
-            dispatchOptProducts({ type: 'delete', payload: id });
+            setDeletedItemIds(prevIds => [...prevIds, id]);
+            dispatchOptProducts({ type: 'delete', payload: id }); 
             await deleteProduct(fd); 
           }); 
-          setPendingDelete(null); 
-          pendingDeleteRef.current = null; 
+          setPendingDelete(null); pendingDeleteRef.current = null; 
         } 
       }, 5000); 
       
-      const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name, actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; 
-      setPendingDelete(newPending); 
-      pendingDeleteRef.current = newPending; 
-      
+      const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name: name, actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; 
+      setPendingDelete(newPending); pendingDeleteRef.current = newPending; 
     } else if (type === 'category') { 
       setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
-      startTransition(async () => { 
-        dispatchOptCategories({ type: 'delete', payload: id });
-        try {
-          await deleteCategory(fd); 
-          showToast("Category deleted"); 
-        } catch(e) {
-          showToast("Failed to delete category");
-        }
-      }); 
-      return; 
+      startTransition(async () => { dispatchOptCategories({ type: 'delete', payload: id }); try { await deleteCategory(fd); showToast("Category deleted"); } catch(e) { showToast("Failed to delete category"); } }); return; 
     } else if (type === 'topping') {
       setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
-      startTransition(async () => { 
-        dispatchOptToppings({ type: 'delete', payload: id });
-        try {
-          await deleteTopping(fd); 
-          showToast("Topping deleted"); 
-        } catch(e) {
-          showToast("Failed to delete topping");
-        }
-      }); 
-      return;
+      startTransition(async () => { dispatchOptToppings({ type: 'delete', payload: id }); try { await deleteTopping(fd); showToast("Topping deleted"); } catch(e) { showToast("Failed to delete topping"); } }); return;
     }
     setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); 
   };
 
   const addRecipeItem = () => setProductRecipe([...productRecipe, { ingredientId: '', quantityUsed: '' }]);
   const removeRecipeItem = (index: number) => setProductRecipe(productRecipe.filter((_, i) => i !== index));
-  const updateRecipeItem = (index: number, field: 'ingredientId' | 'quantityUsed', value: any) => {
-    const newRecipe = [...productRecipe];
-    newRecipe[index] = { ...newRecipe[index], [field]: value };
-    setProductRecipe(newRecipe);
-  };
+  const updateRecipeItem = (index: number, field: 'ingredientId' | 'quantityUsed', value: any) => { const newRecipe = [...productRecipe]; newRecipe[index] = { ...newRecipe[index], [field]: value }; setProductRecipe(newRecipe); };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const payload = {
-      name: prodName.en,
-      name_kh: prodName.kh,
-      name_zh: prodName.zh,
+      name: prodName.en, name_kh: prodName.kh, name_zh: prodName.zh,
       price: parseFloat(productVariants[0]?.price as string) || 0,
       variants: productVariants.map(v => ({ name: v.name, price: parseFloat(v.price as string) || 0 })),
-      discount: Number(productDiscount) || 0,
-      categoryId: productCategoryId,
-      time: prepTime + 'min',
-      isPopular: isHotSale,
-      isSoldOut: isSoldOutState,
-      department: productDepartment,
-      ingredients: productRecipe
-        .map(r => ({ ingredientId: r.ingredientId, quantityUsed: parseFloat(r.quantityUsed as string) || 0 }))
-        .filter(r => r.ingredientId && r.quantityUsed > 0),
+      discount: Number(productDiscount) || 0, categoryId: productCategoryId, time: prepTime + 'min',
+      isPopular: isHotSale, isSoldOut: isSoldOutState, department: productDepartment,
+      ingredients: productRecipe.map(r => ({ ingredientId: r.ingredientId, quantityUsed: parseFloat(r.quantityUsed as string) || 0 })).filter(r => r.ingredientId && r.quantityUsed > 0),
       image: productFileBlob || undefined
     };
 
@@ -659,48 +519,77 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     const currentEditingId = editingProduct?.id;
     const tempId = `temp-${Date.now()}`;
 
-    setIsFormOpen(false);
-    setEditingProduct(null);
-    setWasFormOpen(false);
-    setWasEditingProduct(null);
+    setIsFormOpen(false); setEditingProduct(null); setWasFormOpen(false); setWasEditingProduct(null);
 
     startTransition(async () => {
       if (isUpdate) {
-        const optimisticProduct = {
-          ...editingProduct,
-          ...payload,
-          category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' },
-          image: productPreview || editingProduct.image,
-        } as Product;
-        
+        const optimisticProduct = { ...editingProduct, ...payload, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || editingProduct.image } as Product;
         dispatchOptProducts({ type: 'update', payload: optimisticProduct });
-
-        try {
-          const res = await updateProduct({ ...payload, id: currentEditingId as string }); 
-          if (res?.error) showToast(res.error || "Failed to update product");
-          else showToast("Product updated successfully!");
-        } catch (e) {
-          showToast("Failed to update product.");
-        }
+        try { const res = await updateProduct({ ...payload, id: currentEditingId as string }); if (res?.error) showToast(res.error || "Failed to update product"); else showToast("Product updated successfully!"); } catch (e) { showToast("Failed to update product."); }
       } else {
-        const optimisticProduct = {
-          ...payload,
-          id: tempId,
-          category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' },
-          image: productPreview || '',
-        } as Product;
-
+        const optimisticProduct = { ...payload, id: tempId, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || '' } as Product;
         dispatchOptProducts({ type: 'add', payload: optimisticProduct });
-
-        try {
-          const res = await createProduct(payload);
-          if (res?.error) showToast(res.error || "Failed to create product");
-          else showToast("Product created successfully!");
-        } catch (e) {
-          showToast("Failed to create product.");
-        }
+        try { const res = await createProduct(payload); if (res?.error) showToast(res.error || "Failed to create product"); else showToast("Product created successfully!"); } catch (e) { showToast("Failed to create product."); }
       }
     });
+  };
+
+  const handleToppingFormAction = (fd: FormData) => {
+    const name = fd.get("name") as string;
+    const price = parseFloat(fd.get("price") as string) || 0;
+    const isDrink = fd.get("isDrink") === 'true';
+
+    if (editingTopping) {
+      const id = editingTopping.id; fd.append("id", id);
+      setIsToppingFormOpen(false); setEditingTopping(null);
+      startTransition(async () => { dispatchOptToppings({ type: 'update', payload: { ...editingTopping, name, price, isDrink } as Topping }); try { await updateTopping(fd); showToast("Topping updated!"); } catch (e) { showToast("Failed to update topping."); } });
+    } else {
+      setIsToppingFormOpen(false);
+      startTransition(async () => { dispatchOptToppings({ type: 'add', payload: { id: `temp-${Date.now()}`, name, price, isDrink } as Topping }); try { await createTopping(fd); showToast("Topping created!"); } catch (e) { showToast("Failed to create topping."); } });
+    }
+  };
+
+  const handleTeamFormAction = async (fd: FormData) => {
+    setIsSaving(true);
+    if (editingTeamMember) {
+      fd.append('userId', editingTeamMember.id);
+      const res = await updateTeamMemberRole(fd);
+      if (res.success) { setTeamMembers(teamMembers.map(m => m.id === editingTeamMember.id ? { ...m, role: fd.get('role') } : m)); showToast("Role updated!"); setIsTeamFormOpen(false); } else { showToast(res.error || "Update failed"); }
+    } else {
+      const res = await createTeamMember(fd);
+      if (res.success) { showToast("Team member added!"); getTeamMembers().then(r => { if(r.success) setTeamMembers(r.data); }); setIsTeamFormOpen(false); } else { showToast(res.error || "Creation failed"); }
+    }
+    setIsSaving(false);
+  };
+
+  const handleDeleteTeamMember = async (memberId: string) => {
+    if (confirm("Are you sure you want to remove this user from your team?")) {
+      const fd = new FormData(); fd.append('userId', memberId);
+      const res = await deleteTeamMember(fd);
+      if (res.success) { setTeamMembers(teamMembers.filter(m => m.id !== memberId)); showToast("User removed!"); } else { showToast(res.error || "Failed to remove user"); }
+    }
+  };
+
+  const handleUnsavedChangesDiscard = () => {
+    if (!pendingNav) return;
+    settingsState.resetSettings(pendingNav.source); 
+    clearDirty(pendingNav.source); 
+    executeNav(pendingNav.type, pendingNav.payload); 
+    setPendingNav(null);
+  };
+
+  const handleUnsavedChangesSave = async () => {
+    if (!pendingNav) return;
+    setIsSaving(true); 
+    const success = await settingsState.saveSettings(pendingNav.source);
+    setIsSaving(false); 
+    if (success) { 
+      clearDirty(pendingNav.source); 
+      if (pendingNav.source === 'branding') settingsState.setLogoFileBlob(null); 
+      showToast("Changes saved!"); 
+      executeNav(pendingNav.type, pendingNav.payload); 
+      setPendingNav(null); 
+    }
   };
 
   const renderPrintTemplate = (format: 'portrait' | 'landscape') => {
@@ -708,15 +597,13 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     return (
       <div className="border-[16px] border-[#1a1a1a] rounded-[48px] flex items-center justify-center bg-white text-[#4a4a4a] relative font-sans" style={{ width: format === 'landscape' ? '1000px' : '650px', height: format === 'landscape' ? '650px' : '1000px', flexDirection: format === 'landscape' ? 'row' : 'column', boxSizing: 'border-box', padding: format === 'landscape' ? '3rem 4rem' : '4rem 3rem' }}>
         {format === 'landscape' ? (
-          <><div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2 min-w-0"><h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">{getShopNamePreview()}</h1><p className="text-[2.5rem] text-gray-500 mb-12 font-light">scan to view menu !</p><div className="flex items-center w-full justify-center gap-4 mb-8"><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div><div className="relative flex items-center justify-center px-4"><div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div><div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]"><div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center"><QrCode size={18} className="text-black" /></div><div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div><div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div></div></div><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div></div><p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p></div><div className="flex-1 flex justify-center items-center w-1/2 pl-4"><div className="relative w-[400px] h-[400px] overflow-hidden"><LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" /></div></div></>
+          <><div className="flex-1 flex flex-col items-center justify-center text-center px-6 w-1/2 min-w-0"><h1 className="text-[3.5rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">{settingsState.getShopNamePreview()}</h1><p className="text-[2.5rem] text-gray-500 mb-12 font-light">scan to view menu !</p><div className="flex items-center w-full justify-center gap-4 mb-8"><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div><div className="relative flex items-center justify-center px-4"><div className="absolute w-14 h-14 bg-[#1a1a1a] rounded-full z-0"></div><div className="relative bg-[#333] rounded-xl w-10 h-16 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]"><div className="bg-white w-[26px] h-[34px] rounded-[2px] flex items-center justify-center"><QrCode size={18} className="text-black" /></div><div className="absolute top-1 w-2.5 h-[2px] bg-gray-400 rounded-full"></div><div className="absolute bottom-1 w-1.5 h-1.5 bg-gray-400 rounded-full"></div></div></div><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div></div><p className="text-lg text-gray-500 font-medium tracking-wide">www.scandine.xyz</p></div><div className="flex-1 flex justify-center items-center w-1/2 pl-4"><div className="relative w-[400px] h-[400px] overflow-hidden"><LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[400px] h-[400px] object-contain" /></div></div></>
         ) : (
-          <><div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4 min-w-0"><h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">{getShopNamePreview()}</h1><p className="text-[3rem] text-gray-500 font-light">scan to view menu !</p></div><div className="flex justify-center items-center flex-1 w-full my-6"><div className="relative w-[450px] h-[450px] overflow-hidden"><LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" /></div></div><div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4 min-w-0"><div className="flex items-center w-full justify-center gap-4 mb-8"><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div><div className="relative flex items-center justify-center px-4"><div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div><div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]"><div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center"><QrCode size={22} className="text-black" /></div><div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div><div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div></div></div><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div></div><p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p></div></>
+          <><div className="flex flex-col items-center justify-center text-center mt-2 w-full px-4 min-w-0"><h1 className="text-[4rem] leading-[1.2] font-light text-gray-600 mb-2 tracking-wide break-words max-w-full font-sans">{settingsState.getShopNamePreview()}</h1><p className="text-[3rem] text-gray-500 font-light">scan to view menu !</p></div><div className="flex justify-center items-center flex-1 w-full my-6"><div className="relative w-[450px] h-[450px] overflow-hidden"><LazyImage src={qrCodeUrl} alt="Shop QR Code" className="w-[450px] h-[450px] object-contain" /></div></div><div className="flex flex-col items-center justify-center text-center w-full px-8 mb-4 min-w-0"><div className="flex items-center w-full justify-center gap-4 mb-8"><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div><div className="relative flex items-center justify-center px-4"><div className="absolute w-16 h-16 bg-[#1a1a1a] rounded-full z-0"></div><div className="relative bg-[#333] rounded-2xl w-12 h-20 flex items-center justify-center shadow-md z-10 border-[3px] border-[#1a1a1a]"><div className="bg-white w-8 h-12 rounded-[2px] flex items-center justify-center"><QrCode size={22} className="text-black" /></div><div className="absolute top-1.5 w-3 h-[2px] bg-gray-400 rounded-full"></div><div className="absolute bottom-1.5 w-2 h-2 bg-gray-400 rounded-full"></div></div></div><div className="flex-1 min-w-0 h-[1px] bg-gray-400"></div></div><p className="text-2xl text-gray-500 font-medium tracking-wide">www.scandine.xyz</p></div></>
         )}
       </div>
     );
   };
-
-  const fallbackLogo = 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=100&q=80';
 
   const showText = !isSidebarCollapsed || isMobileMenuOpen;
 
@@ -724,19 +611,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     const isActive = activeTab === id;
     return (
       <div className="relative group/nav">
-        <button 
-          onClick={() => handleTabClick(id)} 
-          className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} ${isActive ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98]'}`}
-        >
-          <Icon size={20} className="shrink-0" />
-          {showText && <span className="font-medium truncate">{label}</span>}
+        <button onClick={() => handleTabClick(id)} className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} ${isActive ? 'bg-gray-900 text-white font-bold shadow-md' : 'text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98]'}`}>
+          <Icon size={20} className="shrink-0" />{showText && <span className="font-medium truncate">{label}</span>}
         </button>
-        {!showText && (
-          <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-lg opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-all z-50 whitespace-nowrap shadow-xl flex items-center">
-            {label}
-            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
-          </div>
-        )}
+        {!showText && (<div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-lg opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-all z-50 whitespace-nowrap shadow-xl flex items-center">{label}<div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div></div>)}
       </div>
     );
   };
@@ -746,89 +624,34 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       
       {receiptToPrint && (
         <>
-          <style>{`
-            @media print {
-              @page { margin: 0; size: 57mm auto; }
-              html, body { background: white !important; height: auto !important; min-height: 0 !important; }
-              .min-h-screen, .h-screen, .h-full, .min-h-[100dvh], .h-[100dvh] { min-height: 0 !important; height: auto !important; }
-              aside, header, nav, main, .md\\:hidden, .lg\\:hidden { display: none !important; }
-              #dashboard-receipt-print-area { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 57mm !important; margin: 0 !important; padding: 0 !important; }
-            }
-          `}</style>
-          <div id="dashboard-receipt-print-area" className="hidden print:block bg-white z-[99999]">
-             <PosReceipt order={receiptToPrint} shopName={settings?.name || "Shop"} />
-          </div>
+          <style>{`@media print { @page { margin: 0; size: 57mm auto; } html, body { background: white !important; height: auto !important; min-height: 0 !important; } .min-h-screen, .h-screen, .h-full, .min-h-[100dvh], .h-[100dvh] { min-height: 0 !important; height: auto !important; } aside, header, nav, main, .md\\:hidden, .lg\\:hidden { display: none !important; } #dashboard-receipt-print-area { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 57mm !important; margin: 0 !important; padding: 0 !important; } }`}</style>
+          <div id="dashboard-receipt-print-area" className="hidden print:block bg-white z-[99999]"><PosReceipt order={receiptToPrint} shopName={settings?.name || "Shop"} /></div>
         </>
       )}
 
-      {pendingDelete && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] w-[90vw] max-w-sm bg-gray-900 shadow-2xl p-2 rounded-2xl flex flex-row items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300 print:hidden">
-          <div className="flex items-center flex-1 min-w-0 overflow-hidden pl-2"><span className="text-sm text-gray-300 truncate w-full flex items-center gap-2"><span>Deleted <span className="font-bold text-white">"{pendingDelete.name}"</span></span></span></div>
-          <div className="flex items-center gap-2 shrink-0 pr-1"><span className="text-xs font-bold px-2 py-1 bg-white/10 text-white rounded-lg">{pendingDelete.timeLeft}s</span><button type="button" onClick={() => { clearTimeout(pendingDelete.timeoutId); clearInterval(pendingDelete.intervalId); setPendingDelete(null); pendingDeleteRef.current = null; }} className="text-gray-900 font-bold text-sm bg-white px-4 py-2 rounded-xl hover:bg-gray-100 active:scale-95 transition-transform">Undo</button></div>
-        </div>
-      )}
-
-      <div className={`fixed top-6 right-6 z-[100] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'} print:hidden`}>
-        <div className="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"><div className="bg-green-500 rounded-full p-1"><Check size={14} strokeWidth={3} className="text-white" /></div><span className="font-bold text-sm">{toast.message}</span></div>
-      </div>
+      <PendingDeleteToast pendingDelete={pendingDelete} onUndo={clearPendingDelete} />
+      <AdminToast show={toast.show} message={toast.message} />
 
       <div className="lg:hidden fixed top-0 left-0 w-full bg-white z-20 px-4 py-3 flex items-center justify-between gap-4 border-b border-gray-100 shadow-sm print:hidden">
-        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          <button ref={mobileMenuBtnRef} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-xl active:scale-95 transition-transform shrink-0"><Menu size={22} className="text-gray-700" /></button>
-          <h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">{getShopNamePreview() || 'AdminPanel'}</h1>
-        </div>
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden"><button ref={mobileMenuBtnRef} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-xl active:scale-95 transition-transform shrink-0"><Menu size={22} className="text-gray-700" /></button><h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">{settingsState.getShopNamePreview() || 'AdminPanel'}</h1></div>
         <button onClick={() => handleTabClick('settings')} className="p-2 bg-gray-50 rounded-xl text-gray-700 active:scale-95 transition-transform shrink-0"><Settings size={20} /></button>
       </div>
 
       <aside ref={sidebarRef} className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:static flex-shrink-0 flex flex-col ${isMobileMenuOpen ? 'translate-x-0 w-64' : `-translate-x-full lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`} print:hidden`}>
-        
-        <button 
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="hidden lg:flex absolute -right-4 top-8 w-8 h-8 bg-gray-900 text-white border-2 border-white rounded-full items-center justify-center shadow-md hover:bg-gray-800 hover:scale-110 z-50 transition-all active:scale-95 cursor-pointer ring-4 ring-white"
-        >
-          {isSidebarCollapsed ? <ChevronRight size={16} strokeWidth={2.5} /> : <ChevronLeft size={16} strokeWidth={2.5} />}
-        </button>
-
+        <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden lg:flex absolute -right-4 top-8 w-8 h-8 bg-gray-900 text-white border-2 border-white rounded-full items-center justify-center shadow-md hover:bg-gray-800 hover:scale-110 z-50 transition-all active:scale-95 cursor-pointer ring-4 ring-white">{isSidebarCollapsed ? <ChevronRight size={16} strokeWidth={2.5} /> : <ChevronLeft size={16} strokeWidth={2.5} />}</button>
         <div className={`pb-6 pt-20 lg:pt-8 h-full flex flex-col overflow-hidden transition-all duration-300 ${isSidebarCollapsed && !isMobileMenuOpen ? 'px-3' : 'px-6'}`}>
           <div className={`mb-6 hidden lg:flex items-center ${isSidebarCollapsed && !isMobileMenuOpen ? 'justify-center' : 'justify-start'}`}>
             {!isSidebarCollapsed || isMobileMenuOpen ? (
-              <div className="flex flex-col min-w-0 animate-in fade-in duration-300">
-                <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">{getShopNamePreview() || 'AdminPanel'}</h1>
-                <span className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max ${shopPlan === 'STARTER' || isFreePlan ? 'bg-orange-50 text-orange-600' : 'bg-orange-50 text-orange-600'}`}>{shopPlan} PLAN</span>
-              </div>
-            ) : (
-              <div className="w-10 h-10 bg-gray-900 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-md shrink-0 animate-in fade-in duration-300">
-                {getShopNamePreview().charAt(0).toUpperCase()}
-              </div>
-            )}
+              <div className="flex flex-col min-w-0 animate-in fade-in duration-300"><h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">{settingsState.getShopNamePreview() || 'AdminPanel'}</h1><span className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max bg-orange-50 text-orange-600`}>{shopPlan} PLAN</span></div>
+            ) : (<div className="w-10 h-10 bg-gray-900 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-md shrink-0 animate-in fade-in duration-300">{settingsState.getShopNamePreview().charAt(0).toUpperCase()}</div>)}
           </div>
-          
-          <div className="mb-6 lg:hidden flex flex-col min-w-0">
-             <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">{getShopNamePreview() || 'AdminPanel'}</h1>
-             <span className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max ${shopPlan === 'STARTER' || isFreePlan ? 'bg-orange-50 text-orange-600' : 'bg-orange-50 text-orange-600'}`}>{shopPlan} PLAN</span>
-          </div>
-
+          <div className="mb-6 lg:hidden flex flex-col min-w-0"><h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">{settingsState.getShopNamePreview() || 'AdminPanel'}</h1><span className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max bg-orange-50 text-orange-600`}>{shopPlan} PLAN</span></div>
           <nav className="space-y-2 flex-1 min-h-0 overflow-y-auto no-scrollbar [-webkit-overflow-scrolling:touch]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {featPos && (
-              <>
-                <NavItem id="overview" icon={Activity} label="Overview" />
-                <NavItem id="pos" icon={ShoppingCart} label="POS" />
-                <NavItem id="orders" icon={ClipboardList} label="Orders" />
-              </>
-            )}
-            
-            {!isFreePlan && (
-               <NavItem id="tables" icon={QrCode} label="Tables & QR" />
-            )}
-
+            {featPos && (<><NavItem id="overview" icon={Activity} label="Overview" /><NavItem id="pos" icon={ShoppingCart} label="POS" /><NavItem id="orders" icon={ClipboardList} label="Orders" /></>)}
+            {!isFreePlan && <NavItem id="tables" icon={QrCode} label="Tables & QR" />}
             {isAdmin && (
               <div className="mt-8 pt-4 border-t border-gray-100">
-                {showText ? (
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-4 animate-in fade-in duration-300">Management</span>
-                ) : (
-                  <div className="h-px w-8 bg-gray-200 mx-auto mb-3 mt-1 rounded-full"></div>
-                )}
-                
+                {showText ? <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-4 animate-in fade-in duration-300">Management</span> : <div className="h-px w-8 bg-gray-200 mx-auto mb-3 mt-1 rounded-full"></div>}
                 <NavItem id="menu" icon={LayoutGrid} label="Menu" />
                 <NavItem id="categories" icon={List} label="Categories" />
                 <NavItem id="toppings" icon={Layers} label="Toppings" />
@@ -838,304 +661,31 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
               </div>
             )}
           </nav>
-          
-          <div className="pt-6 border-t border-gray-100 mt-auto shrink-0">
-            <div className="relative group/nav">
-              <button onClick={() => signOut({ callbackUrl: '/auth/login' })} className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} text-gray-400 hover:text-red-600 hover:bg-red-50 active:scale-[0.98]`}>
-                <LogOut size={20} className="shrink-0" />
-                {showText && <span className="font-semibold truncate text-sm">Log Out</span>}
-              </button>
-              {!showText && (
-                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-all z-50 whitespace-nowrap shadow-xl flex items-center">
-                  Log Out
-                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-red-600 rotate-45"></div>
-                </div>
-              )}
-            </div>
+          <div className="pt-6 border-t border-gray-100 mt-auto shrink-0 flex flex-col gap-2">
+            {!isAdmin && shift && (
+              <div className="relative group/nav mb-2"><button onClick={initiateCloseShift} className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} text-red-600 font-bold bg-red-50 hover:bg-red-100 active:scale-[0.98] border border-red-100 shadow-sm`}><DollarSign size={20} className="shrink-0" />{showText && <span className="font-semibold truncate text-sm">Close Shift</span>}</button></div>
+            )}
+            <div className="relative group/nav"><button onClick={() => signOut({ callbackUrl: '/auth/login' })} className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} text-gray-400 hover:text-red-600 hover:bg-red-50 active:scale-[0.98]`}><LogOut size={20} className="shrink-0" />{showText && <span className="font-semibold truncate text-sm">Log Out</span>}</button></div>
           </div>
         </div>
       </aside>
 
-      {isMobileMenuOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden print:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-
-      {activityUser && (
-        <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm p-4 flex justify-center items-center">
-          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">User Activity</h2>
-                <p className="text-sm text-gray-500 font-medium mt-1">{activityUser.email}</p>
-              </div>
-              <button onClick={() => setActivityUser(null)} className="p-2 bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors active:scale-95">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
-              {isActivityLoading ? (
-                <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-gray-400" size={32} /></div>
-              ) : userActivityData ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Total Sales Generated</p>
-                      <p className="text-3xl font-black text-gray-900">${userActivityData.totalSales.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Orders Processed</p>
-                      <p className="text-3xl font-black text-gray-900">{userActivityData.orders.length}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                      <h3 className="font-bold text-gray-900 text-sm">Recent Orders</h3>
-                    </div>
-                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-white shadow-sm">
-                          <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            <th className="p-3 pl-4">Order ID</th>
-                            <th className="p-3">Type</th>
-                            <th className="p-3">Total</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3 pr-4">Date</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {userActivityData.orders.slice(0, 50).map((o: any) => (
-                            <tr key={o.id} className="hover:bg-gray-50/50">
-                              <td className="p-3 pl-4 text-xs font-bold text-gray-900">{o.orderNumber || o.id.slice(0,8)}</td>
-                              <td className="p-3 text-xs text-gray-500 font-medium">{o.orderType}</td>
-                              <td className="p-3 text-xs font-bold text-gray-900">${o.total.toFixed(2)}</td>
-                              <td className="p-3">
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${o.status === 'COMPLETED' ? 'bg-green-50 text-green-600' : o.status === 'CANCELLED' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
-                                  {o.status}
-                                </span>
-                              </td>
-                              <td className="p-3 pr-4 text-xs text-gray-500">{new Date(o.createdAt).toLocaleDateString()}</td>
-                            </tr>
-                          ))}
-                          {userActivityData.orders.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm text-gray-400">No orders processed by this user.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                      <h3 className="font-bold text-gray-900 text-sm">Inventory Actions</h3>
-                    </div>
-                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-white shadow-sm">
-                          <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            <th className="p-3 pl-4">Reason</th>
-                            <th className="p-3">Change</th>
-                            <th className="p-3">New Stock</th>
-                            <th className="p-3 pr-4">Date</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {userActivityData.stockLogs.slice(0, 50).map((log: any) => (
-                            <tr key={log.id} className="hover:bg-gray-50/50">
-                              <td className="p-3 pl-4">
-                                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">{log.reason}</span>
-                              </td>
-                              <td className={`p-3 text-xs font-bold ${log.change > 0 ? 'text-green-500' : 'text-red-500'}`}>{log.change > 0 ? '+' : ''}{log.change}</td>
-                              <td className="p-3 text-xs font-bold text-gray-900">{log.newStock}</td>
-                              <td className="p-3 pr-4 text-xs text-gray-500">{new Date(log.timestamp).toLocaleDateString()}</td>
-                            </tr>
-                          ))}
-                          {userActivityData.stockLogs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-sm text-gray-400">No inventory actions recorded.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-20 text-center text-red-500">Failed to load activity data.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <UserActivityModal isOpen={!!activityUser} userEmail={activityUser?.email} isLoading={isActivityLoading} activityData={userActivityData} onClose={() => setActivityUser(null)} />
 
       <main className={`flex-1 w-full max-w-full min-w-0 min-h-0 no-scrollbar [&::-webkit-scrollbar]:hidden ${activeTab === 'pos' ? 'flex flex-col h-[100dvh] lg:h-[100dvh] pt-[60px] lg:pt-0 overflow-hidden bg-white print:h-auto print:overflow-visible print:pt-0' : 'p-4 pt-20 lg:p-8 lg:pt-8 pb-28 lg:pb-8 overflow-y-auto [-webkit-overflow-scrolling:touch] print:overflow-visible'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         
         {userEmail?.includes('demo_') && (
           <div className="mb-6 bg-orange-50 border border-orange-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4 print:hidden">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-orange-900">You are in Demo Mode</p>
-                <p className="text-xs text-orange-700">Make any changes you like! This temporary account is yours for 1 hour.</p>
-              </div>
-            </div>
-            <Link href="/auth/register" className="hidden sm:block bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-700 transition-colors">
-              Create Your Own Shop
-            </Link>
+            <div className="flex items-center gap-3"><div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><Sparkles size={18} /></div><div><p className="text-sm font-bold text-orange-900">You are in Demo Mode</p><p className="text-xs text-orange-700">Make any changes you like! This temporary account is yours for 1 hour.</p></div></div>
+            <Link href="/auth/register" className="hidden sm:block bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-700 transition-colors">Create Your Own Shop</Link>
           </div>
         )}
 
-        {featPos && (
-          <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}>
-            <DashboardOverview orders={orders} products={optProducts} />
-          </div>
-        )}
-
-        {featPos && (
-          <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}>
-            <ToastProvider>
-              <OrderProvider>
-                <AdminPosSection 
-                  dashboardCategories={sortedCategories} 
-                  dashboardProducts={optProducts} 
-                  shopId={shopId} 
-                  userEmail={userEmail} 
-                  userRole={userRole} 
-                  shopName={settings?.name || "Shop"} 
-                  printerUrl={printerUrl} 
-                  toppings={optToppings} 
-                />
-              </OrderProvider>
-            </ToastProvider>
-          </div>
-        )}
-
-        {featPos && (
-           <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}>
-              <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
-                  <p className="text-sm text-gray-500 mt-1">Review past transactions generated from the POS.</p>
-                </div>
-                
-                <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 w-full sm:w-auto overflow-x-auto no-scrollbar [-webkit-overflow-scrolling:touch]">
-                  {['All', 'Today', 'Completed', 'Cancelled'].map(f => (
-                    <button 
-                      key={f} 
-                      onClick={() => setOrderFilter(f)} 
-                      className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${orderFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </header>
-
-              <div className="space-y-4">
-                {orders?.filter(o => {
-                   if (orderFilter === 'Completed') return o.status !== 'CANCELLED';
-                   if (orderFilter === 'Cancelled') return o.status === 'CANCELLED';
-                   if (orderFilter === 'Today') {
-                     const today = new Date().toDateString();
-                     return new Date(o.createdAt).toDateString() === today;
-                   }
-                   return true; 
-                }).map((order) => (
-                  <OrderHistoryCard 
-                    key={order.id} 
-                    order={order} 
-                    shopName={settings?.name || "Shop"} 
-                    printerUrl={printerUrl} 
-                  />
-                ))}
-                
-                {(!orders || orders.filter(o => {
-                   if (orderFilter === 'Completed') return o.status !== 'CANCELLED';
-                   if (orderFilter === 'Cancelled') return o.status === 'CANCELLED';
-                   if (orderFilter === 'Today') {
-                     const today = new Date().toDateString();
-                     return new Date(o.createdAt).toDateString() === today;
-                   }
-                   return true; 
-                }).length === 0) && (
-                  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-16 text-center">
-                    <ClipboardList size={32} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 font-medium">No orders match this filter.</p>
-                  </div>
-                )}
-              </div>
-           </div>
-        )}
-
-        {isAdmin && featPos && (
-           <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}>
-             <InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} />
-           </div>
-        )}
-
-        {isAdmin && featPos && (
-          <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div>
-                <h3 className="font-bold text-2xl text-gray-900">Staff & Team Management</h3>
-                <p className="text-sm text-gray-500 mt-1">Manage who has access to your shop's dashboard and POS.</p>
-              </div>
-              <button 
-                onClick={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} 
-                className="shrink-0 bg-gray-900 text-white hover:bg-gray-800 px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm flex items-center justify-center gap-2 text-[16px] md:text-sm"
-              >
-                <Plus size={18} strokeWidth={3}/> Add Staff
-              </button>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-              <table className="w-full text-left border-collapse min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="p-5">User Email</th>
-                    <th className="p-5">Role Level</th>
-                    <th className="p-5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {isTeamLoading ? (
-                    <tr><td colSpan={3} className="py-12 text-center text-gray-400"><Loader2 className="animate-spin mx-auto"/></td></tr>
-                  ) : teamMembers.map((member) => (
-                    <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="p-4 font-bold text-gray-900">
-                        {member.email}
-                        {member.email === userEmail && <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md">YOU</span>}
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-md border ${member.role === 'admin' || member.role === 'OWNER' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                          {member.role === 'OWNER' ? 'admin' : member.role}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => fetchUserActivity(member)} className="w-10 h-10 flex items-center justify-center text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition active:scale-95" title="View Activity">
-                            <Activity size={18} />
-                          </button>
-                          <button onClick={() => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95" title="Edit Role"><Pencil size={18} /></button>
-                          <form action={async (fd) => {
-                             if (confirm("Are you sure you want to remove this user from your team?")) {
-                               fd.append('userId', member.id);
-                               const res = await deleteTeamMember(fd);
-                               if (res.success) {
-                                  setTeamMembers(teamMembers.filter(m => m.id !== member.id));
-                                  showToast("User removed!");
-                               } else {
-                                  showToast(res.error || "Failed to remove user");
-                               }
-                             }
-                          }}>
-                            <button type="submit" disabled={member.email === userEmail} className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95 disabled:opacity-50" title="Delete User"><Trash2 size={18} /></button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {!isTeamLoading && teamMembers.length === 0 && <tr><td colSpan={3} className="py-12 text-center text-gray-400 font-medium">No team members found</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {featPos && <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}><DashboardOverview orders={orders} products={optProducts} /></div>}
+        {featPos && <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}><ToastProvider><OrderProvider><AdminPosSection dashboardCategories={sortedCategories} dashboardProducts={optProducts} shopId={shopId} userEmail={userEmail} userRole={userRole} shopName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} toppings={optToppings} /></OrderProvider></ToastProvider></div>}
+        {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} /></div>}
+        {isAdmin && featPos && <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}><InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} /></div>}
+        {isAdmin && featPos && <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}><TeamTab teamMembers={teamMembers} isTeamLoading={isTeamLoading} userEmail={userEmail || ''} onAddStaff={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} onEditStaff={(member) => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} onViewActivity={fetchUserActivity} onDeleteStaff={handleDeleteTeamMember} /></div>}
 
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && activeTab !== 'toppings' && (
           <header className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4 print:hidden">
@@ -1150,10 +700,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         {activeTab !== 'overview' && activeTab !== 'pos' && activeTab !== 'orders' && activeTab !== 'inventory' && activeTab !== 'team' && activeTab !== 'toppings' && !isGuideComplete && !dismissGuide && (
           <div className="mb-8 bg-white p-6 rounded-3xl border border-gray-900 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4 print:hidden min-w-0">
             <div className="absolute top-0 left-0 w-2 h-full bg-gray-900"></div>
-            <div className="flex justify-between items-start mb-4">
-               <div><h3 className="text-lg font-bold text-gray-900">Welcome to your dashboard! 👋</h3><p className="text-sm text-gray-500 mt-1">Complete these steps to get your menu live.</p></div>
-               <button onClick={() => setDismissGuide(true)} className="text-gray-400 hover:text-gray-600 p-1 active:scale-95 transition-transform"><X size={20}/></button>
-            </div>
+            <div className="flex justify-between items-start mb-4"><div><h3 className="text-lg font-bold text-gray-900">Welcome to your dashboard! 👋</h3><p className="text-sm text-gray-500 mt-1">Complete these steps to get your menu live.</p></div><button onClick={() => setDismissGuide(true)} className="text-gray-400 hover:text-gray-600 p-1 active:scale-95 transition-transform"><X size={20}/></button></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 min-w-0">
                <button onClick={() => { handleTabClick('categories'); if(!hasCategory) setIsCatFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] min-w-0 ${hasCategory ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}><div className="flex justify-between items-center w-full"><span className={`text-sm font-bold ${hasCategory ? 'text-green-700' : 'text-gray-700'}`}>1. Create Category</span>{hasCategory ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}</div><span className="text-xs text-gray-500">Organize your menu structure.</span></button>
                <button onClick={() => { handleTabClick('menu'); if(!hasProduct) setIsFormOpen(true); }} className={`p-4 rounded-2xl text-left flex flex-col gap-2 border transition-all active:scale-[0.98] min-w-0 ${hasProduct ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-900'}`}><div className="flex justify-between items-center w-full"><span className={`text-sm font-bold ${hasProduct ? 'text-green-700' : 'text-gray-700'}`}>2. Add Item</span>{hasProduct ? <CheckCircle size={18} className="text-green-500" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-300"></div>}</div><span className="text-xs text-gray-500">Add products to your menu.</span></button>
@@ -1162,737 +709,171 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </div>
         )}
 
-        {isAdmin && (
-           <div className={`${activeTab === 'menu' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
-             <div className="flex flex-row items-center justify-between gap-3 mb-6 w-full">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} style={{ color: 'var(--theme-color)' }}/>
-                  <input placeholder="Search menu..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-gray-200 bg-white shadow-sm text-[16px] md:text-sm outline-none focus:ring-2 focus:ring-gray-900"/>
-                </div>
-                <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 border border-gray-200">
-                  <button onClick={() => setViewMode('list')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><List size={18}/></button>
-                  <button onClick={() => setViewMode('grid')} className={`p-2.5 rounded-lg transition-colors active:scale-95 flex items-center justify-center ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}><LayoutGrid size={18}/></button>
-                </div>
-                <button onClick={() => setIsFormOpen(true)} className={`hidden lg:flex shrink-0 ${optProducts.length >= safeLimits.maxProducts ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}>
-                  <Plus size={18} strokeWidth={3}/> Add Product
-                </button>
-             </div>
-             
-             {optProducts.length === 0 && searchQuery === '' ? (
-                <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-3xl border border-gray-100 shadow-sm mt-4 text-center">
-                   <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4"><LayoutGrid size={28} className="text-gray-400"/></div>
-                   <h3 className="text-xl font-bold text-gray-900 mb-2">No products yet</h3>
-                   <ul className="text-sm text-gray-500 mb-8 text-left space-y-2 inline-block"><li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Create a category</li><li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Add your first product</li><li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-gray-400" /> View your live menu</li></ul>
-                   <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                     <button onClick={() => setIsFormOpen(true)} className="bg-gray-900 text-white px-6 py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 active:scale-95 transition flex items-center justify-center gap-2 text-[16px] md:text-sm w-full sm:w-auto"><Plus size={16} strokeWidth={3}/> Add Product</button>
-                     <button onClick={() => handleTabClick('categories')} className="bg-white border border-gray-200 text-gray-700 px-6 py-3.5 rounded-xl font-bold hover:bg-gray-50 active:scale-95 transition text-[16px] md:text-sm w-full sm:w-auto">Go to Categories</button>
-                   </div>
-                </div>
-             ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 min-w-0">
-                  {filteredProducts.map(item => {
-                    const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                    const rawItemDiscount = item.discount || 0;
-                    const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                    const basePrice = getDisplayPrice(item);
-                    const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
-                    return (
-                    <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-100 relative flex flex-col h-full group hover:shadow-md transition-all overflow-hidden cursor-pointer" onClick={() => setEditingProduct(item)}>
-                      <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10 pointer-events-none">
-                        {item.isPopular && <span className="bg-orange-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">Hot</span>}
-                        {effectiveDiscount > 0 && <span className="bg-red-500 text-white text-[10px] px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide shadow-md">-{effectiveDiscount}%</span>}
-                      </div>
-                      <div className={`relative w-full aspect-[5/4] sm:aspect-[4/3] shrink-0 bg-gray-100 overflow-hidden pointer-events-none ${item.isSoldOut ? 'opacity-50 grayscale' : ''}`}>
-                        <LazyImage src={getValidImage(item.image)} alt={item.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"/>
-                      </div>
-                      <div className="flex flex-col flex-1 p-4 sm:p-5 min-w-0 pointer-events-none">
-                        <h3 className={`font-bold text-gray-900 text-base sm:text-lg leading-tight line-clamp-2 mb-1.5 ${item.isSoldOut ? 'text-gray-500' : ''}`}>{item.name}</h3>
-                        <div className="flex items-center text-gray-400 text-xs sm:text-sm gap-2 mb-4"><span className="font-medium truncate">{item.category?.name}</span><span className="font-medium shrink-0">•</span><span className="font-medium shrink-0">{item.time}</span></div>
-                        <div className="mt-auto pt-3 flex flex-col pointer-events-auto border-t border-gray-50">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0 pr-2">
-                              {effectiveDiscount > 0 ? (
-                                <div className="flex flex-col"><span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="font-semibold text-xs sm:text-sm text-gray-400 line-through mt-1 truncate block">${basePrice.toFixed(2)}</span></div>
-                              ) : (
-                                <span className={`font-extrabold text-lg sm:text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${basePrice.toFixed(2)}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center shrink-0 relative z-10" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-gray-50 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95 shrink-0"><MoreVertical size={16} /></button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )})}
-                  {filteredProducts.length === 0 && searchQuery !== '' && <div className="col-span-full py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No products found matching "{searchQuery}"</div>}
-                </div>
-             ) : (
-                <>
-                  <div className="hidden lg:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead><tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider"><th className="p-5">Product</th><th className="p-5">Category</th><th className="p-5">Price</th><th className="p-5">Time</th><th className="p-5 text-right">Action</th></tr></thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {filteredProducts.map((item) => {
-                          const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                          const rawItemDiscount = item.discount || 0;
-                          const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                          const basePrice = getDisplayPrice(item);
-                          const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
-                          return (
-                          <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${item.isSoldOut ? 'opacity-70' : ''}`} onClick={() => setEditingProduct(item)}>
-                            <td className="p-4 flex items-center gap-4 min-w-0"><div className={`w-14 h-14 rounded-xl bg-gray-50 overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div><div className="flex flex-col min-w-0"><span className={`font-bold text-base truncate ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</span><div className="flex items-center gap-2 mt-1">{item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">Hot</span>}{effectiveDiscount > 0 && <span className="text-red-500 text-[9px] bg-red-100 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wide">-{effectiveDiscount}%</span>}</div></div></td>
-                            <td className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider"><span className="bg-gray-100 px-3 py-1.5 rounded-lg truncate inline-block max-w-[120px]">{item.category?.name}</span></td>
-                            <td className={`p-4 font-black text-xl ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{effectiveDiscount > 0 ? (<div className="flex flex-col"><span className={item.isSoldOut ? 'text-gray-500' : 'text-red-500'}>${discountedPrice.toFixed(2)}</span><span className="text-xs text-gray-400 line-through font-medium mt-0.5">${basePrice.toFixed(2)}</span></div>) : (`$${basePrice.toFixed(2)}`)}</td>
-                            <td className="p-4 text-sm text-gray-500 font-medium">{item.time}</td>
-                            <td className="p-4 text-right"><div className="flex items-center justify-end gap-3 relative z-10" onClick={(e) => e.stopPropagation()}><button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-10 h-10 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 transition-colors active:scale-95"><MoreVertical size={18} /></button></div></td>
-                          </tr>
-                        )})}
-                      </tbody>
-                    </table>
-                    {filteredProducts.length === 0 && searchQuery !== '' && <div className="py-16 text-center text-gray-400 font-medium">No products found matching "{searchQuery}"</div>}
-                  </div>
-                  <div className="lg:hidden space-y-4">
-                     {filteredProducts.map((item) => {
-                       const categoryDiscount = typeof item.category === 'object' ? (item.category.discount || 0) : 0;
-                       const rawItemDiscount = item.discount || 0;
-                       const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
-                       const basePrice = getDisplayPrice(item);
-                       const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
-                       return(
-                        <div key={item.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col cursor-pointer ${item.isSoldOut ? 'opacity-75' : ''}`} onClick={() => setEditingProduct(item)}>
-                           <div className="flex items-start gap-4 mb-3"><div className={`w-[72px] h-[72px] bg-gray-50 rounded-md overflow-hidden shrink-0 border border-gray-100 relative ${item.isSoldOut ? 'grayscale' : ''}`}><LazyImage src={getValidImage(item.image)} className="w-full h-full object-cover" alt="" /></div><div className="flex-1 min-w-0 pt-1"><h4 className={`font-extrabold text-base leading-tight mb-1.5 line-clamp-2 ${item.isSoldOut ? 'text-gray-500' : 'text-gray-900'}`}>{item.name}</h4><div className="flex items-center gap-2 flex-wrap"><p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{item.category?.name} • {item.time}</p>{item.isPopular && <span className="text-orange-500 text-[9px] bg-orange-50 px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider">Hot</span>}</div></div></div>
-                           <div className="flex flex-col border-t border-gray-50 pt-3 relative z-10 mt-auto"><div className="flex items-center justify-between"><div className="flex-1 min-w-0 pr-2 pointer-events-none">{effectiveDiscount > 0 ? (<div className="flex items-baseline gap-1.5 flex-wrap"><span className={`font-black text-xl leading-none truncate ${item.isSoldOut ? 'text-gray-400' : 'text-red-500'}`}>${discountedPrice.toFixed(2)}</span><span className="text-xs font-medium text-gray-400 line-through truncate">${basePrice.toFixed(2)}</span></div>) : (<span className={`font-black text-xl leading-none truncate block ${item.isSoldOut ? 'text-gray-400' : 'text-gray-900'}`}>${basePrice.toFixed(2)}</span>)}</div><div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}><button onClick={(e) => { e.stopPropagation(); setEditingProduct(item); }} className="w-8 h-8 flex items-center justify-center text-gray-500 bg-gray-50 rounded-full hover:bg-gray-100 hover:text-gray-900 active:scale-95 transition-all"><MoreVertical size={16} /></button></div></div></div>
-                        </div>
-                     )})}
-                     {filteredProducts.length === 0 && searchQuery !== '' && <div className="bg-white p-8 rounded-3xl text-center text-gray-400 font-medium shadow-sm border border-gray-100">No products found matching "{searchQuery}"</div>}
-                  </div>
-                </>
-             )}
-             {optProducts.length > 0 && <button onClick={() => setIsFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50 print:hidden"><Plus size={24} strokeWidth={3} /></button>}
-           </div>
-        )}
-
+        {isAdmin && <div className={`${activeTab === 'menu' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}><MenuTab searchQuery={searchQuery} setSearchQuery={setSearchQuery} viewMode={viewMode} setViewMode={setViewMode} optProducts={optProducts} filteredProducts={filteredProducts} safeLimits={safeLimits} setIsFormOpen={setIsFormOpen} setEditingProduct={setEditingProduct} handleTabClick={handleTabClick} featCampaign={featCampaign} getDisplayPrice={getDisplayPrice} getValidImage={getValidImage} /></div>}
+        
         {isAdmin && (
            <div className={`${activeTab === 'categories' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
-             <div className="flex justify-between items-center gap-4 mb-6">
-                 <div>
-                   <h3 className="font-bold text-gray-900 text-xl sm:text-2xl hidden sm:block">Manage Categories</h3>
-                   <p className="text-sm text-gray-500 mt-1 hidden sm:block">Drag and drop to reorder. The live menu will follow this order.</p>
-                 </div>
-                <button onClick={() => setIsCatFormOpen(true)} className={`hidden lg:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}>
-                  <Plus size={18} strokeWidth={3}/> Add New
-                </button>
-             </div>
-             
-             {sortedCategories.length === 0 ? (
-                <div className="py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No categories created yet</div>
-             ) : (
-                <CategorySortableList 
-                  categories={sortedCategories} 
-                  onReorder={handleReorderCategories} 
-                  onEdit={(cat) => setEditingCategory(cat)} 
-                  onDelete={(id, name) => {
-                     const fd = new FormData();
-                     fd.append('id', id);
-                     confirmDelete('category', id, name, fd);
-                  }} 
-                />
-             )}
+             <div className="flex justify-between items-center gap-4 mb-6"><div><h3 className="font-bold text-gray-900 text-xl sm:text-2xl hidden sm:block">Manage Categories</h3><p className="text-sm text-gray-500 mt-1 hidden sm:block">Drag and drop to reorder. The live menu will follow this order.</p></div><button onClick={() => setIsCatFormOpen(true)} className={`hidden lg:flex ml-auto shrink-0 ${optCategories.length >= safeLimits.maxCategories ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'} px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}><Plus size={18} strokeWidth={3}/> Add New</button></div>
+             {sortedCategories.length === 0 ? (<div className="py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No categories created yet</div>) : (<CategorySortableList categories={sortedCategories} onReorder={handleReorderCategories} onEdit={(cat) => setEditingCategory(cat)} onDelete={(id, name) => { const fd = new FormData(); fd.append('id', id); confirmDelete('category', id, name, fd); }} />)}
             <button onClick={() => setIsCatFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800 disabled:opacity-50"><Plus size={24} strokeWidth={3} /></button>
            </div>
         )}
 
-        {/* --- TOPPINGS TAB UI --- */}
-        {isAdmin && (
-           <div className={`${activeTab === 'toppings' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}>
-             <div className="flex justify-between items-center gap-4 mb-6">
-                 <div>
-                   <h3 className="font-bold text-gray-900 text-xl sm:text-2xl hidden sm:block">Manage Toppings</h3>
-                   <p className="text-sm text-gray-500 mt-1 hidden sm:block">Create toppings that cashiers can add to drinks or food during checkout.</p>
-                 </div>
-                <button onClick={() => setIsToppingFormOpen(true)} className={`hidden lg:flex ml-auto shrink-0 bg-gray-900 text-white hover:bg-gray-800 px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition shadow-sm items-center justify-center gap-2 text-[16px] md:text-sm`}>
-                  <Plus size={18} strokeWidth={3}/> Add Topping
-                </button>
-             </div>
-             
-             {optToppings.length === 0 ? (
-                <div className="py-16 text-center text-gray-400 font-medium bg-white rounded-3xl border border-gray-100 shadow-sm">No toppings created yet</div>
-             ) : (
-                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                        <th className="p-5">Topping Name</th>
-                        <th className="p-5">Type</th>
-                        <th className="p-5">Extra Price</th>
-                        <th className="p-5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {optToppings.map(topping => (
-                        <tr key={topping.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="p-5 font-bold text-gray-900">{topping.name}</td>
-                          <td className="p-5">
-                            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md ${topping.isDrink ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-orange-50 text-orange-600 border border-orange-200'}`}>
-                              {topping.isDrink ? 'Drink' : 'Food'}
-                            </span>
-                          </td>
-                          <td className="p-5 font-bold text-gray-600">
-                            {topping.price > 0 ? `+$${topping.price.toFixed(2)}` : 'Free'}
-                          </td>
-                          <td className="p-5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button onClick={() => { setEditingTopping(topping); setIsToppingFormOpen(true); }} className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition active:scale-95"><Pencil size={18} /></button>
-                              <button onClick={() => {
-                                 const fd = new FormData();
-                                 fd.append('id', topping.id);
-                                 confirmDelete('topping', topping.id, topping.name, fd);
-                              }} className="w-10 h-10 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition active:scale-95"><Trash2 size={18} /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-             )}
-            <button onClick={() => setIsToppingFormOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-10 bg-gray-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform hover:bg-gray-800"><Plus size={24} strokeWidth={3} /></button>
-           </div>
-        )}
-
-        {!isFreePlan && (
-           <div className={`${activeTab === 'tables' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden`}>
-             <TableManager shopId={shopId} shopSlug={shopSlug} />
-           </div>
-        )}
+        {isAdmin && <div className={`${activeTab === 'toppings' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden`}><ToppingsTab toppings={optToppings} onAddTopping={() => setIsToppingFormOpen(true)} onEditTopping={(topping) => { setEditingTopping(topping); setIsToppingFormOpen(true); }} onDeleteTopping={(id, name) => { const fd = new FormData(); fd.append('id', id); confirmDelete('topping', id, name, fd); }} /></div>}
+        {!isFreePlan && <div className={`${activeTab === 'tables' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden`}><TableManager shopId={shopId} shopSlug={shopSlug} /></div>}
 
         {isAdmin && (
           <div className={`${activeTab === 'settings' ? 'block animate-in slide-in-from-right-4 duration-300' : 'hidden'} max-w-2xl mx-auto space-y-6 pb-12 print:hidden`}>
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => handleSectionClick('identity')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center">
-                   <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><Store size={20}/></div>
-                   <div className="text-left"><h3 className="font-bold text-gray-900 text-base">Basic Information</h3><p className="text-xs text-gray-500 mt-0.5">Name, display preferences, and contact info</p></div>
-                 </div>
-                 {openSection === 'identity' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-              </button>
-              <div className={openSection === 'identity' ? 'block' : 'hidden'}>
-                <form onSubmit={onIdentitySubmit} className="p-6 border-t border-gray-100 space-y-6">
-                  <div className="space-y-4">
-                    <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name (English)</label><input name="name" value={previewNameEn} onChange={e => { setPreviewNameEn(e.target.value); markDirty('identity'); }} placeholder="e.g. Banlung City" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
-                    <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Name (Local)</label><input name="name_kh" value={previewNameKh} onChange={e => { setPreviewNameKh(e.target.value); markDirty('identity'); }} placeholder="e.g. បានលុង ស៊ីធី" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-2">How should we display your name?</label>
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        {[{ id: 'EN', label: 'English' }, { id: 'KH', label: 'Local (Khmer)' }, { id: 'BOTH', label: 'Both' }].map((option) => (
-                          <label key={option.id} className={`relative flex-1 flex items-center justify-center py-3 px-2 rounded-xl border-2 cursor-pointer transition-all ${previewDisplay === option.id ? 'border-gray-900 bg-gray-900/5 shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                            <input type="radio" name="nameDisplay" value={option.id} checked={previewDisplay === option.id} onChange={(e) => { setPreviewDisplay(e.target.value); markDirty('identity'); }} className="sr-only" />
-                            <div className="flex items-center gap-2"><div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${previewDisplay === option.id ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>{previewDisplay === option.id && <Check size={10} strokeWidth={4} className="text-white" />}</div><span className={`text-xs sm:text-sm font-semibold text-center ${previewDisplay === option.id ? 'text-gray-900' : 'text-gray-600'}`}>{option.label}</span></div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="pt-2">
-                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
-                      <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
-                      <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing.</p>
-                    </div>
-                  </div>
-                  <hr className="border-gray-100" />
-                  <div className="space-y-4">
-                    <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Shop Address</label><input name="address" value={address} onChange={e => { setAddress(e.target.value); markDirty('identity'); }} placeholder="e.g. Street 123, Phnom Penh" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
-                    <div><label className="block text-sm font-semibold text-gray-800 mb-1.5">Phone Number</label><input name="phone" value={phone} onChange={e => { setPhone(e.target.value); markDirty('identity'); }} placeholder="e.g. 012 345 678" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/></div>
-                    <div className="pt-2">
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="block text-sm font-semibold text-gray-800">Operating Hours</label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={is24Hours} onChange={(e) => { setIs24Hours(e.target.checked); markDirty('identity'); }} className="w-4 h-4 cursor-pointer accent-gray-900" />
-                          <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Open 24 Hours</span>
-                        </label>
-                      </div>
-                      <div className={`flex flex-col sm:flex-row sm:items-end gap-3 transition-opacity ${is24Hours ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Opening Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" disabled={is24Hours} value={openTime} onChange={(e) => { setOpenTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer disabled:bg-gray-50"/></div></div>
-                        <span className="hidden sm:block text-gray-400 font-medium text-sm text-center mb-3.5">to</span>
-                        <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Closing Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" disabled={is24Hours} value={closeTime} onChange={(e) => { setCloseTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer disabled:bg-gray-50"/></div></div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
-                    </div>
-                  </div>
-                  
-                  <hr className="border-gray-100" />
-                  <div>
-                     <div className="mb-4">
-                       <h4 className="text-sm font-semibold text-gray-800">Shop Payment QR</h4>
-                       <p className="text-xs text-gray-500 mt-1">Upload your bank or payment QR code so customers can easily scan to pay.</p>
-                     </div>
-                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                        <div 
-                          onClick={() => qrInputRef.current?.click()}
-                          className={`w-32 h-32 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all overflow-hidden relative group shrink-0 ${qrImagePreview ? 'border-gray-200 bg-white' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
-                        >
-                          {qrImagePreview ? (
-                            <>
-                              <LazyImage src={qrImagePreview} alt="QR Code" className="w-full h-full object-contain p-2" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><span className="text-white text-xs font-bold">Change</span></div>
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center text-gray-400 gap-1.5"><UploadCloud size={24} strokeWidth={1.5} /><span className="text-[10px] font-bold uppercase tracking-wider">Upload QR</span></div>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-2">
-                           <button type="button" onClick={() => qrInputRef.current?.click()} className="text-[16px] md:text-sm font-semibold bg-white border border-gray-300 px-4 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 transition-all text-gray-700 w-max">Choose Image</button>
-                           {qrImagePreview && (
-                             <button type="button" onClick={() => { setQrImagePreview(''); setQrFileBlob(null); setRemoveQr(true); markDirty('identity'); }} className="text-[16px] md:text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2.5 rounded-xl transition-all w-max">Remove QR</button>
-                           )}
-                        </div>
-                     </div>
-                     <input type="file" accept="image/*" ref={qrInputRef} onChange={(e) => onFileSelect(e, 'qr')} className="hidden" />
-                  </div>
-
-                  <div className="flex justify-end pt-4 border-t border-gray-100">
-                     <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => handleSectionClick('branding')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl"><Palette size={20}/></div><div className="text-left"><h3 className="font-bold text-gray-900 text-base">Branding & Design</h3><p className="text-xs text-gray-500 mt-0.5">Customize how your menu looks</p></div></div>
-                 {openSection === 'branding' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-              </button>
-              <div className={openSection === 'branding' ? 'block' : 'hidden'}>
-                <form onSubmit={onBrandingSubmit} className="p-6 border-t border-gray-100 space-y-6">
-                   <div className="space-y-4">
-                      <div className="flex justify-between items-center"><label className="block text-sm font-semibold text-gray-800">Menu Header Style</label><span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md uppercase tracking-wider">{headerDesign.replace('design', 'Design ')}</span></div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {allDesigns.map((designKey, idx) => {
-                          const isLocked = isFreePlan && idx > 3 && designKey !== safeLimits.overrideHeaderStyle;
-                          const isSelected = headerDesign === designKey;
-                          return (
-                            <div key={designKey} onClick={() => { if (!isLocked) { setHeaderDesign(designKey); markDirty('branding'); } }} className={`relative h-20 rounded-xl border-2 flex items-center justify-center overflow-hidden transition-all ${isSelected ? 'border-gray-900 shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'} ${isLocked ? 'cursor-not-allowed opacity-70 bg-gray-50' : 'cursor-pointer bg-white'}`}>
-                              <span className="text-xs font-semibold text-gray-500 relative z-10">{designKey.replace('design', 'Style ')}</span>
-                              {isLocked && <div className="absolute top-1.5 right-1.5 bg-gray-900/60 backdrop-blur-md text-white rounded-full p-1 shadow-sm z-20"><Lock size={10} /></div>}
-                              {isSelected && !isLocked && <div className="absolute top-1 right-1 bg-gray-900 text-white rounded-full p-0.5"><Check size={10} strokeWidth={4} /></div>}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className={`w-full relative z-0 overflow-hidden rounded-2xl border ${isCurrentDesignLocked ? 'border-gray-300' : 'border-gray-200'} shadow-sm group`}>
-                         <button type="button" onClick={handlePrevDesign} className="absolute left-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95"><ChevronLeft size={18}/></button>
-                         <button type="button" onClick={handleNextDesign} className="absolute right-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-white/20 backdrop-blur text-white rounded-full shadow-md hover:bg-white/30 transition-all opacity-100 active:scale-95"><ChevronRight size={18}/></button>
-                         {!isCurrentDesignLocked && <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex justify-center w-max"><span className="bg-black/40 backdrop-blur-md text-white text-[11px] font-medium tracking-wide px-4 py-1.5 rounded-full shadow-sm border border-white/20 block whitespace-nowrap font-sans">Tap arrows to change layout</span></div>}
-                         {isCurrentDesignLocked && <div className="absolute top-3 right-3 z-40 pointer-events-none"><div className="bg-gray-900/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-white/10"><Lock size={12} className="text-amber-400" /><span className="text-[10px] font-bold tracking-wider uppercase">Locked</span></div></div>}
-                         <header onClick={handleNextDesign} className={`relative overflow-hidden transition-colors duration-300 min-h-[140px] cursor-pointer`} style={{ background: themeColorPreview }}>
-                            <div className="absolute inset-0 bg-black/10 z-0 pointer-events-none" />
-                            <div className="absolute inset-0 pointer-events-none z-0 opacity-30" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")` }} />
-                            <div className="absolute pointer-events-none z-0" style={{ top: -20, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, background: 'radial-gradient(ellipse, rgba(255,255,255,0.2) 0%, transparent 70%)' }} />
-                            <div className="relative z-10 flex flex-col h-full w-full pointer-events-none">
-                               {headerDesign !== 'design6' && <div className="absolute top-2 left-4 z-20 pointer-events-none"><div className="p-1.5 sm:p-2 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white shadow-sm flex items-center justify-center"><Menu size={20} strokeWidth={2.5}/></div></div>}
-                               <div className={`flex items-center justify-center px-4 pb-2 w-full h-full pointer-events-none ${headerDesign === 'design6' ? 'pt-6' : 'pt-12'}`}>
-                                  {headerDesign === 'design2' ? <h1 className="text-white tracking-wide text-center text-2xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 w-full">{getShopNamePreview()}</h1> : headerDesign === 'design3' ? <div className="flex flex-col items-center gap-3 max-w-full"><div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16 overflow-hidden rounded-2xl' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}><LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} /><div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div></div><h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1></div> : headerDesign === 'design4' ? <div className="flex items-center justify-center gap-3 max-w-full"><div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-14 h-14 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-14 h-14 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}><LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} /><div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div></div><h1 className="text-white tracking-wide text-left text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words flex-1">{getShopNamePreview()}</h1></div> : headerDesign === 'design5' ? <div className="flex flex-col items-center justify-center w-full max-w-full">{(logoPreview || settings?.logo) ? (<div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20 overflow-hidden rounded-2xl' : 'rounded-2xl overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}><LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-[14px]'}`} /><div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-[14px]' : 'rounded-[14px]'}`}><span className="text-white text-[10px] font-bold">Edit</span></div></div>) : (<h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>)}</div> : headerDesign === 'design7' ? <div className="flex flex-col items-center justify-center w-full max-w-full">{(logoPreview || settings?.logo) ? (<div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-20 h-20 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-20 h-20 shadow-xl p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}><LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} /><div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div></div>) : (<h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{getShopNamePreview()}</h1>)}</div> : headerDesign === 'design6' ? <div className="flex items-center justify-between w-full max-w-full gap-3 mt-[-20px]"><div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg && (logoPreview || settings?.logo) ? 'w-10 h-10 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-10 h-10 shadow-sm p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}>{(logoPreview || settings?.logo) ? (<LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} />) : (<div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xs">{getShopNamePreview().charAt(0).toUpperCase()}</div>)}<div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[8px] font-bold">Edit</span></div></div><h1 className="text-white tracking-wide text-center text-lg font-bold drop-shadow-sm font-sans leading-relaxed line-clamp-1 flex-1 break-words">{getShopNamePreview()}</h1><div className="p-1.5 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white shadow-sm flex items-center justify-center"><Menu size={16} strokeWidth={2.5}/></div></div> : <div className="flex flex-col items-center gap-2 max-w-full"><div className={`flex-shrink-0 relative group/logo pointer-events-auto cursor-pointer flex items-center justify-center ${isNoBg ? 'w-16 h-16 overflow-hidden rounded-full' : 'rounded-full overflow-hidden bg-white w-16 h-16 shadow-lg p-0.5'}`} onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}><LazyImage src={logoPreview || fallbackLogo} alt="Logo" className={`w-full h-full ${isNoBg ? 'object-contain' : 'object-cover rounded-full'}`} /><div className={`absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-opacity ${isNoBg ? 'rounded-full' : 'rounded-full'}`}><span className="text-white text-[10px] font-bold">Edit</span></div></div><h1 className="text-white tracking-wide text-center text-xl font-bold drop-shadow-sm font-sans leading-relaxed pt-1 line-clamp-2 break-words w-full">{getShopNamePreview()}</h1></div>}
-                               </div>
-                            </div>
-                         </header>
-                      </div>
-                      
-                      <input type="hidden" name="headerDesign" value={headerDesign} />
-                      <div className="flex justify-center pt-2">
-                         <div className="flex items-center gap-3 flex-wrap">
-                            <button type="button" onClick={() => logoInputRef.current?.click()} className="text-[16px] md:text-sm font-semibold bg-white border border-gray-300 px-6 py-2.5 rounded-xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700 active:scale-95 transition-all"><ImageIcon size={16}/> {logoPreview ? 'Change Logo Image' : 'Upload Logo Image'}</button>
-                            {isDirtyLogo && <button type="button" onClick={() => { cancelLogoChange(); clearDirty('branding'); }} className="text-[16px] md:text-sm font-semibold text-red-600 bg-red-50 px-6 py-2.5 rounded-xl hover:bg-red-100 active:scale-95 transition-all">Cancel</button>}
-                         </div>
-                      </div>
-                      <input type="file" accept="image/*" ref={logoInputRef} onChange={(e) => onFileSelect(e, 'logo')} className="hidden"/> 
-
-                      {logoFileBlob && (
-                        <div className="mt-8 border-t border-gray-100 pt-6 animate-in fade-in slide-in-from-bottom-4">
-                           <div className="mb-4"><h4 className="text-sm font-bold text-gray-900">Logo Style</h4><p className="text-xs text-gray-500 mt-1">Not sure? Choose "Without background" if your logo does not have a box or colored background behind it.</p></div>
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                              <button type="button" onClick={() => { setLogoType('withBackground'); markDirty('branding'); }} className={`p-4 rounded-2xl border-2 text-left transition-all ${logoType === 'withBackground' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}><div className="flex items-center justify-between mb-2"><span className={`font-bold text-sm ${logoType === 'withBackground' ? 'text-gray-900' : 'text-gray-700'}`}>With background</span><div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${logoType === 'withBackground' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>{logoType === 'withBackground' && <Check size={10} strokeWidth={4} className="text-white" />}</div></div><p className="text-xs text-gray-500">Best for QR, print, and strong visibility</p></button>
-                              <button type="button" onClick={() => { setLogoType('withoutBackground'); markDirty('branding'); }} className={`p-4 rounded-2xl border-2 text-left transition-all ${logoType === 'withoutBackground' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}><div className="flex items-center justify-between mb-2"><span className={`font-bold text-sm ${logoType === 'withoutBackground' ? 'text-gray-900' : 'text-gray-700'}`}>Without background</span><div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${logoType === 'withoutBackground' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>{logoType === 'withoutBackground' && <Check size={10} strokeWidth={4} className="text-white" />}</div></div><p className="text-xs text-gray-500">Best for website headers and flexible layouts</p></button>
-                           </div>
-                        </div>
-                      )}
-                   </div>
-
-                   <div className="space-y-2">
-                      <div className="flex justify-between items-center"><label className="block text-sm font-semibold text-gray-800">Theme Color</label></div>
-                      <div className="flex items-center gap-4"><input name="themeColor" type="color" value={themeColorPreview} onChange={(e) => { setThemeColorPreview(e.target.value); markDirty('branding'); }} className="h-12 w-16 rounded-xl bg-white p-1 border border-gray-300 shadow-sm cursor-pointer"/><span className="text-sm font-mono text-gray-500 uppercase">{themeColorPreview}</span></div>
-                   </div>
-                   <div className="flex justify-end pt-4">
-                       <button type="submit" disabled={!dirtySections['branding'] || isCurrentDesignLocked} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/> {isCurrentDesignLocked ? 'Locked' : (dirtySections['branding'] ? 'Save Design' : 'Saved')}</button>
-                   </div>
-                </form>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => handleSectionClick('banners')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2.5 bg-yellow-50 text-yellow-600 rounded-xl"><ImageIcon size={20}/></div><div className="text-left"><h3 className="font-bold text-gray-900 text-base">Promotional Banners</h3><p className="text-xs text-gray-500 mt-0.5">Add sliding banners to your menu</p></div></div>
-                 {openSection === 'banners' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-              </button>
-              <div className={openSection === 'banners' ? 'block' : 'hidden'}>
-                <div className="p-6 border-t border-gray-100 space-y-4">
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                     {optBanners.map((b, index) => (
-                       <div key={b.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-200'} shadow-sm group bg-gray-50 flex items-center justify-center cursor-move`}>
-                         <LazyImage src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
-                         <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button><button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button></div>
-                         <form action={(fd) => { startTransition(async () => { dispatchOptBanners({ type: 'delete', payload: b.id }); await deleteBanner(fd); showToast("Banner deleted"); }); }}><input type="hidden" name="id" value={b.id} /><button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600"><Trash2 size={14}/></button></form>
-                       </div>
-                     ))}
-                   </div>
-                   {optBanners.length >= safeLimits.maxBanners && <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 my-2"><Info className="text-blue-500 shrink-0" size={20}/><div className="text-xs text-blue-700 leading-relaxed"><p className="font-black mb-1 uppercase tracking-tight">Banner Limit Reached</p><p>Your current plan allows for {safeLimits.maxBanners} active banner. Upgrade to add more promotions.</p></div></div>}
-                   <button type="button" onClick={() => bannerInputRef.current?.click()} disabled={optBanners.length >= safeLimits.maxBanners} className="w-full py-4 bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-600 font-semibold text-[16px] md:text-sm hover:border-gray-400 hover:bg-gray-100 transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={16}/> Upload New Banner</button>
-                   <input type="file" accept="image/*" ref={bannerInputRef} onChange={(e) => onFileSelect(e, 'banner')} className="hidden" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => handleSectionClick('socials')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2.5 bg-pink-50 text-pink-600 rounded-xl"><Share2 size={20}/></div><div className="text-left flex items-center gap-2"><h3 className="font-bold text-gray-900 text-base">Social Media Links</h3>{!canUseCustomSocials && <Lock size={12} className="text-gray-300"/>}</div></div>
-                 {openSection === 'socials' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-              </button>
-              <div className={openSection === 'socials' ? 'block' : 'hidden'}>
-                {!canUseCustomSocials ? (
-                  <div className="bg-gray-50 border-t border-dashed border-gray-200 p-8 text-center"><Share2 className="mx-auto text-gray-300 mb-3" size={32}/><p className="text-sm font-bold text-gray-600">Social Links Locked</p><p className="text-[11px] text-gray-400 mt-1 leading-relaxed max-w-xs mx-auto">Connect Facebook, Instagram, and Telegram to your menu with a PRO plan.</p></div>
-                ) : (
-                  <form onSubmit={onSocialsSubmit} className="p-6 border-t border-gray-100 space-y-4">
-                    {socialLinks.map((link) => (
-                      <div key={link.id} className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 animate-in slide-in-from-left-2 shadow-sm"><div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-300 shadow-sm"><span className="text-gray-500">{getPlatformIcon(link.platform)}</span><select value={link.platform} onChange={(e) => updateSocialLink(link.id, 'platform', e.target.value)} className="bg-transparent text-[16px] md:text-sm font-semibold outline-none cursor-pointer w-24"><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="youtube">YouTube</option><option value="twitter">Twitter</option><option value="linkedin">LinkedIn</option><option value="website">Website</option></select></div><input value={link.url} onChange={(e) => updateSocialLink(link.id, 'url', e.target.value)} placeholder="Paste link here..." className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"/><div className="flex items-center gap-3 justify-end sm:pl-2"><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={link.active} onChange={(e) => updateSocialLink(link.id, 'active', e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div></label><button type="button" onClick={() => removeSocialLink(link.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button></div></div>
-                    ))}
-                    <button type="button" onClick={addSocialLink} className="w-full py-4 bg-white border border-dashed border-gray-300 rounded-2xl text-gray-700 font-semibold text-[16px] md:text-sm hover:border-gray-400 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99] shadow-sm"><Plus size={16}/> Add New Link</button>
-                    <div className="flex justify-end pt-4"><button type="submit" disabled={!dirtySections['socials']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/> {dirtySections['socials'] ? 'Save Social Links' : 'Saved'}</button></div>
-                  </form>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-2">
-              <button onClick={() => handleSectionClick('notifications')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
-                 <div className="flex gap-4 items-center"><div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl"><Bell size={20}/></div><div className="text-left"><h3 className="font-bold text-gray-900 text-base">Staff Notifications</h3><p className="text-xs text-gray-500 mt-0.5">Configure Telegram alerts for table requests</p></div></div>
-                 {openSection === 'notifications' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-              </button>
-              <div className={openSection === 'notifications' ? 'block' : 'hidden'}>
-                {!canUseTelegram ? (
-                  <div className="p-8 text-center bg-gray-50 border-t border-dashed border-gray-200"><div className="w-14 h-14 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner"><Lock size={24}/></div><p className="text-sm font-bold text-gray-700">Telegram Notifications Locked</p><p className="text-xs text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">Alert Barista via Telegram is not included in your current plan.</p></div>
-                ) : (
-                  <form onSubmit={onNotificationsSubmit} className="p-6 border-t border-gray-100 space-y-6">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                      <div><h4 className="font-bold text-gray-900 text-sm">Enable "Call Staff" Feature</h4><p className="text-xs text-gray-500 mt-1">Allow customers to request assistance from their table.</p></div>
-                      <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isStaffEnabled} onChange={(e) => { setIsStaffEnabled(e.target.checked); markDirty('notifications'); }} className="sr-only peer"/><div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div></label>
-                    </div>
-                    <div className="space-y-4">
-                      <label className="block text-sm font-semibold text-gray-800">Main Telegram Chat ID</label>
-                      <div className="flex gap-2"><input type="text" value={tgChatId} onChange={e => { setTgChatId(e.target.value); markDirty('notifications'); }} placeholder="e.g. 123456789" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/><button type="button" onClick={() => handleTestTelegram('General')} disabled={isTestingTg || !tgChatId.trim()} className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-[16px] md:text-sm rounded-xl transition-colors disabled:opacity-50 shrink-0">Test</button></div>
-                    </div>
-                    <div className="pt-4 border-t border-gray-100">
-                      <div className="mb-4"><h4 className="font-bold text-gray-900 text-sm mb-1">Topic Routing (Optional)</h4></div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-semibold text-gray-800 mb-1.5 flex items-center gap-1.5"><Hash size={12}/> Staff Call Topic ID</label><div className="flex gap-2"><input type="text" value={tgStaffCallTopicId} onChange={e => { setTgStaffCallTopicId(e.target.value); markDirty('notifications'); }} placeholder="e.g. 45" className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/><button type="button" onClick={() => handleTestTelegram('Staff Call', tgStaffCallTopicId)} disabled={isTestingTg || !tgChatId.trim() || !tgStaffCallTopicId.trim()} className="px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors disabled:opacity-50" title="Test Staff Call Topic"><Send size={14}/></button></div></div>
-                        <div><label className="block text-xs font-semibold text-gray-800 mb-1.5 flex items-center gap-1.5"><Hash size={12}/> New Order Topic ID</label><div className="flex gap-2"><input type="text" value={tgNewOrderTopicId} onChange={e => { setTgNewOrderTopicId(e.target.value); markDirty('notifications'); }} placeholder="e.g. 99" className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/><button type="button" onClick={() => handleTestTelegram('New Order', tgNewOrderTopicId)} disabled={isTestingTg || !tgChatId.trim() || !tgNewOrderTopicId.trim()} className="px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors disabled:opacity-50" title="Test New Order Topic"><Send size={14}/></button></div></div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end pt-4 border-t border-gray-100"><button type="submit" disabled={!dirtySections['notifications']} className="w-full sm:w-auto bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"><CheckCircle size={16}/>{dirtySections['notifications'] ? 'Save Notifications' : 'Saved'}</button></div>
-                  </form>
-                )}
-              </div>
-            </div>
+             <SettingsTab 
+               openSection={openSection}
+               handleSectionClick={handleSectionClick}
+               onIdentitySubmit={settingsState.onIdentitySubmit}
+               previewNameEn={settingsState.previewNameEn}
+               setPreviewNameEn={settingsState.setPreviewNameEn}
+               previewNameKh={settingsState.previewNameKh}
+               setPreviewNameKh={settingsState.setPreviewNameKh}
+               previewDisplay={settingsState.previewDisplay}
+               setPreviewDisplay={settingsState.setPreviewDisplay}
+               printerUrl={settingsState.printerUrl}
+               setPrinterUrl={settingsState.setPrinterUrl}
+               address={settingsState.address}
+               setAddress={settingsState.setAddress}
+               phone={settingsState.phone}
+               setPhone={settingsState.setPhone}
+               is24Hours={settingsState.is24Hours}
+               setIs24Hours={settingsState.setIs24Hours}
+               openTime={settingsState.openTime}
+               setOpenTime={settingsState.setOpenTime}
+               closeTime={settingsState.closeTime}
+               setCloseTime={settingsState.setCloseTime}
+               qrImagePreview={settingsState.qrImagePreview}
+               qrInputRef={settingsState.qrInputRef} 
+               onFileSelect={onFileSelect}
+               setQrImagePreview={settingsState.setQrImagePreview}
+               setQrFileBlob={settingsState.setQrFileBlob}
+               setRemoveQr={settingsState.setRemoveQr}
+               markDirty={markDirty}
+               dirtySections={dirtySections}
+               onBrandingSubmit={settingsState.onBrandingSubmit}
+               headerDesign={settingsState.headerDesign}
+               allDesigns={allDesigns}
+               isCurrentDesignLocked={isCurrentDesignLocked}
+               setHeaderDesign={settingsState.setHeaderDesign}
+               handlePrevDesign={settingsState.handlePrevDesign}
+               handleNextDesign={settingsState.handleNextDesign}
+               themeColorPreview={settingsState.themeColorPreview}
+               getShopNamePreview={settingsState.getShopNamePreview}
+               isNoBg={settingsState.isNoBg}
+               logoPreview={settingsState.logoPreview}
+               fallbackLogo={FALLBACK_LOGO}
+               logoInputRef={settingsState.logoInputRef} 
+               logoFileBlob={settingsState.logoFileBlob}
+               setLogoType={settingsState.setLogoType}
+               logoType={settingsState.logoType}
+               setThemeColorPreview={settingsState.setThemeColorPreview}
+               cancelLogoChange={settingsState.cancelLogoChange}
+               clearDirty={clearDirty}
+               optBanners={optBanners}
+               draggedBannerIndex={draggedBannerIndex}
+               handleDragStart={handleDragStart}
+               handleDragOver={handleDragOver}
+               handleDrop={handleDrop}
+               handleMoveBanner={handleMoveBanner}
+               dispatchOptBanners={dispatchOptBanners}
+               deleteBanner={deleteBanner}
+               showToast={showToast}
+               bannerInputRef={bannerInputRef}
+               safeLimits={safeLimits}
+               onSocialsSubmit={settingsState.onSocialsSubmit}
+               canUseCustomSocials={canUseCustomSocials}
+               socialLinks={settingsState.socialLinks}
+               getPlatformIcon={getPlatformIcon as any}
+               updateSocialLink={settingsState.updateSocialLink}
+               removeSocialLink={settingsState.removeSocialLink}
+               addSocialLink={settingsState.addSocialLink}
+               onNotificationsSubmit={settingsState.onNotificationsSubmit}
+               canUseTelegram={canUseTelegram} 
+               isStaffEnabled={settingsState.isStaffEnabled}
+               setIsStaffEnabled={settingsState.setIsStaffEnabled}
+               tgChatId={settingsState.tgChatId}
+               setTgChatId={settingsState.setTgChatId}
+               handleTestTelegram={settingsState.handleTestTelegram}
+               isTestingTg={settingsState.isTestingTg}
+               tgStaffCallTopicId={settingsState.tgStaffCallTopicId}
+               setTgStaffCallTopicId={settingsState.setTgStaffCallTopicId}
+               tgNewOrderTopicId={settingsState.tgNewOrderTopicId}
+               setTgNewOrderTopicId={settingsState.setTgNewOrderTopicId}
+               startTransition={startTransition}
+               isDirtyLogo={settingsState.isDirtyLogo}
+               setIsDirtyLogo={settingsState.setIsDirtyLogo}
+               setLogoFileBlobAction={settingsState.setLogoFileBlob}
+               isFreePlan={isFreePlan}
+               settings={settings}
+             />
           </div>
         )}
       </main>
 
-      {/* --- ADDED TOPPING FORM MODAL --- */}
-      {(isToppingFormOpen || editingTopping) && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }}>
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6">
-               <h2 className="text-2xl font-bold">{editingTopping ? "Edit Topping" : "Add Topping"}</h2>
-               <button type="button" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
-             </div>
-             <form action={(fd) => {
-               const name = fd.get("name") as string;
-               const price = parseFloat(fd.get("price") as string) || 0;
-               const isDrink = fd.get("isDrink") === 'true'; // <--- NEW
-
-               if (editingTopping) {
-                 const id = editingTopping.id;
-                 fd.append("id", id);
-                 setIsToppingFormOpen(false);
-                 setEditingTopping(null);
-                 startTransition(async () => { 
-                   dispatchOptToppings({ type: 'update', payload: { ...editingTopping, name, price, isDrink } as Topping });
-                   try {
-                     await updateTopping(fd); 
-                     showToast("Topping updated!"); 
-                   } catch (e) {
-                     showToast("Failed to update topping.");
-                   }
-                 });
-               } else {
-                 setIsToppingFormOpen(false);
-                 startTransition(async () => { 
-                   dispatchOptToppings({ type: 'add', payload: { id: `temp-${Date.now()}`, name, price, isDrink } as Topping });
-                   try {
-                     await createTopping(fd); 
-                     showToast("Topping created!"); 
-                   } catch (e) {
-                     showToast("Failed to create topping.");
-                   }
-                 });
-               }
-             }} className="space-y-4">
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Topping Name</label>
-                 <input type="text" name="name" defaultValue={editingTopping?.name} placeholder="e.g. Pearl" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-               </div>
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Extra Price ($)</label>
-                 <input type="number" step="0.01" min="0" name="price" defaultValue={editingTopping?.price || ''} placeholder="0.50" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-               </div>
-               {/* --- ADDED TOGGLE FOR DRINK VS FOOD --- */}
-               <div className="pt-2">
-                 <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
-                   <input type="checkbox" name="isDrink" value="true" defaultChecked={editingTopping ? editingTopping.isDrink : true} className="w-4 h-4 cursor-pointer accent-gray-900"/> Available for Drinks (Uncheck for Food)
-                 </label>
-               </div>
-               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
-                 <button type="button" onClick={() => { setIsToppingFormOpen(false); setEditingTopping(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
-                 <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button>
-               </div>
-             </form>
-          </div>
-        </div>
-      )}
-
-      {isTeamFormOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }}>
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6">
-               <h2 className="text-2xl font-bold">{editingTeamMember ? "Edit Team Member" : "Add Staff"}</h2>
-               <button type="button" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
-             </div>
-             <form action={async (fd) => {
-               setIsSaving(true);
-               if (editingTeamMember) {
-                 fd.append('userId', editingTeamMember.id);
-                 const res = await updateTeamMemberRole(fd);
-                 if (res.success) {
-                   setTeamMembers(teamMembers.map(m => m.id === editingTeamMember.id ? { ...m, role: fd.get('role') } : m));
-                   showToast("Role updated!");
-                   setIsTeamFormOpen(false);
-                 } else {
-                   showToast(res.error || "Update failed");
-                 }
-               } else {
-                 const res = await createTeamMember(fd);
-                 if (res.success) {
-                   showToast("Team member added!");
-                   getTeamMembers().then(r => { if(r.success) setTeamMembers(r.data); });
-                   setIsTeamFormOpen(false);
-                 } else {
-                   showToast(res.error || "Creation failed");
-                 }
-               }
-               setIsSaving(false);
-             }} className="space-y-4">
-               {!editingTeamMember && (
-                 <>
-                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email Address</label>
-                     <input type="email" name="email" placeholder="staff@shop.com" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-                   </div>
-                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Temporary Password</label>
-                     <input type="password" name="password" placeholder="Min 6 characters" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required minLength={6} />
-                   </div>
-                 </>
-               )}
-               {editingTeamMember && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">User</p>
-                    <p className="font-bold text-gray-900">{editingTeamMember.email}</p>
-                  </div>
-               )}
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Role</label>
-                 <select name="role" defaultValue={editingTeamMember?.role === 'OWNER' ? 'admin' : (editingTeamMember?.role || 'staff')} className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900 bg-white" required>
-                   <option value="staff">Staff (POS & Orders)</option>
-                   <option value="admin">Admin (Full Access)</option>
-                 </select>
-               </div>
-               
-               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
-                 <button type="button" onClick={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
-                 <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button>
-               </div>
-             </form>
-          </div>
-        </div>
-      )}
-
-      {pendingNav && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-5"><AlertTriangle size={24} className="text-orange-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Unsaved Changes</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">You have unsaved changes in this section. Do you want to save them before leaving?</p><div className="flex gap-3 w-full"><button onClick={() => { discardChanges(pendingNav.source); clearDirty(pendingNav.source); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); }} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">No, Discard</button><button onClick={async () => { setIsSaving(true); let success = false; if (pendingNav.source === 'identity') success = await saveIdentityForm(); else if (pendingNav.source === 'branding') success = await saveBrandingForm(); else if (pendingNav.source === 'socials') success = await saveSocialsForm(); else if (pendingNav.source === 'notifications') success = await saveNotificationsForm(); setIsSaving(false); if (success) { clearDirty(pendingNav.source); if (pendingNav.source === 'branding') setLogoFileBlob(null); showToast("Changes saved!"); executeNav(pendingNav.type, pendingNav.payload); setPendingNav(null); } }} className="flex-1 py-3.5 px-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">{isSaving ? <Loader2 className="animate-spin" size={18} /> : 'Yes, Save'}</button></div></div>
-        </div>
-      )}
-
-      {deleteConfirmation.isOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95"><div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-5"><Trash2 size={24} className="text-red-500" /></div><h3 className="text-xl font-bold text-gray-900 mb-2">Delete {deleteConfirmation.type === 'product' ? 'Product' : deleteConfirmation.type === 'topping' ? 'Topping' : 'Category'}?</h3><p className="text-gray-500 text-sm mb-8 leading-relaxed">Are you sure you want to delete <span className="font-semibold text-gray-700">"{deleteConfirmation.name}"</span>? This action cannot be undone after confirmation.</p><div className="flex gap-3 w-full"><button onClick={() => setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null })} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm">Cancel</button><button onClick={handleConfirmDeleteAction} className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm">Confirm</button></div></div>
-        </div>
-      )}
-
-      {isQrModalOpen && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm py-4" onClick={() => setIsQrModalOpen(false)}>
-            <div className="bg-white p-6 md:p-8 rounded-[35px] max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto [-webkit-overflow-scrolling:touch] no-scrollbar [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center mb-6"><h2 className="font-extrabold text-2xl text-gray-900">QR & Print Menu</h2><button className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 transition-colors active:scale-95" onClick={() => setIsQrModalOpen(false)}><X size={20}/></button></div>
-               <div className="flex gap-2 mb-6 bg-gray-100 p-1.5 rounded-2xl w-full"><button onClick={() => setPreviewFormat('portrait')} className={`flex-1 py-2 px-1 rounded-xl text-[16px] md:text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'portrait' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><span>Portrait</span><span className="text-[10px] font-normal opacity-70 mt-0.5">(Table stand)</span></button><button onClick={() => setPreviewFormat('landscape')} className={`flex-1 py-2 px-1 rounded-xl text-[16px] md:text-sm font-bold transition-all active:scale-[0.98] flex flex-col items-center justify-center leading-tight ${previewFormat === 'landscape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><span>Landscape</span><span className="text-[10px] font-normal opacity-70 mt-0.5">(Wall / Counter)</span></button></div>
-               <div className="mb-6"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block text-center">Paper Size</label><div className="flex gap-2 bg-gray-100 p-1.5 rounded-xl w-full max-w-[240px] mx-auto">{['A4', 'A5', '10x15'].map(size => (<button key={size} onClick={() => setPaperSize(size as any)} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${paperSize === size ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>{size === '10x15' ? '10×15 cm' : size}</button>))}</div></div>
-               <div className="w-full bg-gray-50/80 rounded-3xl flex items-center justify-center mb-6 overflow-hidden relative shadow-inner" style={{ height: '320px' }}><div className="absolute top-3 right-4 bg-white/90 backdrop-blur px-2 py-1 rounded shadow-sm z-20"><span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Actual print ratio</span></div><div className="origin-center transform transition-all duration-500 flex items-center justify-center shadow-lg bg-white" style={{ transform: getPreviewScale() }}>{renderPrintTemplate(previewFormat)}</div></div>
-               <div className="space-y-3"><button onClick={() => handleGeneratePDF(previewFormat)} className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-bold shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all text-[15px] flex items-center justify-center gap-2"><QrCode size={18} /> Print / Save as PDF</button></div>
-            </div>
-         </div>
-      )}
+      <DeleteConfirmationModal 
+        isOpen={deleteConfirmation.isOpen} 
+        type={deleteConfirmation.type}
+        name={deleteConfirmation.name || 'this item'}
+        onCancel={() => setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null })} 
+        onConfirm={handleConfirmDeleteAction} 
+      />
+      <ToppingFormModal isOpen={isToppingFormOpen || !!editingTopping} editingTopping={editingTopping} isSaving={isSaving} onClose={() => { setIsToppingFormOpen(false); setEditingTopping(null); }} formAction={handleToppingFormAction} />
+      <TeamManagementModal isOpen={isTeamFormOpen || !!editingTeamMember} editingTeamMember={editingTeamMember} isSaving={isSaving} onClose={() => { setIsTeamFormOpen(false); setEditingTeamMember(null); }} formAction={handleTeamFormAction} />
+      <UnsavedChangesModal isOpen={!!pendingNav} isSaving={isSaving} onDiscard={handleUnsavedChangesDiscard} onSave={handleUnsavedChangesSave} />
+      <QrPrintModal isOpen={isQrModalOpen} onClose={() => setIsQrModalOpen(false)} previewFormat={previewFormat} setPreviewFormat={setPreviewFormat} paperSize={paperSize} setPaperSize={setPaperSize} getPreviewScale={getPreviewScale} renderPrintTemplate={renderPrintTemplate} handleGeneratePDF={handleGeneratePDF} />
+      <ImageCropperModal isOpen={!!cropImageSrc && !!cropTarget} imageSrc={cropImageSrc} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={onCropComplete} onClose={() => { setCropImageSrc(null); setCropTarget(null); }} onSave={showCroppedImage} />
 
       {(isFormOpen || editingProduct) && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto print:hidden" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}>
           <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl p-6 sm:p-8 md:p-10 my-auto max-h-[90vh] overflow-y-auto no-scrollbar relative flex flex-col" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6 md:mb-8 shrink-0">
-               <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">{editingProduct ? "Edit Product" : "Add Product"}</h2>
-               <button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 sm:p-3 bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><X size={20} className="sm:w-6 sm:h-6"/></button>
-             </div>
-             
+             <div className="flex justify-between items-center mb-6 md:mb-8 shrink-0"><h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">{editingProduct ? "Edit Product" : "Add Product"}</h2><button type="button" onClick={() => { setIsFormOpen(false); setEditingProduct(null); }} className="p-2 sm:p-3 bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><X size={20} className="sm:w-6 sm:h-6"/></button></div>
              <form onSubmit={handleSaveProduct} className="space-y-5 md:space-y-6 flex-1 overflow-y-auto no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                
-                <div 
-                  onClick={() => productInputRef.current?.click()}
-                  className="w-full h-36 md:h-48 border-2 border-dashed border-gray-200 rounded-[24px] flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 transition-colors overflow-hidden relative group bg-gray-50/30 shrink-0"
-                >
-                  {productPreview ? (
-                    <>
-                      <img src={productPreview} className="w-full h-full object-contain p-2 md:p-4" alt="Preview"/>
-                      <div className="absolute inset-0 bg-white/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="bg-white text-gray-900 text-sm font-bold px-4 py-2 rounded-xl shadow-sm border border-gray-200">Change Image</span></div>
-                    </>
-                  ) : (
-                    <>
-                      <UploadCloud size={32} className="mb-2 sm:mb-3 text-gray-300" strokeWidth={1.5} />
-                      <span className="text-sm sm:text-base font-semibold text-gray-400">Tap to upload</span>
-                    </>
-                  )}
+                <div onClick={() => productInputRef.current?.click()} className="w-full h-36 md:h-48 border-2 border-dashed border-gray-200 rounded-[24px] flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 transition-colors overflow-hidden relative group bg-gray-50/30 shrink-0">
+                  {productPreview ? (<><img src={productPreview} className="w-full h-full object-contain p-2 md:p-4" alt="Preview"/><div className="absolute inset-0 bg-white/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="bg-white text-gray-900 text-sm font-bold px-4 py-2 rounded-xl shadow-sm border border-gray-200">Change Image</span></div></>) : (<><UploadCloud size={32} className="mb-2 sm:mb-3 text-gray-300" strokeWidth={1.5} /><span className="text-sm sm:text-base font-semibold text-gray-400">Tap to upload</span></>)}
                 </div>
                 <input type="file" ref={productInputRef} onChange={e => onFileSelect(e, 'product')} className="hidden" />
 
-                <div>
-                   <div className="flex justify-between items-center mb-2">
-                     <label className="block text-xs md:text-sm font-extrabold text-gray-500">Product Name</label>
-                     <button type="button" onClick={() => setShowExtraLangs(!showExtraLangs)} className="text-[11px] md:text-xs font-extrabold text-gray-400 hover:text-gray-600">+ Add Khmer</button>
-                   </div>
-                   <input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} placeholder="e.g. Anchor" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />
-                   {showExtraLangs && (
-                      <input value={prodName.kh} onChange={e => setProdName({...prodName, kh: e.target.value})} placeholder="Khmer Name (Optional)" className="w-full mt-3 px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />
-                   )}
-                </div>
+                <div><div className="flex justify-between items-center mb-2"><label className="block text-xs md:text-sm font-extrabold text-gray-500">Product Name</label><button type="button" onClick={() => setShowExtraLangs(!showExtraLangs)} className="text-[11px] md:text-xs font-extrabold text-gray-400 hover:text-gray-600">+ Add Khmer</button></div><input required value={prodName.en} onChange={e => setProdName({...prodName, en: e.target.value})} placeholder="e.g. Anchor" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />{showExtraLangs && (<input value={prodName.kh} onChange={e => setProdName({...prodName, kh: e.target.value})} placeholder="Khmer Name (Optional)" className="w-full mt-3 px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-gray-50/50 border border-gray-100 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold transition-all shadow-sm" />)}</div>
 
                 <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
                    <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-3 md:mb-4">Sizes & Pricing</h3>
                    {productVariants.map((v, idx) => (
                     <div key={idx} className="flex flex-col sm:flex-row gap-3 mb-3 items-start sm:items-center">
                       <input placeholder="Default" value={v.name} onChange={e => { const nv = [...productVariants]; nv[idx].name = e.target.value; setProductVariants(nv); }} className="w-full sm:flex-1 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
-                      <div className="flex w-full sm:w-auto gap-3">
-                         <input type="number" step="0.01" min="0" placeholder="2" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-full sm:w-32 md:w-40 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
-                         {productVariants.length > 1 && <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-500 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>}
-                      </div>
+                      <div className="flex w-full sm:w-auto gap-3"><input type="number" step="0.01" min="0" placeholder="2" value={v.price} onChange={e => { const nv = [...productVariants]; nv[idx].price = e.target.value; setProductVariants(nv); }} className="w-full sm:w-32 md:w-40 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />{productVariants.length > 1 && <button type="button" onClick={() => setProductVariants(productVariants.filter((_, i) => i !== idx))} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-500 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>}</div>
                     </div>
                    ))}
                    <button type="button" onClick={() => setProductVariants([...productVariants, {name: '', price: ''}])} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Size</button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                   <div>
-                     <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Discount (%)</label>
-                     <input type="number" min="0" max="100" value={productDiscount} onChange={e => setProductDiscount(Number(e.target.value))} placeholder="0" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" />
-                   </div>
-                   <div>
-                     <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Category</label>
-                     <select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm appearance-none cursor-pointer">
-                       {sortedCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                     </select>
-                   </div>
+                   <div><label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Discount (%)</label><input type="number" min="0" max="100" value={productDiscount} onChange={e => setProductDiscount(Number(e.target.value))} placeholder="0" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" /></div>
+                   <div><label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Category</label><select value={productCategoryId} onChange={(e) => setProductCategoryId(e.target.value)} className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm appearance-none cursor-pointer">{sortedCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                 </div>
 
-                <div>
-                   <label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Preparation Time</label>
-                   <div className="relative">
-                     <input type="number" min="1" value={prepTime} onChange={e => setPrepTime(e.target.value)} placeholder="15" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" />
-                     <span className="absolute right-5 md:right-6 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm md:text-base pointer-events-none">min</span>
-                   </div>
-                </div>
+                <div><label className="block text-xs md:text-sm font-extrabold text-gray-500 mb-2">Preparation Time</label><div className="relative"><input type="number" min="1" value={prepTime} onChange={e => setPrepTime(e.target.value)} placeholder="15" className="w-full px-4 sm:px-5 py-3.5 sm:py-4 md:py-5 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base md:text-lg font-bold shadow-sm" /><span className="absolute right-5 md:right-6 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm md:text-base pointer-events-none">min</span></div></div>
 
                 <div className="p-4 sm:p-5 border border-gray-100 rounded-[24px] bg-gray-50/30">
-                   <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-1.5">Recipe Mapping</h3>
-                   <p className="text-[11px] md:text-xs text-gray-500 mb-4 font-medium">Auto-deduct inventory stock</p>
+                   <h3 className="text-sm md:text-base font-extrabold text-gray-900 mb-1.5">Recipe Mapping</h3><p className="text-[11px] md:text-xs text-gray-500 mb-4 font-medium">Auto-deduct inventory stock</p>
                    {productRecipe.map((item, idx) => (
                     <div key={idx} className="flex flex-col sm:flex-row gap-3 mb-3 items-start sm:items-center">
-                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="w-full sm:flex-1 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required>
-                        <option value="">Select Ingredient</option>
-                        {ingredients?.map(ing => <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>)}
-                      </select>
-                      <div className="flex w-full sm:w-auto gap-3">
-                         <input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-full sm:w-24 md:w-32 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required />
-                         <button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-50 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button>
-                      </div>
+                      <select value={item.ingredientId} onChange={e => updateRecipeItem(idx, 'ingredientId', e.target.value)} className="w-full sm:flex-1 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required><option value="">Select Ingredient</option>{ingredients?.map(ing => <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>)}</select>
+                      <div className="flex w-full sm:w-auto gap-3"><input type="number" step="0.01" min="0.01" placeholder="Qty" value={item.quantityUsed} onChange={e => updateRecipeItem(idx, 'quantityUsed', e.target.value)} className="w-full sm:w-24 md:w-32 px-4 py-3 sm:py-3.5 md:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:border-gray-900 text-sm sm:text-base font-bold shadow-sm" required /><button type="button" onClick={() => removeRecipeItem(idx)} className="p-3 sm:p-3.5 md:p-4 text-red-300 hover:text-red-50 transition-colors bg-white border border-gray-200 rounded-2xl shadow-sm"><Trash2 size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6"/></button></div>
                     </div>
                    ))}
                    <button type="button" onClick={addRecipeItem} className="text-xs sm:text-sm font-extrabold text-gray-900 hover:text-gray-600 flex items-center gap-1.5 mt-2"><Plus size={16} strokeWidth={3}/> Add Ingredient</button>
                 </div>
 
-                <div className="p-5 md:p-6 bg-orange-50/50 border border-orange-100 rounded-[24px] flex justify-between items-center mt-4">
-                   <div>
-                     <h4 className="font-extrabold text-orange-600 text-sm md:text-base">Hot Sale Item</h4>
-                     <p className="text-[11px] md:text-xs text-orange-400 font-bold mt-1">Show this in the popular section</p>
-                   </div>
-                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="sr-only peer" />
-                      <div className="w-12 h-7 md:w-14 md:h-8 bg-orange-200/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-orange-500"></div>
-                   </label>
-                </div>
-
-                <div className="p-5 md:p-6 bg-emerald-50/50 border border-emerald-100 rounded-[24px] flex justify-between items-center mt-3 mb-1">
-                   <div>
-                     <h4 className="font-extrabold text-emerald-600 text-sm md:text-base tracking-wide">AVAILABLE</h4>
-                   </div>
-                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer" />
-                      <div className="w-12 h-7 md:w-14 md:h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-emerald-500"></div>
-                   </label>
-                </div>
-                <p className="text-[11px] md:text-xs text-gray-400 font-medium px-2 mb-8">Toggle to mark item as currently unavailable.</p>
+                <div className="p-5 md:p-6 bg-orange-50/50 border border-orange-100 rounded-[24px] flex justify-between items-center mt-4"><div><h4 className="font-extrabold text-orange-600 text-sm md:text-base">Hot Sale Item</h4><p className="text-[11px] md:text-xs text-orange-400 font-bold mt-1">Show this in the popular section</p></div><label className="relative inline-flex items-center cursor-pointer shrink-0"><input type="checkbox" checked={isHotSale} onChange={e => setIsHotSale(e.target.checked)} className="sr-only peer" /><div className="w-12 h-7 md:w-14 md:h-8 bg-orange-200/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-orange-500"></div></label></div>
+                <div className="p-5 md:p-6 bg-emerald-50/50 border border-emerald-100 rounded-[24px] flex justify-between items-center mt-3 mb-1"><div><h4 className="font-extrabold text-emerald-600 text-sm md:text-base tracking-wide">AVAILABLE</h4></div><label className="relative inline-flex items-center cursor-pointer shrink-0"><input type="checkbox" checked={!isSoldOutState} onChange={e => setIsSoldOutState(!e.target.checked)} className="sr-only peer" /><div className="w-12 h-7 md:w-14 md:h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 md:after:h-7 md:after:w-7 after:transition-all peer-checked:bg-emerald-500"></div></label></div><p className="text-[11px] md:text-xs text-gray-400 font-medium px-2 mb-8">Toggle to mark item as currently unavailable.</p>
 
                 <div className="flex flex-col gap-3 sm:gap-4 pt-4 shrink-0">
-                   <button type="submit" disabled={isSaving} className="w-full py-4 sm:py-5 bg-[#111827] text-white rounded-[20px] font-extrabold text-sm md:text-base active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                     {isSaving && <Loader2 size={20} className="animate-spin"/>} {editingProduct ? "Update Product" : "Create Product"}
-                   </button>
-                   
-                   {editingProduct && (
-                     <button 
-                       type="button" 
-                       onClick={() => {
-                          const fd = new FormData();
-                          fd.append('id', editingProduct.id);
-                          confirmDelete('product', editingProduct.id, editingProduct.name, fd);
-                          setIsFormOpen(false);
-                          setEditingProduct(null);
-                       }}
-                       className="w-full py-4 sm:py-5 bg-red-50 text-red-600 rounded-[20px] font-extrabold text-sm md:text-base hover:bg-red-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
-                     >
-                       <Trash2 size={20} /> Delete Product
-                     </button>
-                   )}
+                   <button type="submit" disabled={isSaving} className="w-full py-4 sm:py-5 bg-[#111827] text-white rounded-[20px] font-extrabold text-sm md:text-base active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">{isSaving && <Loader2 size={20} className="animate-spin"/>} {editingProduct ? "Update Product" : "Create Product"}</button>
+                   {editingProduct && <button type="button" onClick={() => { const fd = new FormData(); fd.append('id', editingProduct.id); confirmDelete('product', editingProduct.id, editingProduct.name, fd); setIsFormOpen(false); setEditingProduct(null); }} className="w-full py-4 sm:py-5 bg-red-50 text-red-600 rounded-[20px] font-extrabold text-sm md:text-base hover:bg-red-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Trash2 size={20} /> Delete Product</button>}
                 </div>
              </form>
           </div>
@@ -1902,81 +883,13 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       {(isCatFormOpen || editingCategory) && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6">
-               <h2 className="text-2xl font-bold">{editingCategory ? "Edit Category" : "Add Category"}</h2>
-               <button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button>
-             </div>
-             <form action={(fd) => {
-               const name = fd.get("name") as string;
-               const isDrink = fd.get("isDrink") === 'true';
-
-               if (editingCategory) {
-                 const id = editingCategory.id;
-                 fd.append("id", id);
-                 fd.append("sortOrder", (editingCategory.sortOrder || 1).toString());
-                 setIsCatFormOpen(false);
-                 setEditingCategory(null);
-                 startTransition(async () => { 
-                   dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, isDrink } as Category });
-                   try {
-                     await updateCategory(fd); 
-                     showToast("Category updated!"); 
-                   } catch (e) {
-                     showToast("Failed to update category.");
-                   }
-                 });
-               } else {
-                 setIsCatFormOpen(false);
-                 const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0;
-                 const newSortOrder = maxSort + 1;
-                 fd.append("sortOrder", newSortOrder.toString());
-
-                 startTransition(async () => { 
-                   dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder: newSortOrder, isDrink, discount: 0, shopId: shopId } as Category });
-                   try {
-                     await createCategory(fd); 
-                     showToast("Category created!"); 
-                   } catch (e) {
-                     showToast("Failed to create category.");
-                   }
-                 });
-               }
-             }} className="space-y-4">
-               <div>
-                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category Name</label>
-                 <input type="text" name="name" defaultValue={editingCategory?.name} placeholder="e.g. Coffee" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required />
-               </div>
-               <div className="pt-2">
-                 <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
-                   <input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer accent-gray-900"/> This is a Drink Category
-                 </label>
-               </div>
-               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
-                 <button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
-                 <button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button>
-               </div>
+             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">{editingCategory ? "Edit Category" : "Add Category"}</h2><button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button></div>
+             <form action={(fd) => { const name = fd.get("name") as string; const isDrink = fd.get("isDrink") === 'true'; if (editingCategory) { const id = editingCategory.id; fd.append("id", id); fd.append("sortOrder", (editingCategory.sortOrder || 1).toString()); setIsCatFormOpen(false); setEditingCategory(null); startTransition(async () => { dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, isDrink } as Category }); try { await updateCategory(fd); showToast("Category updated!"); } catch (e) { showToast("Failed to update category."); } }); } else { setIsCatFormOpen(false); const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0; const newSortOrder = maxSort + 1; fd.append("sortOrder", newSortOrder.toString()); startTransition(async () => { dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder: newSortOrder, isDrink, discount: 0, shopId: shopId } as Category }); try { await createCategory(fd); showToast("Category created!"); } catch (e) { showToast("Failed to create category."); } }); } }} className="space-y-4">
+               <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category Name</label><input type="text" name="name" defaultValue={editingCategory?.name} placeholder="e.g. Coffee" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required /></div>
+               <div className="pt-2"><label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer accent-gray-900"/> This is a Drink Category</label></div>
+               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6"><button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button><button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button></div>
              </form>
           </div>
-        </div>
-      )}
-
-      {cropImageSrc && cropTarget && (
-        <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur flex flex-col print:hidden animate-in fade-in">
-           <div className="flex-1 relative">
-              <Cropper
-                image={cropImageSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={cropAspect}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={onCropComplete}
-              />
-           </div>
-           <div className="p-6 bg-white flex justify-end gap-4 shrink-0 rounded-t-[32px]">
-              <button onClick={() => { setCropImageSrc(null); setCropTarget(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button>
-              <button onClick={showCroppedImage} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all">Save Crop</button>
-           </div>
         </div>
       )}
 

@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import AdminDashboard from '@/features/admin/AdminDashboard';
 import { getShopPlanState, getShopLimitsAndFeatures } from '@/lib/shop-guard';
 import { redirect } from 'next/navigation';
+import { ShiftProvider } from '@/context/ShiftContext'; // <--- ADDED IMPORT
 
 export const revalidate = 0;
 
@@ -58,7 +59,7 @@ export default async function AdminPage() {
     dbPlan,
     orders,
     ingredients,
-    toppings // <--- ADDED: FETCH TOPPINGS
+    toppings
   ] = await Promise.all([
     getShopPlanState(shopId),
     getShopLimitsAndFeatures(shopId),
@@ -95,7 +96,6 @@ export default async function AdminPage() {
       where: { shopId },
       orderBy: { name: 'asc' }
     }),
-    // --- ADDED: DATABASE QUERY FOR TOPPINGS ---
     (prisma as any).topping.findMany({
       where: { shopId },
       orderBy: { name: 'asc' }
@@ -155,27 +155,30 @@ export default async function AdminPage() {
   };
 
   return (
-    <AdminDashboard
-      shopId={shopId}
-      categories={formattedCategories}
-      products={formattedProducts}
-      settings={settings as any}
-      shopSlug={shop.slug || shop.id}
-      banners={banners}
-      shopPlan={currentPlanName}
-      planLimits={planLimits}
-      callStaffEnabled={(shop as any).callStaffEnabled ?? true}
-      telegramChatId={(shop as any).telegramChatId ?? null}
-      staffCallTopicId={(shop as any).staffCallTopicId ?? null}
-      newOrderTopicId={(shop as any).newOrderTopicId ?? null}
-      telegramNotificationsEnabled={(shop as any).telegramNotificationsEnabled ?? false}
-      featCampaign={canUseCampaign}
-      featPos={canUsePos}
-      userEmail={user.email}
-      userRole={shopUser.role}
-      orders={orders}
-      ingredients={ingredients}
-      toppings={toppings} // <--- ADDED: PASS TOPPINGS TO DASHBOARD
-    />
+    // <--- ADDED SHIFT PROVIDER WRAPPER
+    <ShiftProvider>
+      <AdminDashboard
+        shopId={shopId}
+        categories={formattedCategories}
+        products={formattedProducts}
+        settings={settings as any}
+        shopSlug={shop.slug || shop.id}
+        banners={banners}
+        shopPlan={currentPlanName}
+        planLimits={planLimits}
+        callStaffEnabled={(shop as any).callStaffEnabled ?? true}
+        telegramChatId={(shop as any).telegramChatId ?? null}
+        staffCallTopicId={(shop as any).staffCallTopicId ?? null}
+        newOrderTopicId={(shop as any).newOrderTopicId ?? null}
+        telegramNotificationsEnabled={(shop as any).telegramNotificationsEnabled ?? false}
+        featCampaign={canUseCampaign}
+        featPos={canUsePos}
+        userEmail={user.email}
+        userRole={shopUser.role}
+        orders={orders}
+        ingredients={ingredients}
+        toppings={toppings} 
+      />
+    </ShiftProvider>
   );
 }

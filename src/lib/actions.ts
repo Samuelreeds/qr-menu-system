@@ -2122,3 +2122,57 @@ export async function deleteTopping(formData: FormData) {
   await revalidateActiveShop();
   return { success: true };
 }
+
+// ==========================================
+// POS SHIFT ACTIONS
+// ==========================================
+
+export async function getCurrentShift() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return null;
+
+  const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+  const shopId = await getActiveShopId();
+  
+  if (!user || !shopId) return null;
+
+  return await (prisma as any).posShift.findFirst({
+    where: { shopId, userId: user.id, status: "OPEN" }
+  });
+}
+
+export async function openShift(startingCash: number) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return { success: false, error: "Unauthorized" };
+
+  const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+  const shopId = await getActiveShopId();
+  
+  if (!user || !shopId) return { success: false, error: "No active shop or user" };
+
+  const existing = await (prisma as any).posShift.findFirst({
+    where: { shopId, userId: user.id, status: "OPEN" }
+  });
+
+  if (existing) return { success: false, error: "Shift already open" };
+
+  const shift = await (prisma as any).posShift.create({
+    data: { shopId, userId: user.id, startingCash, status: "OPEN" }
+  });
+
+  return { success: true, shift };
+}
+
+export async function closeShift(shiftId: string, actualEndingCash: number, expectedEndingCash: number) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+
+  try {
+    const shift = await (prisma as any).posShift.update({
+      where: { id: shiftId },
+      data: { status: "CLOSED", endTime: new Date(), actualEndingCash, expectedEndingCash }
+    });
+    return { success: true, shift };
+  } catch (error) {
+    return { success: false, error: "Failed to close shift" };
+  }
+}

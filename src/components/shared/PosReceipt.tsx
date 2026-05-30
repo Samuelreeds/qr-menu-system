@@ -34,22 +34,35 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
             </tr>
           </thead>
           <tbody>
-            {order.items?.map((item: any, idx: number) => (
-              <React.Fragment key={idx}>
-                <tr>
-                  <td className="pt-1.5 align-top">{item.quantity}x</td>
-                  <td className="pt-1.5 pr-1 leading-tight">
-                    <span className="font-semibold">{item.name}</span>
-                    {item.customization && (
-                      <div className="text-[9px] text-gray-700 mt-0.5 leading-tight">
-                        {item.customization.size}, {item.customization.mood}, {item.customization.sugar} sug, {item.customization.ice} ice
-                      </div>
-                    )}
-                  </td>
-                  <td className="text-right pt-1.5 align-top">${(item.price * item.quantity).toFixed(2)}</td>
-                </tr>
-              </React.Fragment>
-            ))}
+            {order.items?.map((item: any, idx: number) => {
+              // 1. Calculate the total cost of all toppings for this single item
+              const toppingsTotal = item.toppings?.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0) || 0;
+              // 2. Add toppings to base price, then multiply by quantity
+              const itemTotal = (Number(item.price) + toppingsTotal) * Number(item.quantity);
+
+              return (
+                <React.Fragment key={idx}>
+                  <tr>
+                    <td className="pt-1.5 align-top">{item.quantity}x</td>
+                    <td className="pt-1.5 pr-1 leading-tight">
+                      <span className="font-semibold">{item.name}</span>
+                      {item.customization && (
+                        <div className="text-[9px] text-gray-700 mt-0.5 leading-tight">
+                          {item.customization.size}, {item.customization.mood}, {item.customization.sugar} sug, {item.customization.ice} ice
+                        </div>
+                      )}
+                      {/* Show toppings under the item name */}
+                      {item.toppings && item.toppings.length > 0 && (
+                        <div className="text-[9px] text-gray-600 mt-0.5 leading-tight italic">
+                          + {item.toppings.map((t: any) => t.name).join(', ')}
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-right pt-1.5 align-top">${itemTotal.toFixed(2)}</td>
+                  </tr>
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

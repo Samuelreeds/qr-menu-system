@@ -53,8 +53,10 @@ model User {
   isSuperAdmin     Boolean   @default(false)
   role             String    @default("staff") // "admin" | "staff"
   createdBy        String?
+  
   shopUsers        ShopUser[]
   orders           Order[]
+  posShifts        PosShift[] // <--- ADDED SHIFT RELATION
 }
 
 // --- NEW SAAS MODELS ---
@@ -67,32 +69,38 @@ model Shop {
   status      String    @default("ACTIVE")
   trialEndsAt DateTime?
   paidUntil   DateTime?
+  
   // --- DEMO SHOP AUTODELETE ---
   isDemo      Boolean   @default(false)
   expiresAt   DateTime?
+  
   // LIMIT OVERRIDES
   overrideMaxProducts   Int?
   overrideMaxCategories Int?
   overrideMaxBanners    Int?
   overrideHeaderStyle   String?
+  
   // STAFF CALL & NOTIFICATIONS
   telegramNotificationsEnabled Boolean @default(false)
   callStaffEnabled             Boolean @default(true)
   telegramChatId               String?
   staffCallTopicId             String?
   newOrderTopicId              String?
+  
   staffCalls StaffCallRequest[] @relation("ShopStaffCalls")
   tables     Table[]            @relation("ShopTables")
 
   createdAt DateTime  @default(now())
   deletedAt DateTime?
+  
   shopUsers   ShopUser[]
   categories  Category[]
   products    Product[]
   settings    ShopSettings?
   banners     Banner[]
   orders      Order[]
-  toppings    Topping[]  // <--- ADDED: TOPPINGS RELATION
+  toppings    Topping[]  
+  posShifts   PosShift[] // <--- ADDED SHIFT RELATION
   
   // INVENTORY RELATIONS
   ingredients Ingredient[]
@@ -228,7 +236,7 @@ model ShopSettings {
   telegram      String?
   showTelegram  Boolean @default(false)
   printerUrl    String?
-  qrImage       String? // <--- NEW FIELD FOR CUSTOM SHOP QR
+  qrImage       String? 
 
   shopId String @unique
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -296,10 +304,12 @@ model StaffCallRequest {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   resolvedAt DateTime?
+  
   // TELEGRAM AUTO-DELETE TRACKING
   telegramMessageId String?
   telegramChatId    String?
   telegramSentAt    DateTime?
+  
   @@index([shopId])
   @@index([tableId])
   @@index([shopId, tableId, createdAt])
@@ -364,7 +374,7 @@ model OrderItem {
   
   // Store customizations (mood, size, sugar, ice, topping) as a flexible JSON object
   customization   Json?
-
+  
   createdAt       DateTime @default(now())
 
   @@index([orderId])
@@ -425,4 +435,27 @@ model Topping {
   createdAt DateTime @default(now())
 
   @@index([shopId])
+}
+
+// --- POS SHIFT MODEL ---
+model PosShift {
+  id                 String    @id @default(cuid())
+  shopId             String
+  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  startTime          DateTime  @default(now())
+  endTime            DateTime?
+  startingCash       Float     @default(0)
+  expectedEndingCash Float?
+  actualEndingCash   Float?
+  status             String    @default("OPEN") // "OPEN" | "CLOSED"
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([shopId, status])
 }
