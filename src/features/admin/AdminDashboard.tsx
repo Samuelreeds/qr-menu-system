@@ -136,7 +136,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const isAdmin = userRole === 'OWNER' || userRole === 'SUPERADMIN' || userRole === 'admin';
 
   const [openSection, setOpenSection] = useState<string | null>('identity');
-  const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  
+  // --- ADDED SNACKBAR TYPES ---
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'warning' | 'fail' | 'info' }>({ show: false, message: '', type: 'info' });
+  
   const [dismissGuide, setDismissGuide] = useState(false);
   const [draggedBannerIndex, setDraggedBannerIndex] = useState<number | null>(null);
 
@@ -155,7 +158,12 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
   const markDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: true }));
   const clearDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: false }));
-  const showToast = (message: string) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
+  
+  // --- UPDATED SHOW TOAST ---
+  const showToast = (message: string, type: 'success' | 'warning' | 'fail' | 'info' = 'success') => { 
+    setToast({ show: true, message, type }); 
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000); 
+  };
 
   const settingsState = useSettingsManager({
     shopId, settings, callStaffEnabled, telegramChatId, staffCallTopicId, newOrderTopicId,
@@ -328,7 +336,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     setIsActivityLoading(true);
     const res = await getUserActivity(member.id);
     if (res.success) setUserActivityData(res.data);
-    else showToast("Could not load activity");
+    else showToast("Could not load activity", "fail");
     setIsActivityLoading(false);
   };
 
@@ -345,8 +353,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     newBanners.sort((a,b) => a.sortOrder - b.sortOrder); 
     startTransition(async () => { 
       dispatchOptBanners({ type: 'set', payload: newBanners }); 
-      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); } 
-      catch (e) { showToast("Failed to reorder banners"); }
+      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!", "success"); } 
+      catch (e) { showToast("Failed to reorder banners", "fail"); }
     }); 
   };
 
@@ -363,8 +371,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     setDraggedBannerIndex(null); 
     startTransition(async () => { 
       dispatchOptBanners({ type: 'set', payload: newBanners }); 
-      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!"); } 
-      catch (e) { showToast("Failed to drop banner"); }
+      try { await reorderBanners(newBanners.map(b => ({ id: b.id, sortOrder: b.sortOrder }))); showToast("Banners reordered!", "success"); } 
+      catch (e) { showToast("Failed to drop banner", "fail"); }
     }); 
   };
 
@@ -376,8 +384,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       const reorderedCategories = newOrder.map((cat, index) => ({ ...cat, sortOrder: index + 1 }));
       startTransition(async () => {
          dispatchOptCategories({ type: 'set', payload: reorderedCategories });
-         try { const res = await updateCategoryOrders(reorderedCategories.map(c => c.id)); if (!res.success) showToast("Failed to reorder categories."); } 
-         catch (e) { showToast("Failed to reorder categories."); }
+         try { const res = await updateCategoryOrders(reorderedCategories.map(c => c.id)); if (!res.success) showToast("Failed to reorder categories.", "fail"); } 
+         catch (e) { showToast("Failed to reorder categories.", "fail"); }
       });
     }
   };
@@ -421,7 +429,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           startTransition(async () => { 
             dispatchOptBanners({ type: 'add', payload: { id: tempId, image: objectUrl, sortOrder: nextOrder } }); 
             const res = await addBanner(fd); 
-            if (res?.error) showToast(res.error); else showToast("Banner added!"); 
+            if (res?.error) showToast(res.error, "fail"); else showToast("Banner added!", "success"); 
           }); 
         } else if (currentTarget === 'qr') { 
           settingsState.setQrFileBlob(croppedBlob); 
@@ -435,7 +443,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   
   const getPlatformIcon = (platform: string) => { switch (platform) { case 'facebook': return <Facebook size={18}/>; case 'instagram': return <Instagram size={18}/>; case 'telegram': return <Send size={18}/>; case 'youtube': return <Youtube size={18}/>; case 'twitter': return <Twitter size={18}/>; case 'linkedin': return <Linkedin size={18}/>; default: return <Globe size={18}/>; } };
   
-  // --- UPDATED FILTER TO PREVENT GHOST ITEMS ---
   const filteredProducts = optProducts.filter(p => 
     !deletedItemIds.includes(p.id) && 
     (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.category?.name || '').toLowerCase().includes(searchQuery.toLowerCase())) && 
@@ -449,7 +456,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     const fd = deleteConfirmation.actionFormData; 
     const type = deleteConfirmation.type; 
     const id = deleteConfirmation.id; 
-    const name = deleteConfirmation.name || 'Item'; 
     
     if (type === 'product') { 
       if (pendingDeleteRef.current) { 
@@ -487,14 +493,14 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         } 
       }, 5000); 
       
-      const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name: name, actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; 
+      const newPending: PendingDelete = { productId: id, productSnapshot: snapshot, name: deleteConfirmation.name || 'Item', actionFormData: fd, timeoutId, intervalId, expiresAt, timeLeft: 5 }; 
       setPendingDelete(newPending); pendingDeleteRef.current = newPending; 
     } else if (type === 'category') { 
       setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
-      startTransition(async () => { dispatchOptCategories({ type: 'delete', payload: id }); try { await deleteCategory(fd); showToast("Category deleted"); } catch(e) { showToast("Failed to delete category"); } }); return; 
+      startTransition(async () => { dispatchOptCategories({ type: 'delete', payload: id }); try { await deleteCategory(fd); showToast("Category deleted", "success"); } catch(e) { showToast("Failed to delete category", "fail"); } }); return; 
     } else if (type === 'topping') {
       setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null });
-      startTransition(async () => { dispatchOptToppings({ type: 'delete', payload: id }); try { await deleteTopping(fd); showToast("Topping deleted"); } catch(e) { showToast("Failed to delete topping"); } }); return;
+      startTransition(async () => { dispatchOptToppings({ type: 'delete', payload: id }); try { await deleteTopping(fd); showToast("Topping deleted", "success"); } catch(e) { showToast("Failed to delete topping", "fail"); } }); return;
     }
     setDeleteConfirmation({ isOpen: false, type: null, id: null, name: null, actionFormData: null }); 
   };
@@ -525,11 +531,11 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       if (isUpdate) {
         const optimisticProduct = { ...editingProduct, ...payload, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || editingProduct.image } as Product;
         dispatchOptProducts({ type: 'update', payload: optimisticProduct });
-        try { const res = await updateProduct({ ...payload, id: currentEditingId as string }); if (res?.error) showToast(res.error || "Failed to update product"); else showToast("Product updated successfully!"); } catch (e) { showToast("Failed to update product."); }
+        try { const res = await updateProduct({ ...payload, id: currentEditingId as string }); if (res?.error) showToast(res.error || "Failed to update product", "fail"); else showToast("Product updated successfully!", "success"); } catch (e) { showToast("Failed to update product.", "fail"); }
       } else {
         const optimisticProduct = { ...payload, id: tempId, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || '' } as Product;
         dispatchOptProducts({ type: 'add', payload: optimisticProduct });
-        try { const res = await createProduct(payload); if (res?.error) showToast(res.error || "Failed to create product"); else showToast("Product created successfully!"); } catch (e) { showToast("Failed to create product."); }
+        try { const res = await createProduct(payload); if (res?.error) showToast(res.error || "Failed to create product", "fail"); else showToast("Product created successfully!", "success"); } catch (e) { showToast("Failed to create product.", "fail"); }
       }
     });
   };
@@ -542,10 +548,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (editingTopping) {
       const id = editingTopping.id; fd.append("id", id);
       setIsToppingFormOpen(false); setEditingTopping(null);
-      startTransition(async () => { dispatchOptToppings({ type: 'update', payload: { ...editingTopping, name, price, isDrink } as Topping }); try { await updateTopping(fd); showToast("Topping updated!"); } catch (e) { showToast("Failed to update topping."); } });
+      startTransition(async () => { dispatchOptToppings({ type: 'update', payload: { ...editingTopping, name, price, isDrink } as Topping }); try { await updateTopping(fd); showToast("Topping updated!", "success"); } catch (e) { showToast("Failed to update topping.", "fail"); } });
     } else {
       setIsToppingFormOpen(false);
-      startTransition(async () => { dispatchOptToppings({ type: 'add', payload: { id: `temp-${Date.now()}`, name, price, isDrink } as Topping }); try { await createTopping(fd); showToast("Topping created!"); } catch (e) { showToast("Failed to create topping."); } });
+      startTransition(async () => { dispatchOptToppings({ type: 'add', payload: { id: `temp-${Date.now()}`, name, price, isDrink } as Topping }); try { await createTopping(fd); showToast("Topping created!", "success"); } catch (e) { showToast("Failed to create topping.", "fail"); } });
     }
   };
 
@@ -554,10 +560,10 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (editingTeamMember) {
       fd.append('userId', editingTeamMember.id);
       const res = await updateTeamMemberRole(fd);
-      if (res.success) { setTeamMembers(teamMembers.map(m => m.id === editingTeamMember.id ? { ...m, role: fd.get('role') } : m)); showToast("Role updated!"); setIsTeamFormOpen(false); } else { showToast(res.error || "Update failed"); }
+      if (res.success) { setTeamMembers(teamMembers.map(m => m.id === editingTeamMember.id ? { ...m, role: fd.get('role') } : m)); showToast("Role updated!", "success"); setIsTeamFormOpen(false); } else { showToast(res.error || "Update failed", "fail"); }
     } else {
       const res = await createTeamMember(fd);
-      if (res.success) { showToast("Team member added!"); getTeamMembers().then(r => { if(r.success) setTeamMembers(r.data); }); setIsTeamFormOpen(false); } else { showToast(res.error || "Creation failed"); }
+      if (res.success) { showToast("Team member added!", "success"); getTeamMembers().then(r => { if(r.success) setTeamMembers(r.data); }); setIsTeamFormOpen(false); } else { showToast(res.error || "Creation failed", "fail"); }
     }
     setIsSaving(false);
   };
@@ -566,7 +572,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (confirm("Are you sure you want to remove this user from your team?")) {
       const fd = new FormData(); fd.append('userId', memberId);
       const res = await deleteTeamMember(fd);
-      if (res.success) { setTeamMembers(teamMembers.filter(m => m.id !== memberId)); showToast("User removed!"); } else { showToast(res.error || "Failed to remove user"); }
+      if (res.success) { setTeamMembers(teamMembers.filter(m => m.id !== memberId)); showToast("User removed!", "success"); } else { showToast(res.error || "Failed to remove user", "fail"); }
     }
   };
 
@@ -586,7 +592,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     if (success) { 
       clearDirty(pendingNav.source); 
       if (pendingNav.source === 'branding') settingsState.setLogoFileBlob(null); 
-      showToast("Changes saved!"); 
+      showToast("Changes saved!", "success"); 
       executeNav(pendingNav.type, pendingNav.payload); 
       setPendingNav(null); 
     }
@@ -630,7 +636,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       )}
 
       <PendingDeleteToast pendingDelete={pendingDelete} onUndo={clearPendingDelete} />
-      <AdminToast show={toast.show} message={toast.message} />
+      
+      {/* --- ADDED TOAST COMPONENT --- */}
+      <AdminToast show={toast.show} message={toast.message} type={toast.type} />
 
       <div className="lg:hidden fixed top-0 left-0 w-full bg-white z-20 px-4 py-3 flex items-center justify-between gap-4 border-b border-gray-100 shadow-sm print:hidden">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden"><button ref={mobileMenuBtnRef} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-xl active:scale-95 transition-transform shrink-0"><Menu size={22} className="text-gray-700" /></button><h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">{settingsState.getShopNamePreview() || 'AdminPanel'}</h1></div>
@@ -682,7 +690,22 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         )}
 
         {featPos && <div className={activeTab === 'overview' ? 'block animate-in fade-in duration-300' : 'hidden'}><DashboardOverview orders={orders} products={optProducts} /></div>}
-        {featPos && <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}><ToastProvider><OrderProvider><AdminPosSection dashboardCategories={sortedCategories} dashboardProducts={optProducts} shopId={shopId} userEmail={userEmail} userRole={userRole} shopName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} toppings={optToppings} /></OrderProvider></ToastProvider></div>}
+        {featPos && <div className={activeTab === 'pos' ? 'block h-full flex flex-col min-h-0' : 'hidden'}>
+          <ToastProvider>
+            <OrderProvider>
+              <AdminPosSection 
+                dashboardCategories={sortedCategories} 
+                dashboardProducts={filteredProducts} // <--- USE FILTERED PRODUCTS HERE
+                shopId={shopId} 
+                userEmail={userEmail} 
+                userRole={userRole} 
+                shopName={settings?.name || "Shop"} 
+                printerUrl={settingsState.printerUrl} 
+                toppings={optToppings} 
+              />
+            </OrderProvider>
+          </ToastProvider>
+        </div>}
         {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}><InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}><TeamTab teamMembers={teamMembers} isTeamLoading={isTeamLoading} userEmail={userEmail || ''} onAddStaff={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} onEditStaff={(member) => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} onViewActivity={fetchUserActivity} onDeleteStaff={handleDeleteTeamMember} /></div>}
@@ -884,7 +907,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 print:hidden" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }}>
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
              <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold">{editingCategory ? "Edit Category" : "Add Category"}</h2><button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 active:scale-95 transition-colors"><X size={20}/></button></div>
-             <form action={(fd) => { const name = fd.get("name") as string; const isDrink = fd.get("isDrink") === 'true'; if (editingCategory) { const id = editingCategory.id; fd.append("id", id); fd.append("sortOrder", (editingCategory.sortOrder || 1).toString()); setIsCatFormOpen(false); setEditingCategory(null); startTransition(async () => { dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, isDrink } as Category }); try { await updateCategory(fd); showToast("Category updated!"); } catch (e) { showToast("Failed to update category."); } }); } else { setIsCatFormOpen(false); const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0; const newSortOrder = maxSort + 1; fd.append("sortOrder", newSortOrder.toString()); startTransition(async () => { dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder: newSortOrder, isDrink, discount: 0, shopId: shopId } as Category }); try { await createCategory(fd); showToast("Category created!"); } catch (e) { showToast("Failed to create category."); } }); } }} className="space-y-4">
+             <form action={(fd) => { const name = fd.get("name") as string; const isDrink = fd.get("isDrink") === 'true'; if (editingCategory) { const id = editingCategory.id; fd.append("id", id); fd.append("sortOrder", (editingCategory.sortOrder || 1).toString()); setIsCatFormOpen(false); setEditingCategory(null); startTransition(async () => { dispatchOptCategories({ type: 'update', payload: { ...editingCategory, name, isDrink } as Category }); try { await updateCategory(fd); showToast("Category updated!", "success"); } catch (e) { showToast("Failed to update category.", "fail"); } }); } else { setIsCatFormOpen(false); const maxSort = sortedCategories.length > 0 ? Math.max(...sortedCategories.map(c => c.sortOrder || 0)) : 0; const newSortOrder = maxSort + 1; fd.append("sortOrder", newSortOrder.toString()); startTransition(async () => { dispatchOptCategories({ type: 'add', payload: { id: `temp-${Date.now()}`, name, sortOrder: newSortOrder, isDrink, discount: 0, shopId: shopId } as Category }); try { await createCategory(fd); showToast("Category created!", "success"); } catch (e) { showToast("Failed to create category.", "fail"); } }); } }} className="space-y-4">
                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category Name</label><input type="text" name="name" defaultValue={editingCategory?.name} placeholder="e.g. Coffee" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-gray-900" required /></div>
                <div className="pt-2"><label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="checkbox" name="isDrink" value="true" defaultChecked={editingCategory?.isDrink} className="w-4 h-4 cursor-pointer accent-gray-900"/> This is a Drink Category</label></div>
                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6"><button type="button" onClick={() => { setIsCatFormOpen(false); setEditingCategory(null); }} className="px-6 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all">Cancel</button><button type="submit" disabled={isSaving} className="px-6 py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">{isSaving && <Loader2 size={16} className="animate-spin"/>} Save</button></div>
