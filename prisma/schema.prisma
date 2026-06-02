@@ -10,9 +10,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  
 }
 
 enum StaffCallStatus {
@@ -53,10 +52,10 @@ model User {
   isSuperAdmin     Boolean   @default(false)
   role             String    @default("staff") // "admin" | "staff"
   createdBy        String?
-  
-  shopUsers        ShopUser[]
-  orders           Order[]
-  posShifts        PosShift[] // <--- ADDED SHIFT RELATION
+
+  shopUsers ShopUser[]
+  orders    Order[]
+  posShifts PosShift[] // <--- ADDED SHIFT RELATION
 }
 
 // --- NEW SAAS MODELS ---
@@ -69,39 +68,39 @@ model Shop {
   status      String    @default("ACTIVE")
   trialEndsAt DateTime?
   paidUntil   DateTime?
-  
+
   // --- DEMO SHOP AUTODELETE ---
-  isDemo      Boolean   @default(false)
-  expiresAt   DateTime?
-  
+  isDemo    Boolean   @default(false)
+  expiresAt DateTime?
+
   // LIMIT OVERRIDES
   overrideMaxProducts   Int?
   overrideMaxCategories Int?
   overrideMaxBanners    Int?
   overrideHeaderStyle   String?
-  
+
   // STAFF CALL & NOTIFICATIONS
   telegramNotificationsEnabled Boolean @default(false)
   callStaffEnabled             Boolean @default(true)
   telegramChatId               String?
   staffCallTopicId             String?
   newOrderTopicId              String?
-  
+
   staffCalls StaffCallRequest[] @relation("ShopStaffCalls")
   tables     Table[]            @relation("ShopTables")
 
   createdAt DateTime  @default(now())
   deletedAt DateTime?
-  
-  shopUsers   ShopUser[]
-  categories  Category[]
-  products    Product[]
-  settings    ShopSettings?
-  banners     Banner[]
-  orders      Order[]
-  toppings    Topping[]  
-  posShifts   PosShift[] // <--- ADDED SHIFT RELATION
-  
+
+  shopUsers  ShopUser[]
+  categories Category[]
+  products   Product[]
+  settings   ShopSettings?
+  banners    Banner[]
+  orders     Order[]
+  toppings   Topping[]
+  posShifts  PosShift[] // <--- ADDED SHIFT RELATION
+
   // INVENTORY RELATIONS
   ingredients Ingredient[]
   stockLogs   StockLog[]
@@ -149,10 +148,10 @@ model Category {
 
 // --- PRODUCT RELATIONS ---
 model ProductVariant {
-  id        String  @id @default(cuid())
-  name      String
-  price     Float
-  
+  id    String @id @default(cuid())
+  name  String
+  price Float
+
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -160,15 +159,15 @@ model ProductVariant {
 }
 
 model ProductIngredient {
-  id            String     @id @default(cuid())
-  
-  productId    String
-  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  
-  quantityUsed Float      // How much of this ingredient is used per 1 order of this product
+
+  quantityUsed Float // How much of this ingredient is used per 1 order of this product
 
   @@unique([productId, ingredientId])
   @@index([productId])
@@ -180,7 +179,7 @@ model Product {
   name        String
   name_kh     String?
   name_zh     String?
-  price       Float   // Kept as base/fallback price
+  price       Float // Kept as base/fallback price
   image       String
   time        String?
   rating      Float   @default(0)
@@ -198,7 +197,8 @@ model Product {
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
+  createdAt  DateTime    @default(now())
+  deletedAt  DateTime?
   orderItems OrderItem[]
 }
 
@@ -208,7 +208,7 @@ model Banner {
   image     String
   sortOrder Int       @default(0)
   deletedAt DateTime?
-  
+
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -236,7 +236,7 @@ model ShopSettings {
   telegram      String?
   showTelegram  Boolean @default(false)
   printerUrl    String?
-  qrImage       String? 
+  qrImage       String?
 
   shopId String @unique
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -281,7 +281,7 @@ model Plan {
 }
 
 model Table {
-  id         String           @id @default(cuid())
+  id         String             @id @default(cuid())
   shopId     String
   shop       Shop               @relation("ShopTables", fields: [shopId], references: [id], onDelete: Cascade)
   label      String
@@ -304,12 +304,12 @@ model StaffCallRequest {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   resolvedAt DateTime?
-  
+
   // TELEGRAM AUTO-DELETE TRACKING
   telegramMessageId String?
   telegramChatId    String?
   telegramSentAt    DateTime?
-  
+
   @@index([shopId])
   @@index([tableId])
   @@index([shopId, tableId, createdAt])
@@ -318,64 +318,64 @@ model StaffCallRequest {
 
 // --- POS ORDER MODELS ---
 model Order {
-  id              String        @id @default(cuid())
-  shopId          String
-  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  orderNumber     String?
-  userId          String?
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  orderNumber String?
+  userId      String?
   // Track which staff member processed the order
-  user            User?         @relation(fields: [userId], references: [id])
+  user        User?   @relation(fields: [userId], references: [id])
 
   // POS Specific Fields
-  orderType       OrderType     @default(TABLE)
-  tableNumber     String?
-  deliveryAgent   String?
-  
+  orderType     OrderType @default(TABLE)
+  tableNumber   String?
+  deliveryAgent String?
+
   // Financials
-  subtotal        Float
-  discount        Float         @default(0)
-  promoCode       String?
-  tax             Float         @default(0)
-  total           Float
-  currency        String        @default("USD")
-  amountReceived  Float         @default(0)
-  changeAmount    Float         @default(0)
-  
+  subtotal       Float
+  discount       Float   @default(0)
+  promoCode      String?
+  tax            Float   @default(0)
+  total          Float
+  currency       String  @default("USD")
+  amountReceived Float   @default(0)
+  changeAmount   Float   @default(0)
+
   // Status & Payment
-  paymentMethod   PaymentMethod @default(CASH)
-  status          OrderStatus   @default(PENDING)
-  isPaid          Boolean       @default(false)
-  
+  paymentMethod PaymentMethod @default(CASH)
+  status        OrderStatus   @default(PENDING)
+  isPaid        Boolean       @default(false)
+
   // Relation to items
-  items           OrderItem[]
-  
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([shopId])
   @@index([userId])
 }
 
 model OrderItem {
-  id              String   @id @default(cuid())
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  productId       String
-  product         Product  @relation(fields: [productId], references: [id])
-  
-  name            String   // Storing the name historically in case product name changes later
-  price           Float    // Storing the exact price at the time of purchase
-  quantity        Int
-  
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  name     String // Storing the name historically in case product name changes later
+  price    Float // Storing the exact price at the time of purchase
+  quantity Int
+
   // POS Specific Fields
-  notes           String?  @db.Text
-  
+  notes String? @db.Text
+
   // Store customizations (mood, size, sugar, ice, topping) as a flexible JSON object
-  customization   Json?
-  
-  createdAt       DateTime @default(now())
+  customization Json?
+
+  createdAt DateTime @default(now())
 
   @@index([orderId])
   @@index([productId])
@@ -383,40 +383,40 @@ model OrderItem {
 
 // --- INVENTORY MODELS ---
 model Ingredient {
-  id            String     @id @default(cuid())
-  shopId        String
-  shop          Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  name          String
-  unit          String     // e.g., "kg", "liters", "pcs"
-  current       Float      @default(0)
-  max           Float      @default(100)
-  lowThreshold  Float      @default(20) // percentage
-  
-  logs          StockLog[]
-  productUses   ProductIngredient[]
-  
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  name         String
+  unit         String // e.g., "kg", "liters", "pcs"
+  current      Float  @default(0)
+  max          Float  @default(100)
+  lowThreshold Float  @default(20) // percentage
+
+  logs        StockLog[]
+  productUses ProductIngredient[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([shopId])
 }
 
 model StockLog {
-  id             String     @id @default(cuid())
-  shopId         String
-  shop           Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  ingredientId   String
-  ingredient     Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  
-  change         Float
-  reason         String     // "Restock", "Sold", "Waste", "Manual"
-  staffName      String
-  previousStock  Float
-  newStock       Float
-  
-  timestamp      DateTime   @default(now())
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  change        Float
+  reason        String // "Restock", "Sold", "Waste", "Manual"
+  staffName     String
+  previousStock Float
+  newStock      Float
+
+  timestamp DateTime @default(now())
 
   @@index([shopId])
   @@index([ingredientId])
@@ -424,13 +424,13 @@ model StockLog {
 
 // --- TOPPING MODEL ---
 model Topping {
-  id        String   @id @default(cuid())
-  name      String
-  price     Float    @default(0)
-  isDrink   Boolean  @default(true)
-  
-  shopId    String
-  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id      String  @id @default(cuid())
+  name    String
+  price   Float   @default(0)
+  isDrink Boolean @default(true)
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -439,21 +439,21 @@ model Topping {
 
 // --- POS SHIFT MODEL ---
 model PosShift {
-  id                 String    @id @default(cuid())
-  shopId             String
-  shop               Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  userId             String
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   startTime          DateTime  @default(now())
   endTime            DateTime?
   startingCash       Float     @default(0)
   expectedEndingCash Float?
   actualEndingCash   Float?
   status             String    @default("OPEN") // "OPEN" | "CLOSED"
-  
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([shopId])
   @@index([userId])

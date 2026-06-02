@@ -110,7 +110,7 @@ export async function getProducts() {
   const shopId = await getActiveShopId();
   if (!shopId) return [];
   return await prisma.product.findMany({
-    where: { shopId },
+    where: { shopId, deletedAt: null },
     include: { category: true, variants: true, ingredients: true }, 
     orderBy: { createdAt: 'desc' }
   });
@@ -354,7 +354,7 @@ export async function createProduct(data: {
   if (!shopId) return;
 
   const limit = await getLimit(shopId, 'maxProducts');
-  const currentCount = await prisma.product.count({ where: { shopId } });
+  const currentCount = await prisma.product.count({ where: { shopId, deletedAt: null } });
   if (currentCount >= limit) return { error: "Product limit reached." };
 
   const name = data.name;
@@ -497,15 +497,20 @@ export async function toggleProductSoldOut(formData: FormData) {
 }
 
 export async function deleteProduct(formData: FormData) {
-  if (!(await checkIsAdmin())) return;
+  if (!(await checkIsAdmin())) return { success: false, error: 'Unauthorized' };
 
   const id = formData.get('id') as string;
-  try { 
-    const product = await prisma.product.findUnique({ where: { id }, select: { image: true } });
-    await prisma.product.delete({ where: { id } });
-    await deleteFromSupabase(product?.image || null);
-  } catch (e) {}
-  await revalidateActiveShop();
+  try {
+    await prisma.product.update({
+      where: { id },
+      data: { deletedAt: new Date(), isPopular: false }
+    });
+    await revalidateActiveShop();
+    return { success: true };
+  } catch (e) {
+    console.error('Failed to delete product', e);
+    return { success: false, error: 'Failed to delete product' };
+  }
 }
 
 export async function updateShopIdentity(formData: FormData) {
@@ -841,26 +846,22 @@ export async function superAdminDeleteProduct(formData: FormData): Promise<void>
   const shopId = formData.get('shopId') as string;
 
   try {
-    const product = await prisma.product.findUnique({
+    await prisma.product.update({
       where: { id },
-      select: { image: true }
+      data: { deletedAt: new Date(), isPopular: false }
     });
 
-    await prisma.product.delete({ where: { id } });
-
-    if (product?.image) {
-      await deleteFromSupabase(product.image);
-    }
-
     revalidatePath(`/superadmin/shop/${shopId}`);
-  } catch (error) {}
+  } catch (error) {
+    console.error('Failed to delete product as super admin', error);
+  }
 }
 
 export async function listShopProductsForModeration(shopId: string, cursor?: string, take = 50) {
   if (!await verifySuperAdmin()) return null;
   
   const products = await prisma.product.findMany({
-    where: { shopId },
+    where: { shopId, deletedAt: null },
     take: take + 1,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     orderBy: { createdAt: 'desc' },
@@ -953,7 +954,7 @@ export async function importMenuData(formData: FormData) {
     const seenProducts = new Set<string>();
 
     const existingProducts = await prisma.product.findMany({
-      where: { shopId },
+      where: { shopId, deletedAt: null },
       include: { category: true }
     });
     existingProducts.forEach(p => {
@@ -1084,7 +1085,7 @@ export async function executeMenuImport(formData: FormData) {
     const categoryMap = new Map(existingCategories.map(c => [c.name.toLowerCase(), c.id]));
     let maxCatSortOrder = existingCategories.reduce((max, c) => Math.max(max, c.sortOrder), 0);
 
-    const existingProducts = await prisma.product.findMany({ where: { shopId }, include: { category: true } });
+    const existingProducts = await prisma.product.findMany({ where: { shopId, deletedAt: null }, include: { category: true } });
     const existingProductKeys = new Set(existingProducts.map(p => `${p.category?.name || 'Uncategorized'}-${p.name}`.toLowerCase()));
 
     let importedCount = 0;
@@ -1534,7 +1535,7 @@ export async function createPosOrder(data: {
 
     const productIds = data.items.map(i => i.productId);
     const realProducts = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, deletedAt: null },
       include: {
         category: { select: { discount: true } },
         ingredients: true 

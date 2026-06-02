@@ -68,7 +68,7 @@ export default async function AdminPage() {
       orderBy: { sortOrder: 'asc' }
     }),
     prisma.product.findMany({
-      where: { shopId },
+      where: { shopId, deletedAt: null },
       include: { category: true, variants: true, ingredients: true }, 
       orderBy: { createdAt: 'desc' }
     }),
