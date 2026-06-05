@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, WifiOff, CloudOff, RefreshCcw } from 'lucide-react';
 import { useOrder } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
-import { createPosOrder } from '@/lib/actions';
+import { createPosOrder, createPrintJob } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 
 import PosCustomizationModal from './PosCustomizationModal';
@@ -390,17 +390,25 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       setIsMobileCartOpen(false);
 
       if (printerUrl) {
+        // Replace your old fetch('http://192.168...') code with this:
+
         try {
+          // 1. Generate the exact 32-character receipt text
+          // 1. Generate the exact 32-character receipt text
           const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
-          fetch(`${printerUrl}/print`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: receiptText }) 
-          }).catch((err) => {
-            console.error("🖨️ Printer server not reachable:", err);
-          });
-        } catch (printErr) {
-          console.error("🖨️ Failed to send print job:", printErr);
+
+          // 2. Drop it into the Prisma Cloud Queue using your Server Action
+          const printRes = await createPrintJob(receiptText);
+
+          if (!printRes.success) {
+            throw new Error(printRes.error);
+          }
+
+          console.log("✅ Print job sent to cloud queue!");
+
+        } catch (error) {
+          console.error("Failed to send print job:", error);
+          // (Show your error toast message here)
         }
       }
 

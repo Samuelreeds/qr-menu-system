@@ -2177,3 +2177,23 @@ export async function closeShift(shiftId: string, actualEndingCash: number, expe
     return { success: false, error: "Failed to close shift" };
   }
 }
+
+// ==========================================
+// PRINT QUEUE ACTIONS
+// ==========================================
+
+export async function createPrintJob(receiptText: string) {
+  try {
+    // Using (prisma as any) to avoid typescript errors if generate hasn't finished
+    const job = await (prisma as any).printJob.create({
+      data: {
+        receipt_text: receiptText,
+        status: 'pending'
+      }
+    });
+    return { success: true, job };
+  } catch (error: any) {
+    console.error("Failed to send print job to queue:", error);
+    return { success: false, error: error.message };
+  }
+}

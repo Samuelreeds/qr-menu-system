@@ -11,7 +11,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  
 }
 
 enum StaffCallStatus {
@@ -458,4 +457,11 @@ model PosShift {
   @@index([shopId])
   @@index([userId])
   @@index([shopId, status])
+}
+
+model PrintJob {
+  id           String   @id @default(cuid())
+  receipt_text String   @db.Text
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
 }

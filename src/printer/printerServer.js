@@ -1,55 +1,74 @@
-import express from "express";
-import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import ptp from "pdf-to-printer";
-import PDFDocument from "pdfkit"; // Required for generating the PDF
+import PDFDocument from "pdfkit";
+import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+// --- SUPABASE CONNECTION ---
+// IMPORTANT: Paste your actual Supabase URL and Anon Key here
+const SUPABASE_URL = "https://fqiuwmxdxqrlpmuyxlyw.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxaXV3bXhkeHFybHBtdXl4bHl3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE2NTAyNCwiZXhwIjoyMDg2NzQxMDI0fQ.vXPv6inWpJ2IPPF0e98-ZPZ82fuL6yQwgmCmFaUN3so";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// --- PRODUCTION PRINT QUEUE ---
-// Prevents Windows Print Spooler crashes when multiple tablets send requests
-const printQueue = [];
 let isPrinting = false;
 
-const processQueue = async () => {
-  if (isPrinting || printQueue.length === 0) return;
-  
-  isPrinting = true;
-  const job = printQueue.shift();
+// --- THE CLOUD WORKER ---
+// --- THE CLOUD WORKER ---
+async function checkPrintQueue() {
+  if (isPrinting) return;
 
   try {
-    await executePrintJob(job.text);
-    job.resolve();
-  } catch (error) {
-    job.reject(error);
-  } finally {
-    isPrinting = false;
-    processQueue(); // Instantly trigger the next job
-  }
-};
+    // 1. Look for the oldest pending job (Updated to 'PrintJob')
+    const { data: jobs, error } = await supabase
+      .from('PrintJob') 
+      .select('*')
+      .eq('status', 'pending')
+      .order('createdAt', { ascending: true }) // Also updated to Prisma's 'createdAt'
+      .limit(1);
 
+    if (error) throw error;
+
+    if (jobs && jobs.length > 0) {
+      isPrinting = true;
+      const job = jobs[0];
+
+      console.log(`\n☁️ Found new cloud print job: ${job.id}`);
+
+      // 2. Lock the job so it doesn't print twice
+      await supabase.from('PrintJob').update({ status: 'processing' }).eq('id', job.id);
+
+      // 3. Send to physical printer
+      await executePrintJob(job.receipt_text);
+
+      // 4. Mark as finished in the cloud
+      await supabase.from('PrintJob').update({ status: 'printed' }).eq('id', job.id);
+      console.log(`✅ Job printed successfully!`);
+    }
+  } catch (error) {
+    console.error("❌ Queue Error:", error.message);
+  } finally {
+    isPrinting = false; // Unlock for the next job
+  }
+}
+
+// --- THE PHYSICAL PRINTER LOGIC (Optimized for 58mm) ---
 const executePrintJob = (text) => {
   return new Promise((resolve, reject) => {
     const tempPdfPath = path.join(__dirname, `receipt_${Date.now()}.pdf`);
     
     try {
-      // 1. Shrink canvas to strictly fit a narrow 58mm roll
       const doc = new PDFDocument({
-        margins: { top: 10, bottom: 15, left: 5, right: 5 }, 
-        size: [148, 800], 
+        margins: { top: 10, bottom: 10, left: 5, right: 5 }, 
+        size: [148, 1500], // 58mm width, long height for big orders
       });
 
       const writeStream = fs.createWriteStream(tempPdfPath);
       doc.pipe(writeStream);
 
-      // 2. Shrink font size to 6.5 so all 32 characters fit perfectly across
       doc.font("Courier")
          .fontSize(6.5) 
          .text(text, { align: "left" });
@@ -58,9 +77,8 @@ const executePrintJob = (text) => {
 
       writeStream.on("finish", async () => {
         try {
-          // 3. Send to printer with NO scaling so Windows doesn't stretch it
           await ptp.print(tempPdfPath, {
-            printer: "POS Printer 203DPI Series", // <-- MAKE SURE YOUR PRINTER NAME IS HERE
+            printer: "POS Printer 203DPI Series", // <-- PUT YOUR EXACT PRINTER NAME HERE
             scale: "noscale"
           });
           
@@ -73,46 +91,16 @@ const executePrintJob = (text) => {
       });
 
       writeStream.on("error", (streamErr) => {
-        reject(new Error(`Failed to write PDF file: ${streamErr.message}`));
+        reject(new Error(`File Error: ${streamErr.message}`));
       });
 
     } catch (error) {
-      reject(new Error(`PDF Generation Error: ${error.message}`));
+      reject(new Error(`PDF Error: ${error.message}`));
     }
   });
 };
 
-// --- API ENDPOINT ---
-app.post("/print", async (req, res) => {
-  const { text } = req.body;
-  console.log(text);
-
-  if (typeof text !== "string" || !text.trim()) {
-    return res.status(400).json({ error: "Valid text payload is required." });
-  }
-
-  try {
-    // Queue the request and wait for Windows to finish spooling it
-    await new Promise((resolve, reject) => {
-      printQueue.push({ text: text.trim(), resolve, reject });
-      processQueue();
-    });
-
-    console.log("✅ Print job sent to Windows Spooler successfully.");
-    res.json({ success: true, message: "Printed successfully" });
-    
-  } catch (error) {
-    console.error("❌ Print Failed:", error.message);
-    res.status(503).json({ error: error.message });
-  }
-});
-
-// --- SERVER INITIALIZATION ---
-const PORT = process.env.PORT || 3001;
-
-// '0.0.0.0' binds to the local network, allowing tablets to reach the laptop
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🖨 Windows PDF Print Server running on port ${PORT}`);
-  console.log(`📡 Ready to receive tablet requests over WiFi`);
-  console.log(`⚠️ Make sure 'pdfkit' is installed: npm install pdfkit`);
-});
+// --- START THE LOOP ---
+console.log("☁️ Scandine Cloud Print Queue Started!");
+console.log("📡 Listening to Supabase for pending receipts...");
+setInterval(checkPrintQueue, 3000); // Checks the database every 3 seconds
