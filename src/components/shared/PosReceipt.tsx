@@ -35,26 +35,33 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
           </thead>
           <tbody>
             {order.items?.map((item: any, idx: number) => {
-              // 1. Calculate the total cost of all toppings for this single item
-              const toppingsTotal = item.toppings?.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0) || 0;
+              const qty = Number(item.quantity || item.qty || 1);
+              
+              // 1. Properly target item.customization.toppings
+              const toppings = item.customization?.toppings || [];
+              const toppingsTotal = toppings.reduce((sum: number, t: any) => sum + ((Number(t.price) || 0) * (Number(t.qty) || 1)), 0);
+              
               // 2. Add toppings to base price, then multiply by quantity
-              const itemTotal = (Number(item.price) + toppingsTotal) * Number(item.quantity);
+              const itemTotal = (Number(item.price) * qty) + (toppingsTotal * qty);
 
               return (
                 <React.Fragment key={idx}>
                   <tr>
-                    <td className="pt-1.5 align-top">{item.quantity}x</td>
+                    <td className="pt-1.5 align-top">{qty}x</td>
                     <td className="pt-1.5 pr-1 leading-tight">
                       <span className="font-semibold">{item.name}</span>
                       {item.customization && (
                         <div className="text-[9px] text-gray-700 mt-0.5 leading-tight">
-                          {item.customization.size}, {item.customization.mood}, {item.customization.sugar} sug, {item.customization.ice} ice
+                          {[
+                            item.customization.size && item.customization.size !== 'Default' ? item.customization.size : null,
+                            item.customization.sugar ? `${item.customization.sugar}% sug` : null,
+                          ].filter(Boolean).join(', ')}
                         </div>
                       )}
-                      {/* Show toppings under the item name */}
-                      {item.toppings && item.toppings.length > 0 && (
+                      {/* Show toppings properly */}
+                      {toppings.length > 0 && (
                         <div className="text-[9px] text-gray-600 mt-0.5 leading-tight italic">
-                          + {item.toppings.map((t: any) => t.name).join(', ')}
+                          {toppings.map((t: any) => `+ ${t.qty}x ${t.name}`).join('\n')}
                         </div>
                       )}
                     </td>

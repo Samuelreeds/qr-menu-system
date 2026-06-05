@@ -111,7 +111,7 @@ function generateReceiptText(order: any, shopName: string): string {
   text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
   text += center('Thank you for your visit!', MAX_LEN) + '\n';
   text += center('Powered by Scandine', MAX_LEN) + '\n';
-  text += '\n\n\n\n';
+  text += '\n\n\n\n\n\n\n\n';
   
   return text;
 }

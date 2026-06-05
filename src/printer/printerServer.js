@@ -37,38 +37,36 @@ const processQueue = async () => {
 
 const executePrintJob = (text) => {
   return new Promise((resolve, reject) => {
-    // Generate a unique filename to prevent overwrite collisions
     const tempPdfPath = path.join(__dirname, `receipt_${Date.now()}.pdf`);
     
     try {
-      // Create a PDF configured for thermal receipt paper
-      // 226 points wide is standard for 80mm rolls. 
-      // Height is set arbitrarily long; thermal printers auto-cut at text end.
+      // 1. Shrink canvas to strictly fit a narrow 58mm roll
       const doc = new PDFDocument({
-        margin: 10,
-        size: [226, 800], 
+        margins: { top: 10, bottom: 15, left: 5, right: 5 }, 
+        size: [148, 800], 
       });
 
       const writeStream = fs.createWriteStream(tempPdfPath);
       doc.pipe(writeStream);
 
-      // Force monospace Courier font so receipt columns and spacing align perfectly
+      // 2. Shrink font size to 6.5 so all 32 characters fit perfectly across
       doc.font("Courier")
-         .fontSize(10)
+         .fontSize(6.5) 
          .text(text, { align: "left" });
 
       doc.end();
 
       writeStream.on("finish", async () => {
         try {
-          // Send to the DEFAULT Windows printer
-          await ptp.print(tempPdfPath);
+          // 3. Send to printer with NO scaling so Windows doesn't stretch it
+          await ptp.print(tempPdfPath, {
+            printer: "POS Printer 203DPI Series", // <-- MAKE SURE YOUR PRINTER NAME IS HERE
+            scale: "noscale"
+          });
           
-          // Cleanup: Delete the PDF after successful print
           if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
           resolve();
         } catch (printErr) {
-          // Cleanup: Delete the PDF even if printing fails
           if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
           reject(new Error(`Windows Spooler Error: ${printErr.message}`));
         }
@@ -87,6 +85,7 @@ const executePrintJob = (text) => {
 // --- API ENDPOINT ---
 app.post("/print", async (req, res) => {
   const { text } = req.body;
+  console.log(text);
 
   if (typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "Valid text payload is required." });
