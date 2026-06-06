@@ -36,6 +36,9 @@ export default async function ShopMenuPage({
         orderBy: { sortOrder: 'asc' }
       },
       products: {
+        where: {
+          deletedAt: null, // <-- ADD THIS LINE
+        },
         include: {
           category: true,
           variants: true, 
