@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, Chenla } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
@@ -21,6 +21,14 @@ const chenla = Chenla({
 export const metadata: Metadata = {
   title: 'Menu',
   description: 'QR Menu System',
+};
+
+// ADDED: Viewport configuration to prevent mobile auto-zoom
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

@@ -31,3 +31,12 @@ body {
   /* Force the Next.js font variables to prevent overrides */
   font-family: var(--font-sans) !important;
 }
+
+/* ADDED: Mobile input zoom prevention */
+@media screen and (max-width: 768px) {
+  input, 
+  textarea, 
+  select {
+    font-size: 16px !important;
+  }
+}

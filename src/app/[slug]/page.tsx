@@ -30,7 +30,9 @@ export default async function ShopMenuPage({
       ]
     },
     include: {
-      categories: true,
+      categories: {
+          orderBy: { sortOrder: 'asc' }
+      },
       settings: true,
       banners: {
         orderBy: { sortOrder: 'asc' }
