@@ -390,25 +390,26 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
       setIsMobileCartOpen(false);
 
       if (printerUrl) {
-        // Replace your old fetch('http://192.168...') code with this:
-
         try {
-          // 1. Generate the exact 32-character receipt text
           // 1. Generate the exact 32-character receipt text
           const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
 
-          // 2. Drop it into the Prisma Cloud Queue using your Server Action
-          const printRes = await createPrintJob(receiptText);
+          // 2. Send DIRECTLY to your local iPad Python server
+          const printRes = await fetch(`${printerUrl}/print`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: receiptText })
+          });
 
-          if (!printRes.success) {
-            throw new Error(printRes.error);
+          if (!printRes.ok) {
+             throw new Error("Local print server returned an error.");
           }
 
-          console.log("✅ Print job sent to cloud queue!");
+          console.log("✅ Print job sent securely to local printer!");
 
         } catch (error) {
           console.error("Failed to send print job:", error);
-          // (Show your error toast message here)
+          alert("❌ Failed to print receipt. Ensure your iPad print server is running.");
         }
       }
 
