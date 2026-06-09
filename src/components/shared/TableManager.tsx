@@ -200,7 +200,7 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
 
         {/* Add Table */}
         <div className="flex-1 lg:max-w-md">
-          <form onSubmit={handleCreate} className="flex gap-2">
+          <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={newLabel}
@@ -208,7 +208,7 @@ export default function TableManager({ shopId, shopSlug }: { shopId: string; sho
               placeholder="e.g. T01, VIP-1"
               className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:bg-white text-sm font-medium transition-all uppercase placeholder:normal-case"
             />
-            <button type="submit" disabled={!newLabel.trim()} className="px-6 py-3 bg-gray-900 text-white font-bold text-sm rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all active:scale-[0.98] whitespace-nowrap shadow-sm">
+            <button type="submit" disabled={!newLabel.trim()} className="w-full sm:w-auto px-6 py-3 bg-gray-900 text-white font-bold text-sm rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all active:scale-[0.98] whitespace-nowrap shadow-sm shrink-0">
               Add Table
             </button>
           </form>
