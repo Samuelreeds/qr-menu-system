@@ -2,11 +2,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ClipboardList, Download, Loader2, FileSpreadsheet, X } from 'lucide-react';
+import { ClipboardList, Download, Loader2, FileSpreadsheet, X, Search } from 'lucide-react';
 import OrderHistoryCard from "@/features/pos/OrderHistoryCard";
 
 interface OrdersTabProps {
-  shopId: string; // <-- Added shopId to pass to the API
+  shopId: string;
   orders: any[];
   orderFilter: string;
   setOrderFilter: (filter: string) => void;
@@ -28,17 +28,47 @@ export default function OrdersTab({
   // Export Panel State
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [reportType, setReportType] = useState<ReportType>("daily");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
+  // Search & Date Filter State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+
   const filteredOrders = orders?.filter(o => {
-    if (orderFilter === 'Completed') return o.status !== 'CANCELLED';
-    if (orderFilter === 'Cancelled') return o.status === 'CANCELLED';
+    // 1. Quick Filters
+    if (orderFilter === 'Completed' && o.status === 'CANCELLED') return false;
+    if (orderFilter === 'Cancelled' && o.status !== 'CANCELLED') return false;
     if (orderFilter === 'Today') {
       const today = new Date().toDateString();
-      return new Date(o.createdAt).toDateString() === today;
+      if (new Date(o.createdAt).toDateString() !== today) return false;
     }
+
+    // 2. Search by Order ID
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const idMatch = o.id?.toLowerCase().includes(query) || o.orderNumber?.toLowerCase().includes(query);
+      if (!idMatch) return false;
+    }
+
+    // 3. Search by Custom Date Range
+    if (filterStartDate || filterEndDate) {
+      const orderDateStr = new Date(o.createdAt).toISOString().split('T')[0];
+      const orderDate = new Date(orderDateStr);
+      
+      if (filterStartDate) {
+        const start = new Date(filterStartDate);
+        if (orderDate < start) return false;
+      }
+      
+      if (filterEndDate) {
+        const end = new Date(filterEndDate);
+        if (orderDate > end) return false;
+      }
+    }
+
     return true; 
   }) || [];
 
@@ -48,13 +78,13 @@ export default function OrdersTab({
       const params = new URLSearchParams({ type: reportType, shopId });
       
       if (reportType === "custom") {
-        if (!startDate || !endDate) {
+        if (!exportStartDate || !exportEndDate) {
           alert("Please select both start and end dates.");
           setIsExporting(false);
           return;
         }
-        params.append("start", startDate);
-        params.append("end", endDate);
+        params.append("start", exportStartDate);
+        params.append("end", exportEndDate);
       }
 
       const response = await fetch(`/api/reports/export?${params.toString()}`);
@@ -70,7 +100,7 @@ export default function OrdersTab({
       a.remove();
       window.URL.revokeObjectURL(url);
       
-      setShowExportPanel(false); // Close panel on success
+      setShowExportPanel(false);
     } catch (error) {
       console.error(error);
       alert("Error downloading the report. Please try again.");
@@ -110,6 +140,59 @@ export default function OrdersTab({
         </div>
       </header>
 
+      {/* SEARCH AND DATE FILTERS */}
+      <div className="flex flex-col lg:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search size={16} className="text-gray-400" />
+          </div>
+          <input 
+            type="text" 
+            placeholder="Search by Order ID..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 text-sm font-medium shadow-sm transition-all"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2 w-full lg:w-auto">
+          <div className="relative flex-1 lg:w-40">
+            <input 
+              type="date" 
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+              className="w-full px-3 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 text-[13px] font-medium text-gray-600 shadow-sm transition-all"
+              title="Start Date"
+            />
+            {filterStartDate && (
+              <button onClick={() => setFilterStartDate('')} className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white pl-1">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <span className="text-gray-400 text-sm font-medium shrink-0">to</span>
+          <div className="relative flex-1 lg:w-40">
+            <input 
+              type="date" 
+              value={filterEndDate}
+              onChange={(e) => setFilterEndDate(e.target.value)}
+              className="w-full px-3 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 text-[13px] font-medium text-gray-600 shadow-sm transition-all"
+              title="End Date"
+            />
+            {filterEndDate && (
+              <button onClick={() => setFilterEndDate('')} className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white pl-1">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* EXPORT DROPDOWN PANEL */}
       {showExportPanel && (
         <div className="mb-6 p-5 sm:p-6 bg-gray-50 border border-gray-200 rounded-2xl animate-in fade-in slide-in-from-top-2">
@@ -146,8 +229,8 @@ export default function OrdersTab({
                   <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Start Date</label>
                   <input
                     type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
                     className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 text-sm font-medium shadow-sm"
                   />
                 </div>
@@ -155,8 +238,8 @@ export default function OrdersTab({
                   <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">End Date</label>
                   <input
                     type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
                     className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 text-sm font-medium shadow-sm"
                   />
                 </div>
