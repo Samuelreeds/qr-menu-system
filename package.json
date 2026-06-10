@@ -37,6 +37,7 @@
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "usb": "^2.17.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

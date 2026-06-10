@@ -137,7 +137,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
   const [openSection, setOpenSection] = useState<string | null>('identity');
   
-  // --- ADDED SNACKBAR TYPES ---
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'warning' | 'fail' | 'info' }>({ show: false, message: '', type: 'info' });
   
   const [dismissGuide, setDismissGuide] = useState(false);
@@ -159,7 +158,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const markDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: true }));
   const clearDirty = (section: string) => setDirtySections(prev => ({ ...prev, [section]: false }));
   
-  // --- UPDATED SHOW TOAST ---
   const showToast = (message: string, type: 'success' | 'warning' | 'fail' | 'info' = 'success') => { 
     setToast({ show: true, message, type }); 
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000); 
@@ -205,7 +203,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
   const hasSettings = !!settings?.address || !!settings?.logo || !!settings?.phone;
   const isGuideComplete = hasCategory && hasProduct && hasSettings;
 
-  // --- CLICK OUTSIDE LISTENER FOR MOBILE MENU ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (window.innerWidth >= 1280 || !isMobileMenuOpen) return;
@@ -637,7 +634,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
 
       <PendingDeleteToast pendingDelete={pendingDelete} onUndo={clearPendingDelete} />
       
-      {/* --- ADDED TOAST COMPONENT --- */}
       <AdminToast show={toast.show} message={toast.message} type={toast.type} />
 
       <div className="lg:hidden fixed top-0 left-0 w-full bg-white z-20 px-4 py-3 flex items-center justify-between gap-4 border-b border-gray-100 shadow-sm print:hidden">
@@ -695,7 +691,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
             <OrderProvider>
               <AdminPosSection 
                 dashboardCategories={sortedCategories} 
-                dashboardProducts={filteredProducts} // <--- USE FILTERED PRODUCTS HERE
+                dashboardProducts={filteredProducts}
                 shopId={shopId} 
                 userEmail={userEmail} 
                 userRole={userRole} 
@@ -706,7 +702,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
             </OrderProvider>
           </ToastProvider>
         </div>}
-        {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} /></div>}
+        {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab shopId={shopId} orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}><InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}><TeamTab teamMembers={teamMembers} isTeamLoading={isTeamLoading} userEmail={userEmail || ''} onAddStaff={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} onEditStaff={(member) => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} onViewActivity={fetchUserActivity} onDeleteStaff={handleDeleteTeamMember} /></div>}
 
