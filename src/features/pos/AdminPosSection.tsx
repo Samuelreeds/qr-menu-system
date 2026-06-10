@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import PosCustomizationModal from './PosCustomizationModal';
 import PosProductCard, { PosProductCardSkeleton } from './PosProductCard';
 import BillingPanel from './BillingPanel';
+import { generateReceiptText } from '@/components/shared/PosReceipt';
 
 // IMPORT OFFLINE STORE
 import { saveOfflineOrder, getPendingOrders, markOrderSynced, OfflineOrder } from '@/lib/offlineStore';
@@ -32,89 +33,6 @@ export interface PosProduct { id: string; name: string; description: string; pri
 export type OrderType = "walk-in" | "table" | "delivery";
 
 const TAX_RATE = 0.1;
-
-// FORMAT RECEIPT FOR IP PRINTER
-function generateReceiptText(order: any, shopName: string): string {
-  const MAX_LEN = 32;
-  const padRight = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padEnd(len, ' ');
-  const padLeft = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padStart(len, ' ');
-  const center = (str: string, len: number) => {
-    if (str.length >= len) return str.substring(0, len);
-    const leftPad = Math.floor((len + str.length) / 2);
-    return str.padStart(leftPad, ' ').padEnd(len, ' ');
-  };
-
-  let text = '\n';
-  
-  text += center(shopName.toUpperCase(), MAX_LEN) + '\n';
-  text += center('Receipt / Tax Invoice', MAX_LEN) + '\n';
-  text += `Date: ${new Date(order.createdAt).toLocaleString()}\n`;
-  text += `Order ID: #${(order.orderNumber || order.id).slice(-6).toUpperCase()}\n`;
-  
-  const orderTypeStr = order.orderType === 'TAKEAWAY' ? 'WALK-IN' : order.orderType;
-  const tableStr = order.tableNumber ? ` - ${order.tableNumber}` : '';
-  text += `Type: ${orderTypeStr}${tableStr}\n`;
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('Qty', 4)}${padRight('Item', 20)}${padLeft('Total', 8)}\n`;
-  text += '-'.repeat(MAX_LEN) + '\n';
-  
-  order.items.forEach((item: any) => {
-    const qty = item.qty || item.quantity;
-    const qtyStr = `${qty}x`; 
-    const nameStr = item.name;
-    const totalStr = `$${(item.price * qty).toFixed(2)}`;
-    
-    text += `${padRight(qtyStr, 4)}${padRight(nameStr, 20)}${padLeft(totalStr, 8)}\n`;
-    
-    if (item.customization) {
-       let mods = [];
-       if (item.customization.size && item.customization.size !== 'Default') mods.push(item.customization.size);
-       
-       if (item.customization.sugar) mods.push(`${item.customization.sugar}% sug`);
-       
-       // --- PHASE 1: DYNAMIC MULTIPLE TOPPING RECEIPT LOGIC ---
-       if (item.customization.toppings && Array.isArray(item.customization.toppings)) {
-         item.customization.toppings.forEach((t: any) => {
-           if (t.qty > 0) mods.push(`+ ${t.qty}x ${t.name}`);
-         });
-       }
-       
-       if (mods.length > 0) {
-         const modsStr = mods.join(', ');
-         const chunks = modsStr.match(/.{1,28}(\s|$)/g) || [modsStr];
-         chunks.forEach(chunk => {
-           text += `    ${chunk.trim()}\n`;
-         });
-       }
-    }
-  });
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('Subtotal:', 24)}${padLeft('$' + order.subtotal.toFixed(2), 8)}\n`;
-  if (order.discount > 0) {
-    text += `${padRight('Discount:', 24)}${padLeft('-$' + order.discount.toFixed(2), 8)}\n`;
-  }
-  if (order.tax > 0) {
-    text += `${padRight('Tax (10%):', 24)}${padLeft('$' + order.tax.toFixed(2), 8)}\n`;
-  }
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('TOTAL:', 24)}${padLeft('$' + order.total.toFixed(2), 8)}\n`;
-  
-  if (order.amountReceived !== undefined) {
-    text += `${padRight('Received:', 24)}${padLeft('$' + order.amountReceived.toFixed(2), 8)}\n`;
-    text += `${padRight('Change:', 24)}${padLeft('$' + (order.changeAmount || 0).toFixed(2), 8)}\n`;
-  }
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
-  text += center('Thank you for your visit!', MAX_LEN) + '\n';
-  text += center('Powered by Scandine', MAX_LEN) + '\n';
-  text += '\n\n\n\n\n\n\n\n';
-  
-  return text;
-}
 
 export default function AdminPosSection({ dashboardCategories, dashboardProducts, shopId, userEmail, userRole, shopName, printerUrl, qrImage, toppings = [] }: { dashboardCategories: Category[], dashboardProducts: Product[], shopId: string, userEmail?: string, userRole?: string, shopName: string, printerUrl?: string, qrImage?: string | null, toppings?: Topping[] }) {
   const router = useRouter();
@@ -391,10 +309,8 @@ export default function AdminPosSection({ dashboardCategories, dashboardProducts
 
       if (printerUrl) {
         try {
-          // 1. Generate the exact 32-character receipt text
-          const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
+          const receiptText = generateReceiptText(finalOrderForReceipt, shopName, false);
 
-          // 2. Send DIRECTLY to your local iPad Python server
           const printRes = await fetch(`${printerUrl}/print`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

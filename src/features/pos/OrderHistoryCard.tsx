@@ -4,126 +4,7 @@
 import { useState, useTransition } from 'react';
 import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer } from 'lucide-react';
 import { deleteOrder, updateOrderStatus } from '@/lib/actions';
-
-const EXCHANGE_RATE = 4000;
-
-// --- DYNAMIC TOTAL RECALCULATION ---
-function getCorrectedOrderTotals(order: any) {
-  let baseSubtotal = 0;
-  let toppingsTotal = 0;
-
-  order.items?.forEach((item: any) => {
-    const qty = Number(item.quantity || item.qty || 1);
-    const itemPrice = Number(item.price) || 0;
-    
-    const toppingsArray = item.toppings || item.customization?.toppings || [];
-    const itemToppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
-    
-    baseSubtotal += itemPrice * qty;
-    toppingsTotal += itemToppingsPrice * qty;
-  });
-
-  const combinedSubtotal = baseSubtotal + toppingsTotal;
-  const discount = Number(order.discount) || 0;
-  const taxRate = order.tax > 0 ? 0.10 : 0; 
-  const tax = (combinedSubtotal - discount) * taxRate;
-  const total = combinedSubtotal - discount + tax;
-
-  return { baseSubtotal, toppingsTotal, combinedSubtotal, discount, tax, total };
-}
-
-// --- RECEIPT GENERATOR ---
-function generateReceiptText(order: any, shopName: string): string {
-  const MAX_LEN = 32;
-  const padRight = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padEnd(len, ' ');
-  const padLeft = (str: string, len: number) => str.length > len ? str.substring(0, len) : str.padStart(len, ' ');
-  const center = (str: string, len: number) => {
-    if (str.length >= len) return str.substring(0, len);
-    const leftPad = Math.floor((len + str.length) / 2);
-    return str.padStart(leftPad, ' ').padEnd(len, ' ');
-  };
-
-  const totals = getCorrectedOrderTotals(order);
-
-  let text = '\n';
-  text += center('** REPRINT **', MAX_LEN) + '\n';
-  text += center(shopName.toUpperCase(), MAX_LEN) + '\n';
-  text += center('Receipt / Tax Invoice', MAX_LEN) + '\n';
-  text += `Date: ${new Date(order.createdAt).toLocaleString()}\n`;
-  text += `Order ID: #${(order.orderNumber || order.id).slice(-6).toUpperCase()}\n`;
-  
-  const orderTypeStr = order.orderType === 'TAKEAWAY' ? 'WALK-IN' : order.orderType;
-  const tableStr = order.tableNumber ? ` - ${order.tableNumber}` : '';
-  text += `Type: ${orderTypeStr}${tableStr}\n`;
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('Qty', 4)}${padRight('Item', 20)}${padLeft('Total', 8)}\n`;
-  text += '-'.repeat(MAX_LEN) + '\n';
-  
-  order.items?.forEach((item: any) => {
-    const qty = Number(item.quantity || item.qty || 1);
-    const qtyStr = `${qty}x`; 
-    const nameStr = item.name;
-
-    const itemPrice = Number(item.price) || 0;
-    const toppingsArray = item.toppings || item.customization?.toppings || [];
-    const itemToppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
-    const itemTotal = (itemPrice + itemToppingsPrice) * qty;
-    
-    const totalStr = `$${itemTotal.toFixed(2)}`;
-    
-    text += `${padRight(qtyStr, 4)}${padRight(nameStr, 20)}${padLeft(totalStr, 8)}\n`;
-    
-    if (item.customization || toppingsArray.length > 0) {
-       let mods = [];
-       if (item.customization?.size && item.customization.size !== 'Default') mods.push(item.customization.size);
-       if (item.customization?.mood) mods.push(item.customization.mood);
-       if (item.customization?.sugar) mods.push(`${item.customization.sugar} sug`);
-       if (item.customization?.ice) mods.push(`${item.customization.ice} ice`);
-       
-       if (toppingsArray.length > 0) {
-         mods.push(`+ ${toppingsArray.map((t: any) => t.name).join(', ')}`);
-       }
-       
-       if (mods.length > 0) {
-         const modsStr = mods.join(', ');
-         const chunks = modsStr.match(/.{1,28}(\s|$)/g) || [modsStr];
-         chunks.forEach(chunk => {
-           text += `    ${chunk.trim()}\n`;
-         });
-       }
-    }
-  });
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('Subtotal:', 24)}${padLeft('$' + totals.baseSubtotal.toFixed(2), 8)}\n`;
-  
-  if (totals.toppingsTotal > 0) {
-    text += `${padRight('Add-ons:', 24)}${padLeft('$' + totals.toppingsTotal.toFixed(2), 8)}\n`;
-  }
-  if (totals.discount > 0) text += `${padRight('Discount:', 24)}${padLeft('-$' + totals.discount.toFixed(2), 8)}\n`;
-  if (totals.tax > 0) text += `${padRight('Tax (10%):', 24)}${padLeft('$' + totals.tax.toFixed(2), 8)}\n`;
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `${padRight('TOTAL (USD):', 22)}${padLeft('$' + totals.total.toFixed(2), 10)}\n`;
-  text += `${padRight('TOTAL (KHR):', 20)}${padLeft((totals.total * EXCHANGE_RATE).toLocaleString() + ' R', 12)}\n`;
-  
-  if (order.amountReceived !== undefined) {
-    const changeAmount = order.amountReceived - totals.total;
-    const symbol = order.currency === 'KHR' ? 'R' : '$';
-    const multiplier = order.currency === 'KHR' ? EXCHANGE_RATE : 1;
-    
-    text += `${padRight('Received:', 22)}${padLeft(symbol + (order.amountReceived * multiplier).toLocaleString(), 10)}\n`;
-    text += `${padRight('Change:', 22)}${padLeft(symbol + (Math.max(changeAmount, 0) * multiplier).toLocaleString(), 10)}\n`;
-  }
-  
-  text += '-'.repeat(MAX_LEN) + '\n';
-  text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
-  text += center('Thank you for your visit!', MAX_LEN) + '\n';
-  text += center('Powered by Scandine', MAX_LEN) + '\n';
-  text += '\n\n\n\n';
-  return text;
-}
+import { generateReceiptText, getCorrectedOrderTotals, EXCHANGE_RATE } from '@/components/shared/PosReceipt';
 
 export default function OrderHistoryCard({ order, shopName = "Store", printerUrl }: { order: any, shopName?: string, printerUrl?: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -164,7 +45,7 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
     }
 
     try {
-      const receiptText = generateReceiptText(order, shopName);
+      const receiptText = generateReceiptText(order, shopName, true);
       await fetch(`${printerUrl}/print`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
