@@ -1,6 +1,6 @@
 // src/features/admin/tabs/SettingsTab.tsx
 import React from 'react';
-import { Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, CheckCircle, Palette, Lock, Menu, ImageIcon, Info, Plus, Share2, Trash2, Bell, Hash, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, CheckCircle, Palette, Lock, Menu, ImageIcon, Info, Plus, Share2, Trash2, Bell, Hash, Send, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import LazyImage from "@/components/ui/LazyImage";
 
 export interface SocialLink { 
@@ -60,7 +60,7 @@ interface SettingsTabProps {
   cancelLogoChange: () => void;
   clearDirty: (section: string) => void;
   optBanners: any[];
-  draggedBannerIndex: number | null; // <--- ADDED
+  draggedBannerIndex: number | null;
   handleDragStart: (e: React.DragEvent, index: number) => void;
   handleDragOver: (e: React.DragEvent, index: number) => void;
   handleDrop: (e: React.DragEvent, dropIndex: number) => void;
@@ -107,7 +107,7 @@ export default function SettingsTab({
   handlePrevDesign, handleNextDesign, themeColorPreview, getShopNamePreview, isNoBg,
   logoPreview, fallbackLogo, logoInputRef, logoFileBlob, setLogoType, logoType,
   setThemeColorPreview, cancelLogoChange, clearDirty, optBanners, 
-  draggedBannerIndex, // <--- ADDED
+  draggedBannerIndex,
   handleDragStart, handleDragOver, handleDrop, handleMoveBanner, dispatchOptBanners, deleteBanner,
   showToast, bannerInputRef, safeLimits, onSocialsSubmit, canUseCustomSocials,
   socialLinks, getPlatformIcon, updateSocialLink, removeSocialLink, addSocialLink,
@@ -144,11 +144,6 @@ export default function SettingsTab({
                     </label>
                   ))}
                 </div>
-              </div>
-              <div className="pt-2">
-                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
-                <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
-                <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing.</p>
               </div>
             </div>
             <hr className="border-gray-100" />
@@ -356,6 +351,31 @@ export default function SettingsTab({
               <div className="flex justify-end pt-4 border-t border-gray-100"><button type="submit" disabled={!dirtySections['notifications']} className="w-full sm:w-auto bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"><CheckCircle size={16}/>{dirtySections['notifications'] ? 'Save Notifications' : 'Saved'}</button></div>
             </form>
           )}
+        </div>
+      </div>
+
+      {/* 6. ADVANCED SETTINGS */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden mt-6">
+        <button onClick={() => handleSectionClick('advanced')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+           <div className="flex gap-4 items-center">
+             <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl"><Settings size={20}/></div>
+             <div className="text-left"><h3 className="font-bold text-gray-900 text-base">Advanced Settings</h3><p className="text-xs text-gray-500 mt-0.5">Local POS integrations and print servers</p></div>
+           </div>
+           {openSection === 'advanced' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
+        </button>
+        <div className={openSection === 'advanced' ? 'block' : 'hidden'}>
+          <form onSubmit={onIdentitySubmit} className="p-6 border-t border-gray-100 space-y-6">
+             <div className="space-y-4">
+                <div className="pt-2">
+                  <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
+                  <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
+                  <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing.</p>
+                </div>
+             </div>
+             <div className="flex justify-end pt-4 border-t border-gray-100">
+               <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
+             </div>
+          </form>
         </div>
       </div>
       
