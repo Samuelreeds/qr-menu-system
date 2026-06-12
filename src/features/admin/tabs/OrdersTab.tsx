@@ -12,6 +12,7 @@ interface OrdersTabProps {
   setOrderFilter: (filter: string) => void;
   settingsName: string;
   printerUrl: string;
+  qrImage?: string | null; // 1. ADD THIS PROP
 }
 
 type ReportType = "daily" | "monthly" | "yearly" | "custom";
@@ -22,7 +23,8 @@ export default function OrdersTab({
   orderFilter,
   setOrderFilter,
   settingsName,
-  printerUrl
+  printerUrl,
+  qrImage // 2. RECEIVE IT HERE
 }: OrdersTabProps) {
   
   // Export Panel State
@@ -39,8 +41,9 @@ export default function OrdersTab({
 
   const filteredOrders = orders?.filter(o => {
     // 1. Quick Filters
-    if (orderFilter === 'Completed' && o.status === 'CANCELLED') return false;
+    if (orderFilter === 'Completed' && (o.status === 'CANCELLED' || o.isPaid === false)) return false;
     if (orderFilter === 'Cancelled' && o.status !== 'CANCELLED') return false;
+    if (orderFilter === 'Unpaid' && o.isPaid !== false) return false;
     if (orderFilter === 'Today') {
       const today = new Date().toDateString();
       if (new Date(o.createdAt).toDateString() !== today) return false;
@@ -119,7 +122,7 @@ export default function OrdersTab({
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
           <div className="flex bg-gray-100 p-1 rounded-xl w-full sm:w-auto overflow-x-auto no-scrollbar [-webkit-overflow-scrolling:touch]">
-            {['All', 'Today', 'Completed', 'Cancelled'].map(f => (
+            {['All', 'Today', 'Completed', 'Cancelled', 'Unpaid'].map(f => (
               <button 
                 key={f} 
                 onClick={() => setOrderFilter(f)} 
@@ -264,7 +267,8 @@ export default function OrdersTab({
             key={order.id} 
             order={order} 
             shopName={settingsName} 
-            printerUrl={printerUrl} 
+            printerUrl={printerUrl}
+            qrImage={qrImage} // 3. PASS IT TO THE CARD
           />
         ))}
         

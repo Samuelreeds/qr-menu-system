@@ -703,7 +703,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
             </OrderProvider>
           </ToastProvider>
         </div>}
-        {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab shopId={shopId} orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} /></div>}
+        {featPos && <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}><OrdersTab shopId={shopId} orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} settingsName={settings?.name || "Shop"} printerUrl={settingsState.printerUrl} qrImage={settings?.qrImage} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'inventory' ? 'block animate-in fade-in duration-300' : 'hidden'} pb-12 print:hidden max-w-5xl mx-auto`}><InventoryManager userName={userEmail ? userEmail.split('@')[0] : 'Admin'} ingredients={ingredients} stockLogs={stockLogs} /></div>}
         {isAdmin && featPos && <div className={`${activeTab === 'team' ? 'block animate-in fade-in duration-300' : 'hidden'} print:hidden max-w-5xl mx-auto`}><TeamTab teamMembers={teamMembers} isTeamLoading={isTeamLoading} userEmail={userEmail || ''} onAddStaff={() => { setEditingTeamMember(null); setIsTeamFormOpen(true); }} onEditStaff={(member) => { setEditingTeamMember(member); setIsTeamFormOpen(true); }} onViewActivity={fetchUserActivity} onDeleteStaff={handleDeleteTeamMember} /></div>}
 

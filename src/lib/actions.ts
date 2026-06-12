@@ -1508,6 +1508,8 @@ export async function createSuperAdminUser(formData: FormData) {
   }
 }
 
+// Replace your existing createPosOrder function in src/lib/actions.ts with this:
+
 export async function createPosOrder(data: {
   shopId: string;
   orderType: string;
@@ -1533,6 +1535,9 @@ export async function createPosOrder(data: {
 
     const currentUser = await prisma.user.findUnique({ where: { email: session!.user!.email! } });
 
+    // Determine if this is an "Owed" order (Amount received is 0)
+    const isOwed = data.amountReceived === 0;
+
     const productIds = data.items.map(i => i.productId);
     const realProducts = await prisma.product.findMany({
       where: { id: { in: productIds }, deletedAt: null },
@@ -1545,14 +1550,13 @@ export async function createPosOrder(data: {
     let secureSubtotal = 0;
     const orderItemsData = data.items.map(clientItem => {
       const realProd = realProducts.find(p => p.id === clientItem.productId);
-      if (!realProd) throw new Error(`Product ${clientItem.name} not found in database.`);
+      if (!realProd) throw new Error(`Product ${clientItem.name} not found.`);
 
       let itemPrice = realProd.price;
       const effectiveDiscount = realProd.discount > 0 ? realProd.discount : (realProd.category?.discount || 0);
       if (effectiveDiscount > 0) {
         itemPrice = itemPrice * (1 - effectiveDiscount / 100);
       }
-
       secureSubtotal += (itemPrice * clientItem.qty);
 
       return {
@@ -1571,12 +1575,10 @@ export async function createPosOrder(data: {
     const secureTotal = afterDiscount + secureTax;
 
     const mappedOrderType = data.orderType.toUpperCase() === 'WALK-IN' ? 'TAKEAWAY' : data.orderType.toUpperCase();
-
     const currentOrderCount = await prisma.order.count({ where: { shopId: data.shopId } });
     const generatedOrderNumber = `# ORD-${String(currentOrderCount + 1).padStart(4, '0')}`;
 
     const order = await prisma.$transaction(async (tx) => {
-       
        const createdOrder = await tx.order.create({
          data: {
            shopId: data.shopId,
@@ -1594,55 +1596,32 @@ export async function createPosOrder(data: {
            amountReceived: data.amountReceived ?? secureTotal,
            changeAmount: data.changeAmount ?? 0,
            paymentMethod: data.paymentMethod as any,
-           status: 'COMPLETED',
-           isPaid: true,
-           items: {
-             create: orderItemsData,
-           },
+           // SET STATUS BASED ON PAYMENT
+           status: isOwed ? 'PENDING' : 'COMPLETED',
+           isPaid: !isOwed,
+           items: { create: orderItemsData },
          },
          include: { items: true } 
        });
 
-       const deductions = new Map<string, number>(); 
+       // Inventory deduction logic stays the same
+       const staffName = (session as any)?.user?.email?.split('@')[0] || "POS System";
        for (const clientItem of data.items) {
           const realProd = realProducts.find(p => p.id === clientItem.productId);
-          if (realProd && realProd.ingredients && realProd.ingredients.length > 0) {
+          if (realProd?.ingredients) {
              for (const recipeItem of realProd.ingredients) {
                 const amountToDeduct = recipeItem.quantityUsed * clientItem.qty;
-                deductions.set(
-                   recipeItem.ingredientId,
-                   (deductions.get(recipeItem.ingredientId) || 0) + amountToDeduct
-                );
+                const ingredient = await tx.ingredient.findUnique({ where: { id: recipeItem.ingredientId } });
+                if (ingredient) {
+                   const newStock = Math.max(0, ingredient.current - amountToDeduct);
+                   await tx.ingredient.update({ where: { id: recipeItem.ingredientId }, data: { current: newStock } });
+                   await tx.stockLog.create({
+                      data: { shopId: data.shopId, ingredientId: recipeItem.ingredientId, change: -amountToDeduct, reason: "Sold", staffName, previousStock: ingredient.current, newStock }
+                   });
+                }
              }
           }
        }
-
-       const staffName = (session as any)?.user?.email?.split('@')[0] || "POS System";
-       
-       for (const [ingredientId, amountToDeduct] of deductions.entries()) {
-          const ingredient = await tx.ingredient.findUnique({ where: { id: ingredientId } });
-          if (ingredient) {
-             const newStock = Math.max(0, ingredient.current - amountToDeduct);
-             
-             await tx.ingredient.update({
-                where: { id: ingredientId },
-                data: { current: newStock }
-             });
-
-             await tx.stockLog.create({
-                data: {
-                   shopId: data.shopId,
-                   ingredientId: ingredientId,
-                   change: -amountToDeduct,
-                   reason: "Sold",
-                   staffName: staffName,
-                   previousStock: ingredient.current,
-                   newStock: newStock
-                }
-             });
-          }
-       }
-
        return createdOrder;
     });
 
@@ -2184,7 +2163,6 @@ export async function closeShift(shiftId: string, actualEndingCash: number, expe
 
 export async function createPrintJob(receiptText: string) {
   try {
-    // Using (prisma as any) to avoid typescript errors if generate hasn't finished
     const job = await (prisma as any).printJob.create({
       data: {
         receipt_text: receiptText,
@@ -2198,6 +2176,7 @@ export async function createPrintJob(receiptText: string) {
   }
 }
 
+// This export is what your AdminPosSection is now looking for
 export async function completeTableOrder(orderId: string) {
   try {
     await prisma.order.update({
@@ -2208,5 +2187,23 @@ export async function completeTableOrder(orderId: string) {
     return { success: true };
   } catch (error) {
     return { success: false };
+  }
+}
+
+export async function settleUnpaidOrder(orderId: string, paymentMethod: string, amountReceived: number) {
+  try {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'COMPLETED',
+        isPaid: true,
+        paymentMethod: paymentMethod as any,
+        amountReceived: amountReceived
+      }
+    });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Failed to settle payment" };
   }
 }

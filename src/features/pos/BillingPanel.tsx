@@ -362,14 +362,23 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               <span className="text-base sm:text-lg leading-none shrink-0">💵</span>
               <span className="truncate w-full text-center">Cash</span>
             </button>
+            
             <button 
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-3 rounded-[12px] sm:rounded-[14px] font-bold text-[10px] sm:text-xs transition-all active:scale-[0.98] border-2 min-w-0 truncate px-1 ${paymentMethod === "khqr" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} 
               onClick={() => setPaymentMethod("khqr")}
             >
               <span className="text-base sm:text-lg leading-none shrink-0">📲</span>
               <span className="truncate w-full text-center">KHQR</span>
-            </button>
+            </button>|
           </div>
+          {/* ADD THIS NEW OWED BUTTON */}
+          <button 
+            onClick={() => onProceedToConfirm("cash", "", "", "percent", "0", false, "USD", 0, 0)}
+            disabled={items.length === 0 || isSavingOrder}
+            className="w-full mb-3 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-[12px] hover:bg-gray-100 transition-all text-xs"
+          >
+            Mark as Owed ($0)
+          </button>
           
           <button 
             className={`w-full py-3 sm:py-4 rounded-[12px] sm:rounded-[14px] font-bold text-sm sm:text-[15px] transition-all flex items-center justify-center gap-2 min-w-0 px-2 ${items.length > 0 && !isSavingOrder ? 'bg-[#111827] text-white shadow-lg hover:bg-black active:scale-[0.98]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} 

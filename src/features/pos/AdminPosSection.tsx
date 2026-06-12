@@ -455,8 +455,9 @@ export default function AdminPosSection({
         isTaxEnabled, 
         paymentMethod: paymentMethod.toUpperCase(), 
         currency, 
-        amountReceived, 
-        changeAmount,
+        amountReceived: amountReceived, // Send the 0 explicitly
+        changeAmount: changeAmount,
+        isOwed: amountReceived === 0, // Add this flag to identify owed orders
         items: billingItems.map(i => ({ 
           productId: i.productId, 
           name: i.name, 
