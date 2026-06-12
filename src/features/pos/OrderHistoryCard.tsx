@@ -2,20 +2,22 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer, X } from 'lucide-react';
+import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer, X, Loader2, CheckCircle } from 'lucide-react';
 import { deleteOrder, updateOrderStatus, settleUnpaidOrder } from '@/lib/actions';
 import { generateReceiptText, getCorrectedOrderTotals, EXCHANGE_RATE } from '@/components/shared/PosReceipt';
 
 export default function OrderHistoryCard({ order, shopName = "Store", printerUrl, qrImage }: { order: any, shopName?: string, printerUrl?: string, qrImage?: string | null }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   const [optimisticStatus, setOptimisticStatus] = useState(order.status);
   const [optimisticIsPaid, setOptimisticIsPaid] = useState(order.isPaid);
   const [isOptimisticallyDeleted, setIsOptimisticallyDeleted] = useState(false);
   
-  // Updated modal actions to support separate Cash and KHQR modals
-  const [modalAction, setModalAction] = useState<'delete' | 'cancel' | 'pay_cash' | 'pay_khqr' | null>(null);
+  // Unified Modal States
+  const [modalAction, setModalAction] = useState<'delete' | 'cancel' | 'pay' | null>(null);
+  const [activeTab, setActiveTab] = useState<'cash' | 'khqr'>('cash');
+  const [printReceipt, setPrintReceipt] = useState(true);
 
   // Cash Calculation States
   const [cashReceivedUSD, setCashReceivedUSD] = useState("");
@@ -40,6 +42,13 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
 
   if (isOptimisticallyDeleted) return null; 
 
+  const handleOpenPaymentModal = () => {
+    setCashReceivedUSD(""); 
+    setCashReceivedKHR("");
+    setActiveTab("cash");
+    setModalAction('pay');
+  };
+
   const handleConfirmAction = () => {
     if (modalAction === 'delete') {
       setIsOptimisticallyDeleted(true); 
@@ -53,11 +62,36 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
   };
 
   const handleConfirmPayment = (method: 'CASH' | 'KHQR') => {
+    if (method === 'CASH' && !isPaymentSufficient) return;
+    
     setOptimisticStatus('COMPLETED');
     setOptimisticIsPaid(true);
     setModalAction(null);
+
     startTransition(async () => { 
       await settleUnpaidOrder(order.id, method, totals.total); 
+      
+      // Handle Auto-Printing for settled orders
+      if (printReceipt && printerUrl) {
+        try {
+          const updatedOrderForReceipt = {
+            ...order,
+            isPaid: true,
+            status: 'COMPLETED',
+            paymentMethod: method,
+            amountReceived: method === 'CASH' ? totalReceivedInUSD : totals.total,
+            changeAmount: method === 'CASH' ? changeDueUSD : 0
+          };
+          const receiptText = generateReceiptText(updatedOrderForReceipt, shopName, true);
+          await fetch(`${printerUrl}/print`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: receiptText })
+          });
+        } catch (err) {
+          console.error("Failed to print settled order receipt", err);
+        }
+      }
     });
   };
 
@@ -80,17 +114,23 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
 
   return (
     <>
-      {/* CASH PAYMENT MODAL */}
-      {modalAction === 'pay_cash' && (
+      {/* UNIFIED PAYMENT MODAL */}
+      {modalAction === 'pay' && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-extrabold text-gray-900 text-xl">Cash Payment</h3>
-              <button onClick={() => setModalAction(null)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
-                <X size={20} />
-              </button>
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col">
+            
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="font-extrabold text-gray-900 text-xl">Settle Payment</h3>
+              <button onClick={() => setModalAction(null)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95"><X size={20} /></button>
             </div>
 
+            {/* TAB NAVIGATION */}
+            <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+              <button onClick={() => setActiveTab("cash")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'cash' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cash</button>
+              <button onClick={() => setActiveTab("khqr")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'khqr' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>KHQR</button>
+            </div>
+
+            {/* COMMON HEADER (Total Due) */}
             <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Due</p>
               <div className="flex flex-col items-center justify-center gap-0.5">
@@ -99,128 +139,75 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
               </div>
             </div>
 
-            <div className="space-y-4 mb-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
-                  <div className="relative mb-2">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">$</span>
-                    <input 
-                      type="number" step="0.01" min="0" 
-                      value={cashReceivedUSD} 
-                      onChange={e => setCashReceivedUSD(e.target.value)} 
-                      className="w-full pl-7 pr-2 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
-                      placeholder="0.00" 
-                    />
+            {/* TAB CONTENT: CASH */}
+            {activeTab === 'cash' && (
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
+                    <div className="relative mb-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">$</span>
+                      <input type="number" step="0.01" min="0" value={cashReceivedUSD} onChange={e => setCashReceivedUSD(e.target.value)} className="w-full pl-7 pr-2 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" placeholder="0.00" />
+                    </div>
+                    <button onClick={() => { setCashReceivedUSD(totals.total.toFixed(2)); setCashReceivedKHR(""); }} className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95">Exact $</button>
                   </div>
-                  <button 
-                    onClick={() => { setCashReceivedUSD(totals.total.toFixed(2)); setCashReceivedKHR(""); }} 
-                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
-                  >
-                    Exact $
-                  </button>
-                </div>
-                
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">KHR Received</label>
-                  <div className="relative mb-2">
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">៛</span>
-                    <input 
-                      type="number" step="100" min="0" 
-                      value={cashReceivedKHR} 
-                      onChange={e => setCashReceivedKHR(e.target.value)} 
-                      className="w-full pl-3 pr-7 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
-                      placeholder="0" 
-                    />
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">KHR Received</label>
+                    <div className="relative mb-2">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">៛</span>
+                      <input type="number" step="100" min="0" value={cashReceivedKHR} onChange={e => setCashReceivedKHR(e.target.value)} className="w-full pl-3 pr-7 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" placeholder="0" />
+                    </div>
+                    <button onClick={() => { setCashReceivedKHR((totals.total * EXCHANGE_RATE).toString()); setCashReceivedUSD(""); }} className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95">Exact ៛</button>
                   </div>
-                  <button 
-                    onClick={() => { setCashReceivedKHR((totals.total * EXCHANGE_RATE).toString()); setCashReceivedUSD(""); }} 
-                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
-                  >
-                    Exact ៛
-                  </button>
                 </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">Change Due</label>
-                <div className="w-full px-4 py-3.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-600 text-lg flex items-center justify-between shadow-sm">
-                  <span>${changeDueUSD.toFixed(2)}</span>
-                  <span className="text-sm opacity-80">{changeDueKHR.toLocaleString()} ៛</span>
+                <div className="pt-2">
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">Change Due</label>
+                  <div className="w-full px-4 py-3.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-600 text-lg flex items-center justify-between shadow-sm">
+                    <span>${changeDueUSD.toFixed(2)}</span>
+                    <span className="text-sm opacity-80">{changeDueKHR.toLocaleString()} ៛</span>
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {!isPaymentSufficient && totalReceivedInUSD > 0 && (
-              <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">
-                Received amount is less than total
+                {!isPaymentSufficient && totalReceivedInUSD > 0 && <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">Received amount is less than total</div>}
               </div>
             )}
 
-            <button 
-              onClick={() => handleConfirmPayment('CASH')}
-              disabled={!isPaymentSufficient}
-              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            {/* TAB CONTENT: KHQR */}
+            {activeTab === 'khqr' && (
+              <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-6 w-full flex justify-center shadow-sm relative overflow-hidden">
+                {qrImage ? <img src={qrImage} alt="Shop KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10" /> : <img src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${totals.total}`)}`} alt="Default KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50" />}
+              </div>
+            )}
+
+            {/* SHARED FOOTER ACTION AREA */}
+            <div 
+              className={`mb-5 border-2 rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all ${printReceipt ? 'bg-gray-900 border-gray-900' : 'bg-gray-50 border-gray-200'}`} 
+              onClick={() => setPrintReceipt(!printReceipt)}
             >
-              Confirm Payment
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* KHQR PAYMENT MODAL */}
-      {modalAction === 'pay_khqr' && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col items-center">
-            
-            <div className="w-full flex justify-between items-center mb-6">
-              <h3 className="font-extrabold text-gray-900 text-xl">KHQR Payment</h3>
-              <button onClick={() => setModalAction(null)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100 w-full">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Amount to Pay</p>
-              <div className="flex flex-col items-center justify-center gap-0.5">
-                <p className="text-4xl font-black text-gray-900">${totals.total.toFixed(2)}</p>
-                <p className="text-sm font-bold text-gray-500">{(totals.total * EXCHANGE_RATE).toLocaleString()} ៛</p>
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🖨️</span>
+                <span className={`text-[15px] font-extrabold ${printReceipt ? 'text-white' : 'text-gray-500'}`}>Auto-Print Receipt</span>
+              </div>
+              <div className={`w-12 h-6 rounded-full transition-colors relative ${printReceipt ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${printReceipt ? 'translate-x-6 left-0.5' : 'translate-x-0 left-0.5'}`} />
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-8 w-full flex justify-center shadow-sm relative overflow-hidden">
-              {qrImage ? (
-                <img 
-                  src={qrImage} 
-                  alt="Shop KHQR Code" 
-                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10"
-                />
-              ) : (
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${totals.total}`)}`} 
-                  alt="Default KHQR Code" 
-                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50"
-                />
-              )}
-            </div>
+            {activeTab === 'cash' && (
+               <button onClick={() => handleConfirmPayment('CASH')} disabled={isPending || !isPaymentSufficient} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                 {isPending && <Loader2 className="animate-spin" size={18} />} Confirm Payment
+               </button>
+            )}
 
-            <div className="w-full flex gap-3">
-              <button 
-                onClick={() => handleConfirmPayment('KHQR')}
-                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
-              >
-                <span>Paid in USD</span>
-                <span className="text-[10px] text-gray-300 font-medium">Record as $</span>
-              </button>
-              <button 
-                onClick={() => handleConfirmPayment('KHQR')}
-                className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[14px] hover:bg-blue-700 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
-              >
-                <span>Paid in ៛</span>
-                <span className="text-[10px] text-blue-200 font-medium">Record as KHR</span>
-              </button>
-            </div>
-
+            {activeTab === 'khqr' && (
+               <div className="w-full flex gap-3">
+                 <button onClick={() => handleConfirmPayment("CASH")} disabled={isPending} className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1">
+                   <span>Paid in USD</span><span className="text-[10px] text-gray-300 font-medium">Record as $</span>
+                 </button>
+                 <button onClick={() => handleConfirmPayment("KHQR")} disabled={isPending} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[14px] hover:bg-blue-700 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1">
+                   <span>Paid in ៛</span><span className="text-[10px] text-blue-200 font-medium">Record as KHR</span>
+                 </button>
+               </div>
+            )}
           </div>
         </div>
       )}
@@ -369,14 +356,9 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
 
                 <div className="flex flex-col gap-2 mt-auto pt-2">
                   {isUnpaid && !isCancelled && (
-                    <div className="flex gap-2 w-full mb-1">
-                      <button onClick={() => setModalAction('pay_cash')} className="flex-1 bg-gray-900 text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
-                        <span className="text-base leading-none">💵</span> Settle (Cash)
-                      </button>
-                      <button onClick={() => setModalAction('pay_khqr')} className="flex-1 bg-gray-900 text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
-                        <span className="text-base leading-none">📲</span> Settle (KHQR)
-                      </button>
-                    </div>
+                    <button onClick={handleOpenPaymentModal} className="w-full bg-green-50 border border-green-100 text-green-600 hover:bg-green-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                      <CheckCircle size={14}/> Settle Payment
+                    </button>
                   )}
                   <div className="flex items-center gap-2">
                     {!isCancelled && (

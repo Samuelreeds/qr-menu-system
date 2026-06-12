@@ -16,6 +16,8 @@ import { generateReceiptText } from '@/components/shared/PosReceipt';
 
 import { saveOfflineOrder, getPendingOrders, markOrderSynced, OfflineOrder } from '@/lib/offlineStore';
 import { getShopTables } from '@/lib/table-actions';
+import { useToast } from "@/context/ToastContext";
+
 
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; }
@@ -282,7 +284,7 @@ export default function AdminPosSection({
   toppings?: Topping[] 
 }) {
   const router = useRouter();
-  
+  const { addSuccessToast, addErrorToast } = useToast();
   const [menuLoading, setMenuLoading] = useState(true);
   const [selectedModalProduct, setSelectedModalProduct] = useState<PosProduct | null>(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
@@ -425,7 +427,8 @@ export default function AdminPosSection({
     isTaxEnabled: boolean, 
     currency: string = "USD", 
     amountReceived: number = 0, 
-    changeAmount: number = 0
+    changeAmount: number = 0,
+    shouldPrint: boolean = true
   ) => {
     if (billingItems.length === 0) return;
     if (orderType === "table" && !tableNumber) { 
@@ -433,106 +436,90 @@ export default function AdminPosSection({
       return; 
     }
     
-    if (isCheckoutLocked.current) return;
-    isCheckoutLocked.current = true;
-    setIsSavingOrder(true);
-    
-    try {
-      const subtotal = billingItems.reduce((sum, i) => sum + i.price * i.qty, 0);
-      const discountNum = parseFloat(discountValue) || 0;
-      const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
-      const afterDiscount = subtotal - discountAmount;
-      const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
-      const total = afterDiscount + tax;
+    // Capture data
+    const itemsToProcess = [...billingItems];
+    const subtotal = itemsToProcess.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const discountNum = parseFloat(discountValue) || 0;
+    const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
+    const afterDiscount = subtotal - discountAmount;
+    const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
+    const total = afterDiscount + tax;
 
-      const orderPayload = {
-        shopId, 
-        orderType: orderType.toUpperCase(), 
-        tableNumber, 
-        deliveryAgent: deliveryAgent || "", 
-        discount: discountAmount, 
-        promoCode: promoCode || "", 
-        isTaxEnabled, 
-        paymentMethod: paymentMethod.toUpperCase(), 
-        currency, 
-        amountReceived: amountReceived, // Send the 0 explicitly
-        changeAmount: changeAmount,
-        isOwed: amountReceived === 0, // Add this flag to identify owed orders
-        items: billingItems.map(i => ({ 
-          productId: i.productId, 
-          name: i.name, 
-          price: i.price, 
-          qty: i.qty, 
-          notes: i.notes, 
-          customization: i.customization 
-        }))
-      };
+    const orderPayload = {
+      shopId, 
+      orderType: orderType.toUpperCase(), 
+      tableNumber, 
+      deliveryAgent: deliveryAgent || "", 
+      discount: discountAmount, 
+      promoCode: promoCode || "", 
+      isTaxEnabled, 
+      paymentMethod: paymentMethod.toUpperCase(), 
+      currency, 
+      amountReceived, 
+      changeAmount,
+      items: itemsToProcess.map(i => ({ 
+        productId: i.productId, 
+        name: i.name, 
+        price: i.price, 
+        qty: i.qty, 
+        notes: i.notes, 
+        customization: i.customization 
+      }))
+    };
 
-      const tempOrderId = `offline_${Date.now()}`;
-      let finalOrderForReceipt: any = null;
+    // OPTIMISTIC UI: Clear the cart instantly
+    setBillingItems([]); 
+    setTableNumber(""); 
+    setIsMobileCartOpen(false);
 
+    // BACKGROUND PROCESSING
+    (async () => {
       try {
-        if (!navigator.onLine) throw new Error("Offline");
-        isSyncingRef.current = true;
-        
-        const res = await createPosOrder(orderPayload);
-        
-        if (res?.success && res.order) {
-          finalOrderForReceipt = res.order;
-        } else { 
-          alert("Server rejected order"); 
-          isCheckoutLocked.current = false; 
-          setIsSavingOrder(false); 
-          isSyncingRef.current = false; 
-          return; 
+        let finalOrderForReceipt: any = null;
+
+        if (!navigator.onLine) {
+            await saveOfflineOrder({ id: `offline_${Date.now()}`, payload: orderPayload, status: 'pending', createdAt: Date.now() });
+            checkPendingOrders();
+        } else {
+            const res = await createPosOrder(orderPayload);
+            if (res?.success && res.order) {
+                finalOrderForReceipt = res.order;
+                if (orderType === 'table') completeTableOrder(res.order.id).catch(console.error);
+            } else {
+                throw new Error(res?.error || "Server rejected order");
+            }
         }
+        
+        // FIXED: Replaced showToast with addSuccessToast
+        addSuccessToast("Order Saved!");
+
+        // OPTIMISTIC PRINTING
+        if (shouldPrint && printerUrl && finalOrderForReceipt) {
+            const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
+            
+            fetch(`${printerUrl}/print`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ text: receiptText }) 
+            })
+            .then(printRes => {
+                if (printRes.ok) {
+                   addSuccessToast("Receipt Printed"); // FIXED
+                } else {
+                   addErrorToast("Printer error: Check paper or connection"); // FIXED
+                }
+            })
+            .catch(printErr => {
+                console.error("Print Error:", printErr);
+                addErrorToast("Failed to connect to printer"); // FIXED
+            });
+        }
+
       } catch (err) {
-        await saveOfflineOrder({ id: tempOrderId, payload: orderPayload, status: 'pending', createdAt: Date.now() });
-        await checkPendingOrders(); 
-        finalOrderForReceipt = { 
-          id: tempOrderId, 
-          createdAt: new Date(), 
-          subtotal, 
-          discount: discountAmount, 
-          tax, 
-          total, 
-          paymentMethod, 
-          orderType, 
-          tableNumber, 
-          items: billingItems, 
-          amountReceived, 
-          changeAmount,
-          isOffline: true
-        };
-      } finally { 
-        isSyncingRef.current = false; 
+        console.error("Background Order Error:", err);
+        addErrorToast("Order failed to save to server."); // FIXED
       }
-
-      setBillingItems([]); 
-      setTableNumber(""); 
-      setIsMobileCartOpen(false);
-
-      if (printerUrl) {
-        try {
-          const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
-          await fetch(`${printerUrl}/print`, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ text: receiptText }) 
-          });
-        } catch (error) { 
-          console.error("Print failed", error); 
-          alert("❌ Failed to print."); 
-        }
-      }
-      
-      if (finalOrderForReceipt && !finalOrderForReceipt.isOffline) {
-        router.refresh();
-      }
-    } finally { 
-      isCheckoutLocked.current = false; 
-      setIsSavingOrder(false); 
-    }
+    })();
   };
 
   return (

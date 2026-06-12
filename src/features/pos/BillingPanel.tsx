@@ -9,38 +9,45 @@ import { BillingItem, OrderType } from './AdminPosSection';
 const TAX_RATE = 0.1;
 const EXCHANGE_RATE = 4000;
 
-export default function BillingPanel({ items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen, qrImage }: { items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string, amountReceived: number, changeAmount: number) => void; isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; qrImage?: string | null; }) {
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "khqr">("cash");
+export default function BillingPanel({ 
+  items, onRemove, onQtyChange, orderType, setOrderType, tableNumber, 
+  setTableNumber, onProceedToConfirm, isSavingOrder, userEmail, 
+  userRole, onCloseMobile, isTableModalOpen, setIsTableModalOpen, qrImage 
+}: { 
+  items: BillingItem[]; onRemove: (id: string) => void; onQtyChange: (id: string, delta: number) => void; 
+  orderType: OrderType; setOrderType: (t: OrderType) => void; tableNumber: string; setTableNumber: (t: string) => void; 
+  onProceedToConfirm: (paymentMethod: string, deliveryAgent: string, promoCode: string, discountType: string, discountValue: string, isTaxEnabled: boolean, currency: string, amountReceived: number, changeAmount: number, shouldPrint: boolean) => void; 
+  isSavingOrder?: boolean; userEmail?: string; userRole?: string; onCloseMobile?: () => void; 
+  isTableModalOpen: boolean; setIsTableModalOpen: (b: boolean) => void; qrImage?: string | null; 
+}) {
   const [deliveryAgent, setDeliveryAgent] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
   const [isTaxEnabled, setIsTaxEnabled] = useState(false);
 
-  // Cash Modal State
-  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
+  // Unified Payment Modal State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"cash" | "khqr" | "owed">("cash");
+  const [printReceipt, setPrintReceipt] = useState(true);
+
+  // Cash Calculation State
   const [cashReceivedUSD, setCashReceivedUSD] = useState("");
   const [cashReceivedKHR, setCashReceivedKHR] = useState("");
 
-  // KHQR Modal State
-  const [isKhqrModalOpen, setIsKhqrModalOpen] = useState(false);
-
   const { addSuccessToast, addErrorToast } = useToast();
 
-  // Editable Name State
   const defaultCashierName = userEmail ? userEmail.split('@')[0] : 'Unknown';
   const defaultFormattedName = defaultCashierName.charAt(0).toUpperCase() + defaultCashierName.slice(1);
-  
   const [customName, setCustomName] = useState(defaultFormattedName);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState("");
 
   useEffect(() => {
     const storedName = localStorage.getItem('pos_cashier_name');
-    if (storedName) {
-      setCustomName(storedName);
-    }
-  }, []);
+    if (storedName) setCustomName(storedName);
+    if (orderType === 'table' as any) setOrderType('walk-in');
+  }, [orderType, setOrderType]);
 
   const handleNameSave = () => {
     const newName = tempName.trim() || defaultFormattedName;
@@ -50,14 +57,10 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   };
 
   const handleNameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleNameSave();
-    } else if (e.key === 'Escape') {
-      setIsEditingName(false);
-    }
+    if (e.key === 'Enter') handleNameSave();
+    else if (e.key === 'Escape') setIsEditingName(false);
   };
 
-  // Safe Math Calculations
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const discountNum = parseFloat(discountValue) || 0;
   const discountAmount = discountType === "percent" ? (subtotal * discountNum) / 100 : Math.min(discountNum, subtotal);
@@ -65,7 +68,6 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   const tax = isTaxEnabled ? (afterDiscount * TAX_RATE) : 0;
   const total = Number((afterDiscount + tax).toFixed(2));
 
-  // Currency Calculations
   const parsedUSD = parseFloat(cashReceivedUSD) || 0;
   const parsedKHR = parseFloat(cashReceivedKHR) || 0;
   const totalReceivedInUSD = parsedUSD + (parsedKHR / EXCHANGE_RATE);
@@ -74,27 +76,29 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
   
   const isPaymentSufficient = Math.round(totalReceivedInUSD * 100) >= Math.round(total * 100);
 
-  const handleMainActionClick = () => {
+  const handleOpenPaymentModal = () => {
     if (items.length === 0) return;
-    if (paymentMethod === 'cash') {
-      setCashReceivedUSD(""); 
-      setCashReceivedKHR("");
-      setIsCashModalOpen(true);
-    } else if (paymentMethod === 'khqr') {
-      setIsKhqrModalOpen(true);
-    }
+    setCashReceivedUSD(""); 
+    setCashReceivedKHR("");
+    setIsPaymentModalOpen(true);
   };
 
   const handleConfirmCashPayment = () => {
     if (!isPaymentSufficient) return;
-    setIsCashModalOpen(false);
+    setIsPaymentModalOpen(false);
     const currency = (parsedUSD === 0 && parsedKHR > 0) ? "KHR" : "USD";
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, totalReceivedInUSD, changeDueUSD);
+    onProceedToConfirm("CASH", deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, totalReceivedInUSD, changeDueUSD, printReceipt);
   };
 
   const handleConfirmKhqrPayment = (currency: "USD" | "KHR") => {
-    setIsKhqrModalOpen(false);
-    onProceedToConfirm(paymentMethod, deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, total, 0);
+    setIsPaymentModalOpen(false);
+    onProceedToConfirm("KHQR", deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, currency, total, 0, printReceipt);
+  };
+
+  const handleConfirmOwedPayment = () => {
+    setIsPaymentModalOpen(false);
+    // Use "CASH" but amountReceived is 0 to signify Unpaid/Owed
+    onProceedToConfirm("CASH", deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, "USD", 0, 0, printReceipt);
   };
 
   return (
@@ -103,40 +107,19 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {onCloseMobile && (
-              <button 
-                onClick={onCloseMobile} 
-                className="md:hidden mr-1 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors active:scale-95 shrink-0"
-              >
+              <button onClick={onCloseMobile} className="md:hidden mr-1 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors active:scale-95 shrink-0">
                 <ChevronLeft size={20} className="text-gray-700" />
               </button>
             )}
-            <div 
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center font-bold text-gray-500 text-xs sm:text-sm shrink-0 cursor-pointer hover:bg-gray-200 transition-colors"
-              onClick={() => { setTempName(customName); setIsEditingName(true); }}
-              title="Edit Name"
-            >
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center font-bold text-gray-500 text-xs sm:text-sm shrink-0 cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => { setTempName(customName); setIsEditingName(true); }} title="Edit Name">
               {customName.substring(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <p className="text-[9px] sm:text-[10px] text-gray-500 font-black uppercase tracking-wider truncate">
-                {userRole || 'Cashier'}
-              </p>
+              <p className="text-[9px] sm:text-[10px] text-gray-500 font-black uppercase tracking-wider truncate">{userRole || 'Cashier'}</p>
               {isEditingName ? (
-                <input 
-                  autoFocus
-                  type="text"
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  onBlur={handleNameSave}
-                  onKeyDown={handleNameKeyDown}
-                  className="text-xs sm:text-sm font-extrabold text-gray-900 truncate bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 -ml-1 outline-none focus:ring-1 focus:ring-gray-900 w-full"
-                />
+                <input autoFocus type="text" value={tempName} onChange={(e) => setTempName(e.target.value)} onBlur={handleNameSave} onKeyDown={handleNameKeyDown} className="text-xs sm:text-sm font-extrabold text-gray-900 truncate bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 -ml-1 outline-none focus:ring-1 focus:ring-gray-900 w-full" />
               ) : (
-                <div 
-                  className="text-xs sm:text-sm font-extrabold text-gray-900 truncate cursor-pointer hover:bg-gray-50 hover:text-gray-600 rounded px-1.5 py-0.5 -ml-1.5 transition-colors w-max group/name flex items-center gap-1"
-                  onClick={() => { setTempName(customName); setIsEditingName(true); }}
-                  title="Click to edit name"
-                >
+                <div className="text-xs sm:text-sm font-extrabold text-gray-900 truncate cursor-pointer hover:bg-gray-50 hover:text-gray-600 rounded px-1.5 py-0.5 -ml-1.5 transition-colors w-max group/name flex items-center gap-1" onClick={() => { setTempName(customName); setIsEditingName(true); }} title="Click to edit name">
                   <span className="truncate">{customName}</span>
                   <Pencil size={10} className="text-gray-400 opacity-0 group-hover/name:opacity-100 transition-opacity" />
                 </div>
@@ -148,77 +131,18 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
 
       <div className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-gray-100 bg-white shrink-0 z-10 shadow-sm relative min-w-0">
         <div className="flex bg-gray-50 p-1 rounded-[14px] mb-3 sm:mb-4 border border-gray-100 min-w-0">
-          <button 
-            onClick={() => setOrderType('walk-in')} 
-            className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 ${orderType === 'walk-in' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Walk-in
-          </button>
-          <button 
-            onClick={() => setOrderType('table')} 
-            className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 ${orderType === 'table' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Table
-          </button>
-          <button 
-            onClick={() => setOrderType('delivery')} 
-            className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 ${orderType === 'delivery' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Delivery
-          </button>
+          <button onClick={() => setOrderType('walk-in')} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 ${orderType === 'walk-in' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in</button>
+          <button onClick={() => setOrderType('delivery')} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 ${orderType === 'delivery' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Delivery</button>
         </div>
-
-        {orderType === 'table' && (
-           <div className="mb-2 relative min-w-0">
-             <button 
-               onClick={() => setIsTableModalOpen(!isTableModalOpen)} 
-               className={`w-full py-2.5 rounded-xl border flex items-center justify-between px-3 sm:px-4 transition-colors min-w-0 ${tableNumber ? 'border-gray-900 bg-gray-900 text-white shadow-md' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}
-             >
-               <span className="text-xs sm:text-sm font-bold truncate pr-2">
-                 {tableNumber ? tableNumber : 'Select Table'}
-               </span>
-               <ChevronDown size={16} className={`shrink-0 ${tableNumber ? 'text-gray-300' : 'text-gray-400'}`} />
-             </button>
-             {isTableModalOpen && (
-               <>
-                 <div className="fixed inset-0 bg-transparent z-[100]" onClick={() => setIsTableModalOpen(false)}></div>
-                 <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-200 p-2 sm:p-3 z-[110] max-h-[250px] sm:max-h-[300px] overflow-y-auto no-scrollbar">
-                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                     {Array.from({ length: 40 }, (_, i) => i + 1).map((num) => { 
-                       const tVal = `Table ${num}`; 
-                       const isSel = tableNumber === tVal; 
-                       return (
-                         <button 
-                           key={num} 
-                           onClick={() => { setTableNumber(tVal); setIsTableModalOpen(false); }} 
-                           className={`py-2 rounded-xl flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${isSel ? 'bg-[#111827] text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-200'}`}
-                         >
-                           {num}
-                         </button>
-                       ); 
-                     })}
-                   </div>
-                 </div>
-               </>
-             )}
-           </div>
-        )}
         
         {orderType === 'delivery' && (
-           <select 
-             value={deliveryAgent} 
-             onChange={(e) => setDeliveryAgent(e.target.value)} 
-             className="w-full px-3 py-2.5 rounded-xl text-xs font-semibold outline-none border border-gray-200 bg-white focus:border-gray-900 transition-all text-gray-900 cursor-pointer mb-2 min-w-0"
-           >
+           <select value={deliveryAgent} onChange={(e) => setDeliveryAgent(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-xs font-semibold outline-none border border-gray-200 bg-white focus:border-gray-900 transition-all text-gray-900 cursor-pointer mb-2 min-w-0">
              <option value="" className="text-gray-500">— Select Agent —</option>
-             {["Grab", "Wownow", "Food Panda", "E-get"].map((agent) => (
-               <option key={agent} value={agent}>{agent}</option>
-             ))}
+             {["Grab", "Wownow", "Food Panda", "E-get"].map((agent) => <option key={agent} value={agent}>{agent}</option>)}
            </select>
         )}
       </div>
 
-      {/* ITEMS LIST SECTION */}
       <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden p-3 sm:p-4 bg-gray-50/50 min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <div className="flex items-center justify-between mb-3 sm:mb-4 min-w-0">
           <h3 className="font-extrabold text-gray-900 text-[10px] sm:text-xs uppercase tracking-widest truncate">Current Order</h3>
@@ -235,30 +159,15 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
           <div className="space-y-2.5 sm:space-y-3 min-w-0">
             {items.map((item) => (
               <div key={item.id} className="flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-white rounded-[16px] border border-gray-100 shadow-sm relative group min-w-0">
-                <button 
-                  onClick={() => onRemove(item.id)} 
-                  className="absolute -top-2 -right-2 w-5 h-5 sm:w-6 sm:h-6 bg-white hover:bg-gray-100 text-gray-400 hover:text-red-500 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all border border-gray-200 shadow-sm z-10"
-                >
+                <button onClick={() => onRemove(item.id)} className="absolute -top-2 -right-2 w-5 h-5 sm:w-6 sm:h-6 bg-white hover:bg-gray-100 text-gray-400 hover:text-red-500 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all border border-gray-200 shadow-sm z-10">
                   <X size={10} className="sm:w-3 sm:h-3" strokeWidth={3} />
                 </button>
-                
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100">
-                  {item.img ? (
-                    <img src={item.img} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ImageIcon size={16} className="text-gray-300" />
-                    </div>
-                  )}
+                  {item.img ? <img src={item.img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><ImageIcon size={16} className="text-gray-300" /></div>}
                 </div>
-                
                 <div className="flex-1 min-w-0 flex flex-col justify-between h-full pt-0.5">
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-extrabold text-gray-900 leading-tight truncate pr-2 sm:pr-4">
-                      {item.name}
-                    </p>
-                    
-                    {/* --- PHASE 3: UPDATED TO RENDER MULTIPLE TOPPINGS --- */}
+                    <p className="text-xs sm:text-sm font-extrabold text-gray-900 leading-tight truncate pr-2 sm:pr-4">{item.name}</p>
                     <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold truncate mt-0.5">
                       {[
                         item.customization.size && item.customization.size !== 'Default' ? `Size ${item.customization.size}` : null,
@@ -267,27 +176,12 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
                       ].filter(Boolean).join(' • ')}
                     </p>
                   </div>
-                  
                   <div className="flex items-center justify-between mt-2 min-w-0">
-                    <span className="font-black text-xs sm:text-sm text-gray-900 truncate pr-2">
-                      ${(item.price * item.qty).toFixed(2)}
-                    </span>
+                    <span className="font-black text-xs sm:text-sm text-gray-900 truncate pr-2">${(item.price * item.qty).toFixed(2)}</span>
                     <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-6 sm:h-7 shrink-0">
-                      <button 
-                        className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-l-lg" 
-                        onClick={() => onQtyChange(item.id, -1)}
-                      >
-                        −
-                      </button>
-                      <span className="w-5 sm:w-6 text-center text-[10px] sm:text-xs font-bold text-gray-900 bg-white border-x border-gray-200 h-full flex items-center justify-center">
-                        {item.qty}
-                      </span>
-                      <button 
-                        className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-r-lg" 
-                        onClick={() => onQtyChange(item.id, 1)}
-                      >
-                        +
-                      </button>
+                      <button className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-l-lg" onClick={() => onQtyChange(item.id, -1)}>−</button>
+                      <span className="w-5 sm:w-6 text-center text-[10px] sm:text-xs font-bold text-gray-900 bg-white border-x border-gray-200 h-full flex items-center justify-center">{item.qty}</span>
+                      <button className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-r-lg" onClick={() => onQtyChange(item.id, 1)}>+</button>
                     </div>
                   </div>
                 </div>
@@ -297,40 +191,20 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
         )}
       </div>
 
-      {/* FOOTER TOTALS & CHECKOUT */}
       <div className="border-t border-gray-100 bg-white shrink-0 z-20 min-w-0">
-        
-        {/* DISCOUNT PANEL UI */}
         <div className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-50/80 border-b border-gray-100 flex items-center gap-2 min-w-0">
            <span className="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider shrink-0">Discount:</span>
            <div className="flex bg-white rounded-lg border border-gray-200 overflow-hidden shrink-0 shadow-sm">
               <button onClick={() => setDiscountType('percent')} className={`px-2.5 py-1.5 text-xs font-black transition-colors ${discountType === 'percent' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>%</button>
               <button onClick={() => setDiscountType('fixed')} className={`px-2.5 py-1.5 text-xs font-black transition-colors ${discountType === 'fixed' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>$</button>
            </div>
-           <input
-              type="number"
-              min="0"
-              step={discountType === 'percent' ? "1" : "0.01"}
-              placeholder={discountType === 'percent' ? "e.g. 10" : "e.g. 2.50"}
-              value={discountValue}
-              onChange={(e) => setDiscountValue(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-xs sm:text-sm font-black border border-gray-200 rounded-lg outline-none focus:border-gray-900 shadow-sm min-w-0"
-           />
+           <input type="number" min="0" step={discountType === 'percent' ? "1" : "0.01"} placeholder={discountType === 'percent' ? "e.g. 10" : "e.g. 2.50"} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} className="flex-1 px-3 py-1.5 text-xs sm:text-sm font-black border border-gray-200 rounded-lg outline-none focus:border-gray-900 shadow-sm min-w-0" />
         </div>
 
         <div className="p-3 sm:p-4 space-y-2 sm:space-y-3 border-b border-gray-100 min-w-0">
-          <div className="flex justify-between text-[11px] sm:text-xs min-w-0">
-            <span className="text-gray-500 font-bold truncate pr-2">Subtotal</span>
-            <span className="font-black text-gray-900 shrink-0">${subtotal.toFixed(2)}</span>
-          </div>
+          <div className="flex justify-between text-[11px] sm:text-xs min-w-0"><span className="text-gray-500 font-bold truncate pr-2">Subtotal</span><span className="font-black text-gray-900 shrink-0">${subtotal.toFixed(2)}</span></div>
+          {discountAmount > 0 && <div className="flex justify-between text-[11px] sm:text-xs min-w-0"><span className="text-red-500 font-bold truncate pr-2">Discount ({discountType === 'percent' ? `${discountValue}%` : `$${discountValue}`})</span><span className="font-black text-red-600 shrink-0">-${discountAmount.toFixed(2)}</span></div>}
           
-          {discountAmount > 0 && (
-            <div className="flex justify-between text-[11px] sm:text-xs min-w-0">
-              <span className="text-red-500 font-bold truncate pr-2">Discount ({discountType === 'percent' ? `${discountValue}%` : `$${discountValue}`})</span>
-              <span className="font-black text-red-600 shrink-0">-${discountAmount.toFixed(2)}</span>
-            </div>
-          )}
-
           <div className="flex justify-between items-center text-[11px] sm:text-xs min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-gray-500 font-bold truncate">Tax (10%)</span>
@@ -339,11 +213,9 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
                 <div className="w-6 h-3 sm:w-7 sm:h-4 bg-gray-300 rounded-full peer peer-checked:bg-[#111827] after:content-[''] after:absolute after:top-[1px] sm:after:top-[2px] after:left-[1px] sm:after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 sm:after:h-3 sm:after:w-3 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
               </label>
             </div>
-            <span className={`font-black shrink-0 pl-2 ${isTaxEnabled ? 'text-gray-900' : 'text-gray-300 line-through'}`}>
-              ${(afterDiscount * TAX_RATE).toFixed(2)}
-            </span>
+            <span className={`font-black shrink-0 pl-2 ${isTaxEnabled ? 'text-gray-900' : 'text-gray-300 line-through'}`}>${(afterDiscount * TAX_RATE).toFixed(2)}</span>
           </div>
-          
+
           <div className="flex justify-between pt-2 border-t border-gray-100 mt-2 items-end min-w-0">
             <span className="font-black text-gray-900 text-xs sm:text-sm truncate pr-2 mb-0.5">Total Amount</span>
             <div className="flex flex-col items-end">
@@ -354,58 +226,31 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
         </div>
         
         <div className="p-3 sm:p-4 pt-3 sm:pt-4 bg-gray-50/50 min-w-0">
-          <div className="flex gap-2 mb-3 min-w-0">
-            <button 
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-3 rounded-[12px] sm:rounded-[14px] font-bold text-[10px] sm:text-xs transition-all active:scale-[0.98] border-2 min-w-0 truncate px-1 ${paymentMethod === "cash" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} 
-              onClick={() => setPaymentMethod("cash")}
-            >
-              <span className="text-base sm:text-lg leading-none shrink-0">💵</span>
-              <span className="truncate w-full text-center">Cash</span>
-            </button>
-            
-            <button 
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-3 rounded-[12px] sm:rounded-[14px] font-bold text-[10px] sm:text-xs transition-all active:scale-[0.98] border-2 min-w-0 truncate px-1 ${paymentMethod === "khqr" ? "bg-[#111827] text-white border-[#111827] shadow-md" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"}`} 
-              onClick={() => setPaymentMethod("khqr")}
-            >
-              <span className="text-base sm:text-lg leading-none shrink-0">📲</span>
-              <span className="truncate w-full text-center">KHQR</span>
-            </button>|
-          </div>
-          {/* ADD THIS NEW OWED BUTTON */}
-          <button 
-            onClick={() => onProceedToConfirm("cash", "", "", "percent", "0", false, "USD", 0, 0)}
-            disabled={items.length === 0 || isSavingOrder}
-            className="w-full mb-3 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-[12px] hover:bg-gray-100 transition-all text-xs"
-          >
-            Mark as Owed ($0)
-          </button>
-          
-          <button 
-            className={`w-full py-3 sm:py-4 rounded-[12px] sm:rounded-[14px] font-bold text-sm sm:text-[15px] transition-all flex items-center justify-center gap-2 min-w-0 px-2 ${items.length > 0 && !isSavingOrder ? 'bg-[#111827] text-white shadow-lg hover:bg-black active:scale-[0.98]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} 
-            onClick={handleMainActionClick} 
-            disabled={items.length === 0 || isSavingOrder}
-          >
-            {isSavingOrder ? <Loader2 className="animate-spin shrink-0" size={18} /> : null}
-            <span className="truncate">
-              {items.length > 0 && !isSavingOrder 
-                ? (paymentMethod === 'cash' ? `Calculate Change & Pay — $${total.toFixed(2)}` : paymentMethod === 'khqr' ? `Show KHQR & Pay — $${total.toFixed(2)}` : `Place Order — $${total.toFixed(2)}`) 
-                : isSavingOrder ? "Processing..." : "Select items to begin"}
-            </span>
+          <button className={`w-full py-4 rounded-[14px] font-bold text-[15px] transition-all flex items-center justify-center gap-2 min-w-0 px-2 ${items.length > 0 && !isSavingOrder ? 'bg-[#111827] text-white shadow-lg hover:bg-black active:scale-[0.98]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} onClick={handleOpenPaymentModal} disabled={items.length === 0 || isSavingOrder}>
+            {isSavingOrder && <Loader2 className="animate-spin shrink-0" size={18} />}
+            <span className="truncate">{items.length > 0 && !isSavingOrder ? `Proceed to Payment — $${total.toFixed(2)}` : isSavingOrder ? "Processing..." : "Select items to begin"}</span>
           </button>
         </div>
       </div>
 
-      {/* CASH PAYMENT MODAL */}
-      {isCashModalOpen && (
+      {/* UNIFIED PAYMENT MODAL */}
+      {isPaymentModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-extrabold text-gray-900 text-xl">Cash Payment</h3>
-              <button onClick={() => setIsCashModalOpen(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
-                <X size={20} />
-              </button>
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col">
+            
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="font-extrabold text-gray-900 text-xl">Payment</h3>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95"><X size={20} /></button>
             </div>
 
+            {/* TAB NAVIGATION */}
+            <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+              <button onClick={() => setActiveTab("cash")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'cash' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cash</button>
+              <button onClick={() => setActiveTab("khqr")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'khqr' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>KHQR</button>
+              <button onClick={() => setActiveTab("owed")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'owed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Owed</button>
+            </div>
+
+            {/* COMMON HEADER (Total Due) */}
             <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Due</p>
               <div className="flex flex-col items-center justify-center gap-0.5">
@@ -414,130 +259,90 @@ export default function BillingPanel({ items, onRemove, onQtyChange, orderType, 
               </div>
             </div>
 
-            <div className="space-y-4 mb-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
-                  <div className="relative mb-2">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">$</span>
-                    <input 
-                      type="number" step="0.01" min="0" 
-                      value={cashReceivedUSD} 
-                      onChange={e => setCashReceivedUSD(e.target.value)} 
-                      className="w-full pl-7 pr-2 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
-                      placeholder="0.00" 
-                    />
+            {/* TAB CONTENT: CASH */}
+            {activeTab === 'cash' && (
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">USD Received</label>
+                    <div className="relative mb-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">$</span>
+                      <input type="number" step="0.01" min="0" value={cashReceivedUSD} onChange={e => setCashReceivedUSD(e.target.value)} className="w-full pl-7 pr-2 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" placeholder="0.00" />
+                    </div>
+                    <button onClick={() => { setCashReceivedUSD(total.toFixed(2)); setCashReceivedKHR(""); }} className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95">Exact $</button>
                   </div>
-                  <button 
-                    onClick={() => { setCashReceivedUSD(total.toFixed(2)); setCashReceivedKHR(""); }} 
-                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
-                  >
-                    Exact $
-                  </button>
-                </div>
-                
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">KHR Received</label>
-                  <div className="relative mb-2">
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">៛</span>
-                    <input 
-                      type="number" step="100" min="0" 
-                      value={cashReceivedKHR} 
-                      onChange={e => setCashReceivedKHR(e.target.value)} 
-                      className="w-full pl-3 pr-7 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" 
-                      placeholder="0" 
-                    />
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">KHR Received</label>
+                    <div className="relative mb-2">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-base">៛</span>
+                      <input type="number" step="100" min="0" value={cashReceivedKHR} onChange={e => setCashReceivedKHR(e.target.value)} className="w-full pl-3 pr-7 py-3 bg-white border-2 border-gray-200 rounded-xl font-black text-base outline-none focus:border-gray-900 transition-colors shadow-sm" placeholder="0" />
+                    </div>
+                    <button onClick={() => { setCashReceivedKHR((total * EXCHANGE_RATE).toString()); setCashReceivedUSD(""); }} className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95">Exact ៛</button>
                   </div>
-                  <button 
-                    onClick={() => { setCashReceivedKHR((total * EXCHANGE_RATE).toString()); setCashReceivedUSD(""); }} 
-                    className="w-full text-[11px] font-bold bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors active:scale-95"
-                  >
-                    Exact ៛
-                  </button>
                 </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">Change Due</label>
-                <div className="w-full px-4 py-3.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-600 text-lg flex items-center justify-between shadow-sm">
-                  <span>${changeDueUSD.toFixed(2)}</span>
-                  <span className="text-sm opacity-80">{changeDueKHR.toLocaleString()} ៛</span>
+                <div className="pt-2">
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 block pl-1">Change Due</label>
+                  <div className="w-full px-4 py-3.5 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-600 text-lg flex items-center justify-between shadow-sm">
+                    <span>${changeDueUSD.toFixed(2)}</span>
+                    <span className="text-sm opacity-80">{changeDueKHR.toLocaleString()} ៛</span>
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {!isPaymentSufficient && totalReceivedInUSD > 0 && (
-              <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">
-                Received amount is less than total
+                {!isPaymentSufficient && totalReceivedInUSD > 0 && <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">Received amount is less than total</div>}
               </div>
             )}
 
-            <button 
-              onClick={handleConfirmCashPayment}
-              disabled={isSavingOrder || !isPaymentSufficient}
-              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            {/* TAB CONTENT: KHQR */}
+            {activeTab === 'khqr' && (
+              <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-6 w-full flex justify-center shadow-sm relative overflow-hidden">
+                {qrImage ? <img src={qrImage} alt="Shop KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10" /> : <img src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${total}`)}`} alt="Default KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50" />}
+              </div>
+            )}
+
+            {/* TAB CONTENT: OWED */}
+            {activeTab === 'owed' && (
+              <div className="mb-6 bg-orange-50 border border-orange-100 p-4 rounded-xl text-center text-orange-800 text-sm font-medium">
+                This order will be marked as unpaid ($0.00 received). You can collect payment later in the Order History tab.
+              </div>
+            )}
+
+            {/* SHARED FOOTER ACTION AREA */}
+            <div 
+              className={`mb-5 border-2 rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all ${printReceipt ? 'bg-gray-900 border-gray-900' : 'bg-gray-50 border-gray-200'}`} 
+              onClick={() => setPrintReceipt(!printReceipt)}
             >
-              {isSavingOrder ? <Loader2 className="animate-spin" size={18} /> : null}
-              Confirm Payment
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* KHQR PAYMENT MODAL */}
-      {isKhqrModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col items-center">
-            
-            <div className="w-full flex justify-between items-center mb-6">
-              <h3 className="font-extrabold text-gray-900 text-xl">KHQR Payment</h3>
-              <button onClick={() => setIsKhqrModalOpen(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100 w-full">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Amount to Pay</p>
-              <div className="flex flex-col items-center justify-center gap-0.5">
-                <p className="text-4xl font-black text-gray-900">${total.toFixed(2)}</p>
-                <p className="text-sm font-bold text-gray-500">{(total * EXCHANGE_RATE).toLocaleString()} ៛</p>
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🖨️</span>
+                <span className={`text-[15px] font-extrabold ${printReceipt ? 'text-white' : 'text-gray-500'}`}>Auto-Print Receipt</span>
+              </div>
+              <div className={`w-12 h-6 rounded-full transition-colors relative ${printReceipt ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${printReceipt ? 'translate-x-6 left-0.5' : 'translate-x-0 left-0.5'}`} />
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-8 w-full flex justify-center shadow-sm relative overflow-hidden">
-              {qrImage ? (
-                <img 
-                  src={qrImage} 
-                  alt="Shop KHQR Code" 
-                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10"
-                />
-              ) : (
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${total}`)}`} 
-                  alt="Default KHQR Code" 
-                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50"
-                />
-              )}
-            </div>
+            {activeTab === 'cash' && (
+               <button onClick={handleConfirmCashPayment} disabled={isSavingOrder || !isPaymentSufficient} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                 {isSavingOrder && <Loader2 className="animate-spin" size={18} />}
+                 Confirm Payment
+               </button>
+            )}
 
-            <div className="w-full flex gap-3">
-              <button 
-                onClick={() => handleConfirmKhqrPayment("USD")}
-                disabled={isSavingOrder}
-                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
-              >
-                <span>Paid in USD</span>
-                <span className="text-[10px] text-gray-300 font-medium">Record as $</span>
-              </button>
-              <button 
-                onClick={() => handleConfirmKhqrPayment("KHR")}
-                disabled={isSavingOrder}
-                className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[14px] hover:bg-blue-700 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
-              >
-                <span>Paid in ៛</span>
-                <span className="text-[10px] text-blue-200 font-medium">Record as KHR</span>
-              </button>
-            </div>
+            {activeTab === 'khqr' && (
+               <div className="w-full flex gap-3">
+                 <button onClick={() => handleConfirmKhqrPayment("USD")} disabled={isSavingOrder} className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1">
+                   <span>Paid in USD</span><span className="text-[10px] text-gray-300 font-medium">Record as $</span>
+                 </button>
+                 <button onClick={() => handleConfirmKhqrPayment("KHR")} disabled={isSavingOrder} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-[14px] hover:bg-blue-700 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1">
+                   <span>Paid in ៛</span><span className="text-[10px] text-blue-200 font-medium">Record as KHR</span>
+                 </button>
+               </div>
+            )}
+
+            {activeTab === 'owed' && (
+               <button onClick={handleConfirmOwedPayment} disabled={isSavingOrder} className="w-full py-4 bg-orange-500 text-white rounded-2xl font-bold text-[15px] hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                 {isSavingOrder && <Loader2 className="animate-spin" size={18} />}
+                 Mark as Owed
+               </button>
+            )}
 
           </div>
         </div>
