@@ -2197,3 +2197,16 @@ export async function createPrintJob(receiptText: string) {
     return { success: false, error: error.message };
   }
 }
+
+export async function completeTableOrder(orderId: string) {
+  try {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: "COMPLETED" }
+    });
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (error) {
+    return { success: false };
+  }
+}

@@ -697,7 +697,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                 userRole={userRole} 
                 shopName={settings?.name || "Shop"} 
                 printerUrl={settingsState.printerUrl} 
-                toppings={optToppings} 
+                toppings={optToppings}
+                qrImage={settings?.qrImage}
               />
             </OrderProvider>
           </ToastProvider>
