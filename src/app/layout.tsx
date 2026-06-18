@@ -21,6 +21,11 @@ const chenla = Chenla({
 export const metadata: Metadata = {
   title: 'Menu',
   description: 'QR Menu System',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 // ADDED: Viewport configuration to prevent mobile auto-zoom
