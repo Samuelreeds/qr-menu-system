@@ -11,17 +11,11 @@ export async function requestStaffAssistance(
   tableId: string
 ) {
   try {
-    // ------------------------------------------------------------------
-    // 1. PLAN ENTITLEMENT ENFORCEMENT
-    // ------------------------------------------------------------------
     const planLimits: any = await getShopLimitsAndFeatures(shopId);
     if (!planLimits?.featAlertBarista) {
       return { success: false, message: "Telegram notifications are not enabled for this plan." };
     }
 
-    // ------------------------------------------------------------------
-    // 2. SHOP SETTINGS VALIDATION
-    // ------------------------------------------------------------------
     const shop = await prisma.shop.findUnique({
       where: { id: shopId },
       select: { 
@@ -35,18 +29,12 @@ export async function requestStaffAssistance(
     if (shop.callStaffEnabled === false) return { success: false, message: "Staff assistance is currently disabled for this shop." };
     if (!shop.telegramChatId) return { success: false, message: "Shop is not configured to receive notifications." };
 
-    // ------------------------------------------------------------------
-    // 3. TABLE VALIDATION
-    // ------------------------------------------------------------------
     const table = await prisma.table.findUnique({
       where: { id: tableId },
     });
 
     if (!table || table.shopId !== shopId || !table.isActive) return { success: false, message: "Invalid or inactive table." };
 
-    // ------------------------------------------------------------------
-    // 4. COOLDOWN PROTECTION
-    // ------------------------------------------------------------------
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
     const recentRequest = await prisma.staffCallRequest.findFirst({
       where: {
@@ -58,16 +46,10 @@ export async function requestStaffAssistance(
 
     if (recentRequest) return { success: false, message: "Staff already notified. Please wait a moment." };
 
-    // ------------------------------------------------------------------
-    // 5. CREATE REQUEST
-    // ------------------------------------------------------------------
     const newRequest = await prisma.staffCallRequest.create({
       data: { shopId: shopId, tableId: tableId, status: "PENDING" },
     });
 
-    // ------------------------------------------------------------------
-    // 6. NOTIFY TELEGRAM & TRACK MESSAGE ID
-    // ------------------------------------------------------------------
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) return { success: false, message: "System configuration error." };
 
@@ -99,7 +81,6 @@ export async function requestStaffAssistance(
     if (!tgResponse.ok) {
       console.error("Telegram API Error:", tgData);
     } else if (tgData.ok && tgData.result?.message_id) {
-      // Message successfully sent. Store the exact message ID for 24hr auto-delete.
       await prisma.staffCallRequest.update({
         where: { id: newRequest.id },
         data: {
@@ -184,5 +165,48 @@ export async function sendTestTelegramNotification(
     return { success: true, message: `Test message sent to ${typeName || 'General'}!` };
   } catch (error) {
     return { success: false, message: "Failed to send test message." };
+  }
+}
+
+export async function sendNewOrderNotification(
+  shopId: string,
+  shopName: string,
+  tableLabel: string,
+  orderNumber: string,
+  total: number,
+  itemsSummary: string
+) {
+  try {
+    const shop = await prisma.shop.findUnique({
+      where: { id: shopId },
+      select: { telegramChatId: true, newOrderTopicId: true }
+    });
+
+    if (!shop || !shop.telegramChatId) return { success: false };
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return { success: false };
+
+    const message = `🛒 *New Order Received*\nShop: ${shopName}\nTable: ${tableLabel}\nOrder ID: ${orderNumber}\n\n*Items:*\n${itemsSummary}\n\n*Total:* $${total.toFixed(2)}\n\nStatus: Pending Review`;
+
+    const payload: any = {
+      chat_id: shop.telegramChatId,
+      text: message,
+      parse_mode: "Markdown"
+    };
+
+    if (shop.newOrderTopicId) {
+      payload.message_thread_id = shop.newOrderTopicId;
+    }
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    return { success: true };
+  } catch (error) {
+    return { success: false };
   }
 }

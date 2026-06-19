@@ -1,13 +1,14 @@
-// src/components/pos/AdminPosSection.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Search, CloudOff, RefreshCcw, Printer, X, Map, ChevronDown, ChevronLeft, Loader2 } from 'lucide-react';
+import { ShoppingCart, Search, CloudOff, RefreshCcw, Printer, X, Map, ChevronDown, ChevronLeft, Loader2, Bell } from 'lucide-react';
 import { useOrder } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
 import { createPosOrder, completeTableOrder } from '@/lib/actions';
+import { updateStaffDecision } from '@/lib/customer-actions';
 import { useRouter } from 'next/navigation';
 import { Rnd } from "react-rnd";
+import { supabase } from '@/lib/supabase/client';
 
 import PosCustomizationModal from './PosCustomizationModal';
 import PosProductCard, { PosProductCardSkeleton } from './PosProductCard';
@@ -37,7 +38,6 @@ export type OrderType = "walk-in" | "table" | "delivery";
 const TAX_RATE = 0.1;
 const EXCHANGE_RATE = 4000;
 
-// --- LIVE FLOOR PLAN VIEW (Returns 2 Columns to mimic standard POS layout) ---
 function LiveFloorPlanView({ 
   shopId, 
   printerUrl, 
@@ -60,7 +60,6 @@ function LiveFloorPlanView({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
 
-  // Replicate Cashier Name logic from BillingPanel
   const defaultCashierName = userEmail ? userEmail.split('@')[0] : 'Unknown';
   const defaultFormattedName = defaultCashierName.charAt(0).toUpperCase() + defaultCashierName.slice(1);
   const [customName, setCustomName] = useState(defaultFormattedName);
@@ -101,9 +100,7 @@ function LiveFloorPlanView({
 
   return (
     <>
-      {/* PANE 1: LEFT CANVAS (Mimics the Product Grid wrapper) */}
       <div id="pos-left-pane-floorplan" className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-[#F9FAFB] relative border-r border-gray-200">
-        
         <div className="h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 bg-transparent relative z-10 mt-2">
           <div className="flex items-center gap-3">
             <select className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 outline-none shadow-sm hidden sm:block">
@@ -141,7 +138,7 @@ function LiveFloorPlanView({
                   onClick={(e: any) => { 
                     e.stopPropagation(); 
                     setSelectedTable(table); 
-                    setIsMobilePanelOpen(true); // Open panel on mobile
+                    setIsMobilePanelOpen(true);
                   }}
                 >
                   <div className="flex flex-col items-center justify-center text-center">
@@ -161,10 +158,7 @@ function LiveFloorPlanView({
         </div>
       </div>
 
-      {/* PANE 2: RIGHT DETAILS (Identical replica of BillingPanel layout) */}
       <div id="pos-right-pane-floorplan" className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobilePanelOpen ? 'flex' : 'hidden md:flex'}`}>
-        
-        {/* IDENTICAL PROFILE HEADER */}
         <div className="p-3 sm:p-4 border-b border-gray-100 shrink-0 bg-white z-20 min-w-0">
           <div className="flex items-center justify-between min-w-0">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -184,7 +178,6 @@ function LiveFloorPlanView({
           </div>
         </div>
 
-        {/* IDENTICAL NAVIGATION / TABLE SELECTOR */}
         <div className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-gray-100 bg-white shrink-0 z-10 shadow-sm relative min-w-0">
           <div className="flex bg-gray-50 p-1 rounded-[14px] mb-3 sm:mb-4 border border-gray-100 min-w-0">
             <button onClick={() => onOrderTypeChange('walk-in')} className="flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-[10px] transition-all min-w-0 truncate px-1 text-gray-500 hover:text-gray-700">Walk-in</button>
@@ -200,7 +193,6 @@ function LiveFloorPlanView({
           </div>
         </div>
 
-        {/* IDENTICAL LIST AREA */}
         <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden p-3 sm:p-4 bg-gray-50/50 min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center justify-between mb-3 sm:mb-4 min-w-0">
             <h3 className="font-extrabold text-gray-900 text-[10px] sm:text-xs uppercase tracking-widest truncate">Live Orders</h3>
@@ -246,7 +238,6 @@ function LiveFloorPlanView({
           )}
         </div>
 
-        {/* IDENTICAL FOOTER */}
         <div className="p-3 sm:p-4 pt-3 sm:pt-4 bg-gray-50/50 min-w-0 border-t border-gray-100">
            <button 
             onClick={() => selectedTable ? onSelectTableForOrder(selectedTable.label) : null} 
@@ -291,14 +282,56 @@ export default function AdminPosSection({
   const [pendingSyncCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false); 
-  const isCheckoutLocked = useRef(false); 
 
   const [leftView, setLeftView] = useState<'menu' | 'floorplan'>('menu');
+  const [customerPendingOrders, setCustomerPendingOrders] = useState<any[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setMenuLoading(false), 500);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    checkPendingOrders();
+    syncPendingOrders();
+    const interval = setInterval(syncPendingOrders, 30000); 
+    window.addEventListener('online', syncPendingOrders);
+    return () => { 
+      clearInterval(interval); 
+      window.removeEventListener('online', syncPendingOrders); 
+    };
+  }, []);
+
+  // --- SUPABASE REALTIME QUEUE ---
+  useEffect(() => {
+    const fetchInitial = async () => {
+      const { data } = await supabase
+        .from('Order')
+        .select('*')
+        .eq('shopId', shopId)
+        .eq('status', 'PENDING');
+      if (data) setCustomerPendingOrders(data);
+    };
+
+    fetchInitial();
+
+    const channel = supabase
+      .channel('pos-queue')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Order', filter: `shopId=eq.${shopId}` }, (payload) => {
+        if (payload.new.status === 'PENDING') {
+          setCustomerPendingOrders(prev => [payload.new, ...prev]);
+          addSuccessToast(`New Order from Table ${payload.new.tableNumber}`);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Order', filter: `shopId=eq.${shopId}` }, (payload) => {
+        if (payload.new.status !== 'PENDING') {
+          setCustomerPendingOrders(prev => prev.filter(o => o.id !== payload.new.id));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [shopId]);
 
   const checkPendingOrders = async () => {
     try {
@@ -333,17 +366,6 @@ export default function AdminPosSection({
       router.refresh(); 
     }
   };
-
-  useEffect(() => {
-    checkPendingOrders();
-    syncPendingOrders();
-    const interval = setInterval(syncPendingOrders, 30000); 
-    window.addEventListener('online', syncPendingOrders);
-    return () => { 
-      clearInterval(interval); 
-      window.removeEventListener('online', syncPendingOrders); 
-    };
-  }, []);
 
   const categories = [
     { id: "all", label: "All", emoji: "📋", isDrink: false },
@@ -436,7 +458,6 @@ export default function AdminPosSection({
       return; 
     }
     
-    // Capture data
     const itemsToProcess = [...billingItems];
     const subtotal = itemsToProcess.reduce((sum, i) => sum + i.price * i.qty, 0);
     const discountNum = parseFloat(discountValue) || 0;
@@ -467,12 +488,10 @@ export default function AdminPosSection({
       }))
     };
 
-    // OPTIMISTIC UI: Clear the cart instantly
     setBillingItems([]); 
     setTableNumber(""); 
     setIsMobileCartOpen(false);
 
-    // BACKGROUND PROCESSING
     (async () => {
       try {
         let finalOrderForReceipt: any = null;
@@ -490,10 +509,8 @@ export default function AdminPosSection({
             }
         }
         
-        // FIXED: Replaced showToast with addSuccessToast
         addSuccessToast("Order Saved!");
 
-        // OPTIMISTIC PRINTING
         if (shouldPrint && printerUrl && finalOrderForReceipt) {
             const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
             
@@ -504,170 +521,200 @@ export default function AdminPosSection({
             })
             .then(printRes => {
                 if (printRes.ok) {
-                   addSuccessToast("Receipt Printed"); // FIXED
+                   addSuccessToast("Receipt Printed");
                 } else {
-                   addErrorToast("Printer error: Check paper or connection"); // FIXED
+                   addErrorToast("Printer error: Check paper or connection"); 
                 }
             })
             .catch(printErr => {
                 console.error("Print Error:", printErr);
-                addErrorToast("Failed to connect to printer"); // FIXED
+                addErrorToast("Failed to connect to printer"); 
             });
         }
 
       } catch (err) {
         console.error("Background Order Error:", err);
-        addErrorToast("Order failed to save to server."); // FIXED
+        addErrorToast("Order failed to save to server."); 
       }
     })();
   };
 
+  const handleStaffDecision = async (orderId: string, decision: "ACCEPTED" | "REJECTED") => {
+    const reason = decision === "REJECTED" ? prompt("Enter rejection reason (e.g. Out of stock):") : undefined;
+    if (decision === "REJECTED" && !reason) return;
+    
+    await updateStaffDecision(orderId, decision, reason || undefined);
+    setCustomerPendingOrders(prev => prev.filter(o => o.id !== orderId));
+  };
+
   return (
-    <div className="flex flex-row h-full w-full bg-[#F9FAFB] relative min-w-0">
-      
-      {selectedModalProduct && (
-        <PosCustomizationModal 
-          product={selectedModalProduct} 
-          toppings={toppings} 
-          onClose={() => setSelectedModalProduct(null)} 
-          onAdd={handleAddToBilling} 
-        />
+    <div className="flex flex-col h-full w-full bg-[#F9FAFB] relative min-w-0">
+      {/* --- CUSTOMER PENDING QUEUE (TOP BAR) --- */}
+      {customerPendingOrders.length > 0 && (
+        <div className="bg-orange-50 border-b border-orange-200 p-3 shrink-0 flex items-center gap-4 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 text-orange-800 font-bold shrink-0 pr-4 border-r border-orange-200">
+            <Bell className="animate-bounce" size={18} />
+            <span>Pending ({customerPendingOrders.length})</span>
+          </div>
+          {customerPendingOrders.map(o => (
+            <div key={o.id} className="bg-white border border-orange-200 rounded-xl p-3 shrink-0 shadow-sm min-w-[200px] flex flex-col justify-between gap-3">
+               <div>
+                 <div className="flex justify-between font-black text-sm">
+                   <span>Table {o.tableNumber}</span>
+                   <span>${o.total.toFixed(2)}</span>
+                 </div>
+                 <span className="text-xs text-gray-500">{o.orderNumber}</span>
+               </div>
+               <div className="flex gap-2">
+                 <button onClick={() => handleStaffDecision(o.id, "ACCEPTED")} className="flex-1 bg-green-500 text-white font-bold text-xs py-1.5 rounded-lg hover:bg-green-600">Accept</button>
+                 <button onClick={() => handleStaffDecision(o.id, "REJECTED")} className="flex-1 bg-red-100 text-red-700 font-bold text-xs py-1.5 rounded-lg hover:bg-red-200">Reject</button>
+               </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* RENDER EITHER THE FLOOR PLAN OR THE MENU + BILLING PANEL */}
-      {leftView === 'floorplan' ? (
-        <LiveFloorPlanView 
-          shopId={shopId} 
-          shopName={shopName}
-          printerUrl={printerUrl}
-          userEmail={userEmail}
-          userRole={userRole}
-          onSelectTableForOrder={(id) => {
-            setOrderType("table");
-            setTableNumber(id);
-            setLeftView("menu");
-          }}
-          onOrderTypeChange={(type) => {
-            setOrderType(type);
-            setLeftView("menu");
-          }}
-        />
-      ) : (
-        <>
-          {/* LEFT PANE: PRODUCT MENU */}
-          <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 pb-28 md:pb-6 min-w-0 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0 min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900 truncate">Select Products</h1>
-              
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                {pendingSyncCount > 0 && (
-                  <div className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 text-gray-900 px-3 py-2 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap">
-                    <CloudOff size={14} />
-                    <span>{pendingSyncCount} Offline</span>
-                    {isSyncing && <RefreshCcw size={12} className="animate-spin ml-1" />}
+      <div className="flex flex-row flex-1 overflow-hidden min-w-0">
+        {selectedModalProduct && (
+          <PosCustomizationModal 
+            product={selectedModalProduct} 
+            toppings={toppings} 
+            onClose={() => setSelectedModalProduct(null)} 
+            onAdd={handleAddToBilling} 
+          />
+        )}
+
+        {leftView === 'floorplan' ? (
+          <LiveFloorPlanView 
+            shopId={shopId} 
+            shopName={shopName}
+            printerUrl={printerUrl}
+            userEmail={userEmail}
+            userRole={userRole}
+            onSelectTableForOrder={(id) => {
+              setOrderType("table");
+              setTableNumber(id);
+              setLeftView("menu");
+            }}
+            onOrderTypeChange={(type) => {
+              setOrderType(type);
+              setLeftView("menu");
+            }}
+          />
+        ) : (
+          <>
+            <div id="pos-left-pane" className={`flex-1 flex flex-col h-full overflow-hidden p-4 md:p-6 pb-28 md:pb-6 min-w-0 ${isMobileCartOpen ? 'hidden md:flex' : 'flex'}`}>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3 shrink-0 min-w-0">
+                <h1 className="text-2xl font-bold text-gray-900 truncate">Select Products</h1>
+                
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  {pendingSyncCount > 0 && (
+                    <div className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 text-gray-900 px-3 py-2 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap">
+                      <CloudOff size={14} />
+                      <span>{pendingSyncCount} Offline</span>
+                      {isSyncing && <RefreshCcw size={12} className="animate-spin ml-1" />}
+                    </div>
+                  )}
+                  
+                  <div className="relative w-full sm:w-72 shrink-0">
+                    <input 
+                      type="text" 
+                      placeholder="Search menu..." 
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)} 
+                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:border-gray-900 transition-colors" 
+                    />
+                    <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0 no-scrollbar" style={{ scrollbarWidth: 'none' }}>
+                {categories.map((cat) => (
+                  <button 
+                    key={cat.id} 
+                    className={`flex-shrink-0 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all active:scale-95 ${activeCategory === String(cat.id) ? "bg-gray-900 text-white border-gray-900 shadow-md" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`} 
+                    onClick={() => setActiveCategory(String(cat.id))}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar pb-12" style={{ scrollbarWidth: 'none' }}>
+                {menuLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                    {[...Array(8)].map((_, i) => <PosProductCardSkeleton key={i} />)}
+                  </div>
+                ) : filteredProducts.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center pt-10 pb-20">
+                    <div className="w-32 h-32 mb-4 opacity-50"><SearchEmptySVG /></div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">No products found</h3>
+                    <p className="text-sm text-gray-500">Try adjusting your search or category filter.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                    {filteredProducts.map((product) => (
+                      <PosProductCard 
+                        key={product.id} 
+                        product={product} 
+                        onClick={(p) => setSelectedModalProduct(p)} 
+                      />
+                    ))}
                   </div>
                 )}
-                
-                <div className="relative w-full sm:w-72 shrink-0">
-                  <input 
-                    type="text" 
-                    placeholder="Search menu..." 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-200 shadow-sm text-sm outline-none focus:border-gray-900 transition-colors" 
-                  />
-                  <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                </div>
               </div>
             </div>
 
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 shrink-0 no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-              {categories.map((cat) => (
+            {!isMobileCartOpen && (
+              <div className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40">
                 <button 
-                  key={cat.id} 
-                  className={`flex-shrink-0 px-5 py-2.5 rounded-xl text-sm font-bold border transition-all active:scale-95 ${activeCategory === String(cat.id) ? "bg-gray-900 text-white border-gray-900 shadow-md" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`} 
-                  onClick={() => setActiveCategory(String(cat.id))}
+                  onClick={() => setIsMobileCartOpen(true)} 
+                  className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all"
                 >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-12" style={{ scrollbarWidth: 'none' }}>
-              {menuLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                  {[...Array(8)].map((_, i) => <PosProductCardSkeleton key={i} />)}
-                </div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center pt-10 pb-20">
-                  <div className="w-32 h-32 mb-4 opacity-50"><SearchEmptySVG /></div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">No products found</h3>
-                  <p className="text-sm text-gray-500">Try adjusting your search or category filter.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                  {filteredProducts.map((product) => (
-                    <PosProductCard 
-                      key={product.id} 
-                      product={product} 
-                      onClick={(p) => setSelectedModalProduct(p)} 
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* MOBILE CART BUTTON */}
-          {!isMobileCartOpen && (
-            <div className="md:hidden fixed bottom-6 left-0 w-full px-4 z-40">
-              <button 
-                onClick={() => setIsMobileCartOpen(true)} 
-                className="w-full bg-gray-900 text-white shadow-2xl rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <ShoppingCart size={20} />
-                    {billingItems.length > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                        {billingItems.reduce((acc, item) => acc + item.qty, 0)}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <ShoppingCart size={20} />
+                      {billingItems.length > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                          {billingItems.reduce((acc, item) => acc + item.qty, 0)}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-bold text-sm truncate">View Cart</span>
                   </div>
-                  <span className="font-bold text-sm truncate">View Cart</span>
-                </div>
-                <span className="font-black text-lg shrink-0">
-                  ${(billingItems.reduce((acc, item) => acc + item.price * item.qty, 0)).toFixed(2)}
-                </span>
-              </button>
-            </div>
-          )}
+                  <span className="font-black text-lg shrink-0">
+                    ${(billingItems.reduce((acc, item) => acc + item.price * item.qty, 0)).toFixed(2)}
+                  </span>
+                </button>
+              </div>
+            )}
 
-          {/* RIGHT PANE: STANDARD BILLING PANEL */}
-          <div 
-            id="pos-right-pane" 
-            className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}
-          >
-            <BillingPanel
-              items={billingItems}
-              onRemove={handleRemove}
-              onQtyChange={handleQtyChange}
-              orderType={orderType}
-              setOrderType={setOrderType}
-              tableNumber={tableNumber}
-              setTableNumber={setTableNumber}
-              onProceedToConfirm={handleProceedToConfirm}
-              isSavingOrder={isSavingOrder}
-              userEmail={userEmail}
-              userRole={userRole}
-              onCloseMobile={() => setIsMobileCartOpen(false)}
-              isTableModalOpen={false} 
-              setIsTableModalOpen={() => {}} 
-              qrImage={qrImage}
-            />
-          </div>
-        </>
-      )}
+            <div 
+              id="pos-right-pane" 
+              className={`fixed inset-0 z-[60] md:static w-full md:w-[360px] lg:w-[400px] shrink-0 border-l border-gray-200 bg-white flex-col h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-transform duration-300 min-w-0 ${isMobileCartOpen ? 'flex' : 'hidden md:flex'}`}
+            >
+              <BillingPanel
+                items={billingItems}
+                onRemove={handleRemove}
+                onQtyChange={handleQtyChange}
+                orderType={orderType}
+                setOrderType={setOrderType}
+                tableNumber={tableNumber}
+                setTableNumber={setTableNumber}
+                onProceedToConfirm={handleProceedToConfirm}
+                isSavingOrder={isSavingOrder}
+                userEmail={userEmail}
+                userRole={userRole}
+                onCloseMobile={() => setIsMobileCartOpen(false)}
+                isTableModalOpen={false} 
+                setIsTableModalOpen={() => {}} 
+                qrImage={qrImage}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

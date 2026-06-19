@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 // IMPORTANT: AFTER SAVING THIS FILE, YOU MUST RUN IN YOUR TERMINAL:
 // 1. npx prisma format
 // 2. npx prisma generate
@@ -11,6 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  //  url      = env("DATABASE_URL")
 }
 
 enum StaffCallStatus {
@@ -34,7 +34,11 @@ enum PaymentMethod {
 
 enum OrderStatus {
   PENDING
+  ACCEPTED
+  REJECTED
   PREPARING
+  READY
+  SERVED
   COMPLETED
   CANCELLED
 }
@@ -54,7 +58,7 @@ model User {
 
   shopUsers ShopUser[]
   orders    Order[]
-  posShifts PosShift[] // <--- ADDED SHIFT RELATION
+  posShifts PosShift[]
 }
 
 // --- NEW SAAS MODELS ---
@@ -98,7 +102,7 @@ model Shop {
   banners    Banner[]
   orders     Order[]
   toppings   Topping[]
-  posShifts  PosShift[] // <--- ADDED SHIFT RELATION
+  posShifts  PosShift[]
 
   // INVENTORY RELATIONS
   ingredients Ingredient[]
@@ -166,7 +170,7 @@ model ProductIngredient {
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
-  quantityUsed Float // How much of this ingredient is used per 1 order of this product
+  quantityUsed Float
 
   @@unique([productId, ingredientId])
   @@index([productId])
@@ -178,7 +182,7 @@ model Product {
   name        String
   name_kh     String?
   name_zh     String?
-  price       Float // Kept as base/fallback price
+  price       Float
   image       String
   time        String?
   rating      Float   @default(0)
@@ -288,6 +292,7 @@ model Table {
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
   staffCalls StaffCallRequest[] @relation("TableStaffCalls")
+  sessions   TableSession[]
 
   @@unique([shopId, label])
   @@index([shopId])
@@ -323,13 +328,13 @@ model Order {
 
   orderNumber String?
   userId      String?
-  // Track which staff member processed the order
   user        User?   @relation(fields: [userId], references: [id])
 
   // POS Specific Fields
-  orderType     OrderType @default(TABLE)
-  tableNumber   String?
-  deliveryAgent String?
+  orderType       OrderType @default(TABLE)
+  tableNumber     String?
+  deliveryAgent   String?
+  rejectionReason String?
 
   // Financials
   subtotal       Float
@@ -352,6 +357,9 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  tableSessionId String?
+  tableSession   TableSession? @relation(fields: [tableSessionId], references: [id])
+
   @@index([shopId])
   @@index([userId])
 }
@@ -364,14 +372,13 @@ model OrderItem {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  name     String // Storing the name historically in case product name changes later
-  price    Float // Storing the exact price at the time of purchase
+  name     String
+  price    Float
   quantity Int
 
   // POS Specific Fields
   notes String? @db.Text
 
-  // Store customizations (mood, size, sugar, ice, topping) as a flexible JSON object
   customization Json?
 
   createdAt DateTime @default(now())
@@ -387,10 +394,10 @@ model Ingredient {
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   name         String
-  unit         String // e.g., "kg", "liters", "pcs"
+  unit         String
   current      Float  @default(0)
   max          Float  @default(100)
-  lowThreshold Float  @default(20) // percentage
+  lowThreshold Float  @default(20)
 
   logs        StockLog[]
   productUses ProductIngredient[]
@@ -410,7 +417,7 @@ model StockLog {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
   change        Float
-  reason        String // "Restock", "Sold", "Waste", "Manual"
+  reason        String
   staffName     String
   previousStock Float
   newStock      Float
@@ -449,7 +456,7 @@ model PosShift {
   startingCash       Float     @default(0)
   expectedEndingCash Float?
   actualEndingCash   Float?
-  status             String    @default("OPEN") // "OPEN" | "CLOSED"
+  status             String    @default("OPEN")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -464,4 +471,19 @@ model PrintJob {
   receipt_text String   @db.Text
   status       String   @default("pending")
   createdAt    DateTime @default(now())
+}
+
+model TableSession {
+  id        String   @id @default(cuid())
+  shopId    String
+  tableId   String
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+  table  Table   @relation(fields: [tableId], references: [id])
+
+  @@index([tableId])
+  @@index([shopId, status])
 }
