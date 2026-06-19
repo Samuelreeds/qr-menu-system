@@ -73,9 +73,12 @@ export default function AdminSidebar({
           >
             <Menu size={22} className="text-gray-700" />
           </button>
-          <h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">
-            {shopName || 'AdminPanel'}
-          </h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <img src="/logo.png" alt="Company Logo" className="h-8 w-8 object-contain shrink-0" />
+            <h1 className="font-bold text-lg tracking-tight text-gray-900 truncate font-sans">
+              {shopName || 'AdminPanel'}
+            </h1>
+          </div>
         </div>
 
         <button
@@ -119,9 +122,12 @@ export default function AdminSidebar({
           >
             {!isSidebarCollapsed || isMobileMenuOpen ? (
               <div className="flex flex-col min-w-0 animate-in fade-in duration-300">
-                <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">
-                  {shopName || 'AdminPanel'}
-                </h1>
+                <div className="flex items-center gap-3">
+                  <img src="/logo.png" alt="Company Logo" className="h-8 w-8 object-contain shrink-0" />
+                  <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">
+                    {shopName || 'AdminPanel'}
+                  </h1>
+                </div>
                 <span
                   className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max ${
                     shopPlan === 'STARTER' || isFreePlan
@@ -133,16 +139,19 @@ export default function AdminSidebar({
                 </span>
               </div>
             ) : (
-              <div className="w-10 h-10 bg-gray-900 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-md shrink-0 animate-in fade-in duration-300">
-                {(shopName || 'A').charAt(0).toUpperCase()}
+              <div className="w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center shadow-md shrink-0 animate-in fade-in duration-300 overflow-hidden">
+                <img src="/logo.png" alt="Company Logo" className="w-7 h-7 object-contain" />
               </div>
             )}
           </div>
 
           <div className="mb-6 lg:hidden flex flex-col min-w-0">
-            <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">
-              {shopName || 'AdminPanel'}
-            </h1>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Company Logo" className="h-8 w-8 object-contain shrink-0" />
+              <h1 className="font-bold text-xl font-sans line-clamp-1 text-gray-900">
+                {shopName || 'AdminPanel'}
+              </h1>
+            </div>
             <span
               className={`inline-block mt-2 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider w-max ${
                 shopPlan === 'STARTER' || isFreePlan

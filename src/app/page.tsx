@@ -1,4 +1,3 @@
-// src/app/page.tsx
 'use client';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
@@ -161,11 +160,8 @@ export default function HomePage() {
     <div className="min-h-screen bg-white font-sans flex flex-col">
       {/* NAVIGATION */}
       <nav className="flex items-center justify-between py-4 sm:py-6 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full">
-        <div className="flex items-center gap-2">
-          <div className="bg-orange-500 p-1.5 rounded-lg">
-            <Utensils className="text-white" size={18} />
-          </div>
-          <span className="text-base sm:text-lg font-black tracking-tight text-gray-900">Scandine</span>
+        <div className="flex items-center -ml-2 sm:-ml-0">
+          <img src="/horizontalLogo.png" alt="Company Logo" className="h-14 sm:h-16 md:h-20 w-auto object-contain" />
         </div>
         <div className="flex gap-2 sm:gap-4 items-center">
           <Link 
@@ -303,20 +299,17 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-10">
             
-            <div className="col-span-1 sm:col-span-2 md:col-span-1">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="bg-orange-500 p-1.5 rounded-lg">
-                  <Utensils className="text-white" size={14} />
-                </div>
-                <span className="text-sm sm:text-base font-black tracking-tight text-gray-900">Scandine</span>
+            <div className="col-span-1 sm:col-span-2 md:col-span-1 flex flex-col items-center md:items-start text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start mb-4 w-full">
+                <img src="/horizontalLogo.png" alt="Company Logo" className="h-14 sm:h-16 md:h-20 w-auto object-contain" />
               </div>
-              <p className="text-gray-500 text-xs font-medium leading-relaxed max-w-xs">
+              <p className="text-gray-500 text-xs font-medium leading-relaxed max-w-xs mx-auto md:mx-0">
                 The leading digital menu platform for restaurants in Cambodia. Empowering owners with smart tools for growth.
               </p>
             </div>
 
-            <div>
-              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm">Product</h4>
+            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm w-full">Product</h4>
               <ul className="space-y-2 text-xs text-gray-500 font-medium">
                 <li><Link href="/auth/register" className="hover:text-orange-500 transition-colors">Pricing</Link></li>
                 <li><Link href="/auth/register" className="hover:text-orange-500 transition-colors">Features</Link></li>
@@ -324,8 +317,8 @@ export default function HomePage() {
               </ul>
             </div>
 
-            <div>
-              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm">Support</h4>
+            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm w-full">Support</h4>
               <ul className="space-y-2 text-xs text-gray-500 font-medium">
                 <li><Link href="#" className="hover:text-orange-500 transition-colors">Help Center</Link></li>
                 <li><Link href="#" className="hover:text-orange-500 transition-colors">Privacy Policy</Link></li>
@@ -333,15 +326,15 @@ export default function HomePage() {
               </ul>
             </div>
 
-            <div>
-              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm">Contact Us</h4>
-              <ul className="space-y-2.5">
+            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+              <h4 className="font-bold text-gray-900 mb-3 text-xs sm:text-sm w-full">Contact Us</h4>
+              <ul className="space-y-2.5 flex flex-col items-center md:items-start">
                 <li>
                   <a 
                     href="https://t.me/Mengyin01" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-xs text-gray-500 font-medium hover:text-blue-500 transition-colors"
+                    className="flex items-center justify-center md:justify-start gap-2 text-xs text-gray-500 font-medium hover:text-blue-500 transition-colors"
                   >
                     <MessageCircle size={14} className="text-blue-500" />
                     Telegram @Mengyin01
@@ -350,13 +343,13 @@ export default function HomePage() {
                 <li>
                   <a 
                     href="tel:066605342" 
-                    className="flex items-center gap-2 text-xs text-gray-500 font-medium hover:text-orange-500 transition-colors"
+                    className="flex items-center justify-center md:justify-start gap-2 text-xs text-gray-500 font-medium hover:text-orange-500 transition-colors"
                   >
                     <Phone size={14} className="text-orange-500" />
                     066 605 342
                   </a>
                 </li>
-                <li className="flex items-center gap-3 pt-1.5">
+                <li className="flex items-center justify-center md:justify-start gap-3 pt-1.5 w-full">
                   <Link href="#" className="text-gray-400 hover:text-blue-600 transition-colors"><Facebook size={14} /></Link>
                   <Link href="#" className="text-gray-400 hover:text-pink-600 transition-colors"><Instagram size={14} /></Link>
                   <Link href="#" className="text-gray-400 hover:text-gray-900 transition-colors"><Globe size={14} /></Link>

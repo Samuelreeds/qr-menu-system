@@ -1,6 +1,11 @@
-// src/features/admin/tabs/SettingsTab.tsx
 import React from 'react';
-import { Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, CheckCircle, Palette, Lock, Menu, ImageIcon, Info, Plus, Share2, Trash2, Bell, Hash, Send, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { 
+  Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, 
+  CheckCircle, Palette, Lock, Menu, ImageIcon, Info, Plus, 
+  Share2, Trash2, Bell, Hash, Send, ChevronLeft, ChevronRight, 
+  Settings, MessageCircle, Bug, Lightbulb, BookOpen, PlayCircle, 
+  Activity, Phone 
+} from 'lucide-react';
 import LazyImage from "@/components/ui/LazyImage";
 
 export interface SocialLink { 
@@ -376,6 +381,69 @@ export default function SettingsTab({
                <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
              </div>
           </form>
+        </div>
+      </div>
+
+      {/* 7. HELP & SUPPORT */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden mt-6">
+        <button onClick={() => handleSectionClick('support')} className="w-full flex justify-between items-center p-5 hover:bg-gray-50 transition-colors">
+           <div className="flex gap-4 items-center">
+             <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><Info size={20}/></div>
+             <div className="text-left">
+               <h3 className="font-bold text-gray-900 text-base">Help & Support</h3>
+               <p className="text-xs text-gray-500 mt-0.5">Get help, contact support, report issues, and access documentation.</p>
+             </div>
+           </div>
+           {openSection === 'support' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
+        </button>
+        <div className={openSection === 'support' ? 'block' : 'hidden'}>
+          <div className="p-6 border-t border-gray-100 space-y-3">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><MessageCircle size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Contact Support</h4><p className="text-[11px] text-gray-500">Reach out to our team</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Phone size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">WhatsApp Support</h4><p className="text-[11px] text-gray-500">Chat with us directly</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-sky-50 text-sky-600 rounded-lg"><Send size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Telegram Support</h4><p className="text-[11px] text-gray-500">Join our community</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><BookOpen size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Documentation</h4><p className="text-[11px] text-gray-500">Read the user guides</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><PlayCircle size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Video Tutorials</h4><p className="text-[11px] text-gray-500">Watch how-to videos</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-red-50 text-red-600 rounded-lg"><Bug size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Report a Bug</h4><p className="text-[11px] text-gray-500">Help us fix issues</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg"><Lightbulb size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">Feature Request</h4><p className="text-[11px] text-gray-500">Suggest new ideas</p></div>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                  <div className="p-2 bg-green-50 text-green-600 rounded-lg"><Activity size={18}/></div>
+                  <div className="text-left"><h4 className="font-bold text-gray-900 text-sm">System Status</h4><p className="text-[11px] text-gray-500">Check server health</p></div>
+                </a>
+             </div>
+             
+             <div className="mt-4 flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
+               <div className="flex items-center gap-3">
+                 <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500"><Settings size={14}/></div>
+                 <div>
+                   <h4 className="font-bold text-gray-900 text-sm">App Version</h4>
+                   <p className="text-[11px] text-gray-500">v0.1.0 (Production)</p>
+                 </div>
+               </div>
+               <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider">Up to Date</span>
+             </div>
+          </div>
         </div>
       </div>
       
