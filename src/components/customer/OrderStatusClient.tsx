@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-// FIX: Swapped BellConcierge for Utensils to guarantee compatibility with your lucide-react version
-import { CheckCircle, Clock, XCircle, ChefHat, Utensils } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, ChefHat, Utensils, Receipt, Loader2 } from 'lucide-react';
+import { requestBill } from '@/lib/session-actions';
 
 interface OrderStatusProps {
   initialOrder: any;
@@ -11,6 +11,8 @@ interface OrderStatusProps {
 
 export default function OrderStatusClient({ initialOrder }: OrderStatusProps) {
   const [order, setOrder] = useState(initialOrder);
+  const [isRequestingBill, setIsRequestingBill] = useState(false);
+  const [billRequested, setBillRequested] = useState(false);
 
   useEffect(() => {
     const channel = supabase
@@ -28,6 +30,18 @@ export default function OrderStatusClient({ initialOrder }: OrderStatusProps) {
       supabase.removeChannel(channel);
     };
   }, [order.id]);
+
+  const handleRequestBill = async () => {
+    if (!order.tableSessionId) return;
+    setIsRequestingBill(true);
+    const res = await requestBill(order.tableSessionId);
+    if (res.success) {
+      setBillRequested(true);
+    } else {
+      alert("Failed to request bill. Please try again or wave to staff.");
+    }
+    setIsRequestingBill(false);
+  };
 
   const getStatusDisplay = () => {
     switch (order.status) {
@@ -67,7 +81,35 @@ export default function OrderStatusClient({ initialOrder }: OrderStatusProps) {
             <span className="font-bold">${(item.price * item.quantity).toFixed(2)}</span>
           </div>
         ))}
+        <div className="pt-4 mt-2 border-t border-gray-200 flex justify-between items-center text-lg font-black text-gray-900">
+          <span>Order Total</span>
+          <span>${order.total.toFixed(2)}</span>
+        </div>
       </div>
+
+      {order.tableSessionId && (
+        <button 
+          onClick={handleRequestBill}
+          disabled={billRequested || isRequestingBill}
+          className={`w-full mt-6 flex items-center justify-center gap-2 py-4 rounded-xl font-bold transition-all ${
+            billRequested 
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+              : 'bg-gray-900 text-white hover:bg-black active:scale-95 shadow-md'
+          }`}
+        >
+          {isRequestingBill ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : billRequested ? (
+            <>
+              <CheckCircle size={20} /> Bill Requested
+            </>
+          ) : (
+            <>
+              <Receipt size={20} /> Request Final Bill
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// src/components/shared/MenuClient.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,10 +7,11 @@ import LangSwitcher from '@/components/ui/LangSwitcher';
 import FoodCard from '@/components/shared/FoodCard';
 import ShopInfoModal from '@/components/shared/ShopInfoModal';
 import CartFloat from '@/components/ui/CartFloat'; 
+import MyOrdersDrawer from '@/components/customer/MyOrdersDrawer'; // <-- Added import
 import { useLanguage } from '@/context/LanguageContext'; 
-// FIX: Import the useCart hook
 import { useCart } from '@/context/CartContext';
-import { Menu, X, Star, Bell, Loader2, CheckCircle, QrCode } from 'lucide-react'; 
+import { useSearchParams } from 'next/navigation'; // <-- Added import
+import { Menu, X, Star, Bell, Loader2, CheckCircle, QrCode, Receipt } from 'lucide-react'; // <-- Added Receipt
 import { requestStaffAssistance } from "@/lib/staff-actions";
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -81,6 +83,7 @@ interface MenuClientProps {
   tableContext?: { isValid: boolean; tableId: string | null; tableLabel: string | null; };
   shopId?: string;
   shopSlug?: string;
+  activeSession?: any;
 }
 
 const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBanner: number }) => {
@@ -110,7 +113,7 @@ const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBan
 
 export default function MenuClient({ 
   initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false,
-  featCampaign = false, isStaffCallActive = false, tableContext, shopId, shopSlug
+  featCampaign = false, isStaffCallActive = false, tableContext, shopId, shopSlug, activeSession
 }: MenuClientProps) {
   
   const hasPopularProducts = initialProducts.some(p => p.isPopular);
@@ -125,6 +128,9 @@ export default function MenuClient({
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0);
   const [currentBanner, setCurrentBanner] = useState(0);
+  
+  const searchParams = useSearchParams();
+  const [isOrdersDrawerOpen, setIsOrdersDrawerOpen] = useState(searchParams?.get('openOrders') === 'true');
   
   const [callState, setCallState] = useState<'IDLE' | 'CONFIRM' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [callError, setCallError] = useState('');
@@ -143,8 +149,6 @@ export default function MenuClient({
   const selectedImgRef = useRef<HTMLImageElement>(null);
 
   const { lang, setMultiLangEnabled } = useLanguage(); 
-  
-  // FIX: Destructure addToCart from your context
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -152,6 +156,13 @@ export default function MenuClient({
       setMultiLangEnabled(multiLanguageEnabled);
     }
   }, [multiLanguageEnabled, setMultiLangEnabled]);
+
+  // FIX: Force the drawer open when returning from checkout
+  useEffect(() => {
+    if (searchParams?.get('openOrders') === 'true') {
+      setIsOrdersDrawerOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (logoRef.current?.complete) setLogoLoaded(true);
@@ -624,7 +635,6 @@ export default function MenuClient({
                     )}
                   </div>
                   
-                  {/* FIX: ADD TO ORDER BUTTON */}
                   <button 
                     onClick={() => {
                       addToCart({
@@ -635,7 +645,7 @@ export default function MenuClient({
                         price: activeDiscPrice,
                         image: selectedItem.image
                       });
-                      setSelectedItem(null); // Close the modal
+                      setSelectedItem(null);
                     }}
                     style={{ backgroundColor: themeColor }}
                     className="text-white font-bold px-6 py-3 rounded-xl active:scale-95 transition-transform"
@@ -699,6 +709,32 @@ export default function MenuClient({
             </div>
           )}
         </div>
+      )}
+
+      {/* FIX: My Orders Floating Action Button */}
+      {activeSession && activeSession.orders?.length > 0 && (
+        <div className="fixed bottom-24 right-4 sm:right-6 z-40">
+          <button 
+            onClick={() => setIsOrdersDrawerOpen(true)}
+            className="flex items-center gap-2 bg-white text-gray-900 font-bold px-4 py-3 rounded-full shadow-2xl border border-gray-100 active:scale-95 transition-transform"
+            style={{ color: themeColor }}
+          >
+            <Receipt size={20} />
+            <span className="text-sm">My Orders ({activeSession.orders.length})</span>
+          </button>
+        </div>
+      )}
+
+      {/* FIX: My Orders Drawer Component */}
+      {activeSession && (
+        <MyOrdersDrawer 
+          isOpen={isOrdersDrawerOpen}
+          onClose={() => setIsOrdersDrawerOpen(false)}
+          shopId={shopId!}
+          tableSessionId={activeSession.id}
+          initialOrders={activeSession.orders}
+          themeColor={themeColor}
+        />
       )}
 
       <CartFloat themeColor={themeColor} />

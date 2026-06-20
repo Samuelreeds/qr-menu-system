@@ -6,26 +6,32 @@ export default async function CartPage({
   params,
   searchParams, 
 }: { 
-  params: Promise<{ slug: string }>;
+  params: Promise<{ shopSlug: string }>;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   
   const rawTableId = resolvedSearchParams.tableId;
-  const tableId = Array.isArray(rawTableId) ? rawTableId[0] : rawTableId;
+  const tableId = Array.isArray(rawTableId) ? rawTableId[0] : rawTableId || "";
 
   // 1. Fetch the exact Shop using the URL slug
+  // 1. Fetch the exact Shop using the URL shopSlug
   const shop = await prisma.shop.findFirst({
-    where: { 
+    where: {
       OR: [
-        { slug: resolvedParams.slug },
-        { id: resolvedParams.slug }
+        { slug: resolvedParams.shopSlug }, // <-- FIX 1: Changed shopSlug to slug
+        { id: resolvedParams.shopSlug }
       ]
     },
-    select: { id: true, slug: true, name: true, status: true, deletedAt: true }
+    select: {
+      id: true,
+      slug: true, // <-- FIX 2: Changed shopSlug to slug here as well
+      name: true,
+      status: true,
+      deletedAt: true
+    }
   });
-
   if (!shop || shop.status === 'LOCKED' || shop.deletedAt) {
     notFound();
   }
@@ -52,7 +58,8 @@ export default async function CartPage({
         shopId={shop.id} 
         shopSlug={shop.slug} 
         shopName={shop.name} 
-        tableLabel={tableLabel} 
+        tableLabel={tableLabel}
+        tableId={tableId}
       />
     </div>
   );

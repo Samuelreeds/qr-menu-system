@@ -11,7 +11,7 @@ export default async function ShopMenuPage({
   params,
   searchParams, 
 }: { 
-  params: Promise<{ slug: string }>;
+  params: Promise<{ shopSlug: string }>;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   
@@ -21,12 +21,11 @@ export default async function ShopMenuPage({
   const rawTableId = resolvedSearchParams.tableId;
   const tableId = Array.isArray(rawTableId) ? rawTableId[0] : rawTableId;
 
-  // Use findFirst with OR to support both the new slug and legacy shop IDs
   const shop: any = await (prisma as any).shop.findFirst({
     where: { 
       OR: [
-        { slug: resolvedParams.slug },
-        { id: resolvedParams.slug }
+        { slug: resolvedParams.shopSlug },
+        { id: resolvedParams.shopSlug }
       ]
     },
     include: {
@@ -39,7 +38,7 @@ export default async function ShopMenuPage({
       },
       products: {
         where: {
-          deletedAt: null, // <-- ADD THIS LINE
+          deletedAt: null,
         },
         include: {
           category: true,
@@ -49,14 +48,10 @@ export default async function ShopMenuPage({
     },
   });
 
-  // SECURITY GUARD: Prevent public access to locked or soft-deleted shops
   if (!shop || shop.status === 'LOCKED' || shop.deletedAt) {
     notFound();
   }
 
-  // ==========================================
-  // TABLE VALIDATION LOGIC
-  // ==========================================
   let tableContext = {
     isValid: false,
     tableId: null as string | null,
@@ -77,18 +72,15 @@ export default async function ShopMenuPage({
     }
   }
 
-  // ENFORCEMENT: Fetch the effective capabilities for this shop to apply downgrade logic
   const planLimits = await getShopLimitsAndFeatures(shop.id);
   
   const effectiveMaxBanners = (planLimits as any)?.maxBanners || 1;
   const effectiveCustomSocials = (planLimits as any)?.customSocials || false;
   const multiLanguageEnabled = !!(planLimits as any)?.featMultipleLanguage;
   
-  // SUPERADMIN FEATURE GATES
   const canUseCampaign = !!(planLimits as any)?.featCampaign;
   const canUseTelegram = !!(planLimits as any)?.featAlertBarista;
 
-  // DETERMINE IF CALL STAFF IS FULLY ACTIVE
   const isStaffCallActive = canUseTelegram && shop.telegramNotificationsEnabled !== false && shop.callStaffEnabled && !!shop.telegramChatId;
 
   const safeSettings = shop.settings || {
@@ -110,7 +102,7 @@ export default async function ShopMenuPage({
     telegram: '',
     showTelegram: false,
     socials: '[]', 
-    qrImage: null, // <--- ADDED QR IMAGE FALLBACK
+    qrImage: null,
   };
 
   const formattedSettings = {
@@ -131,7 +123,7 @@ export default async function ShopMenuPage({
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
     socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
-    qrImage: safeSettings.qrImage || null, // <--- ADDED QR IMAGE PAYLOAD
+    qrImage: safeSettings.qrImage || null,
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({
@@ -170,6 +162,30 @@ export default async function ShopMenuPage({
       sortOrder: b.sortOrder,
     }));
 
+  let activeSessionData = null;
+  if (tableContext.isValid && tableContext.tableId) {
+    const session = await (prisma as any).tableSession.findFirst({
+      where: { tableId: tableContext.tableId, status: { in: ['ACTIVE', 'BILL_REQUESTED'] } },
+      // Fetches the product so the image URL is included in the item data
+      include: { 
+        orders: { 
+          include: { 
+            items: { include: { product: true } } // <--- Updated line
+          }, 
+          orderBy: { createdAt: 'desc' } 
+        } 
+      }
+    });
+    
+    if (session) {
+      activeSessionData = {
+        id: session.id,
+        status: session.status,
+        orders: session.orders
+      };
+    }
+  }
+
   return (
     <main className="relative min-h-screen">
       <CustomerEntryGate 
@@ -190,6 +206,7 @@ export default async function ShopMenuPage({
         tableContext={tableContext}
         shopId={shop.id}
         shopSlug={shop.slug}
+        activeSession={activeSessionData}
       />
     </main>
   );

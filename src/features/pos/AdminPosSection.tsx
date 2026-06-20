@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Search, CloudOff, RefreshCcw, Printer, X, Map, ChevronDown, ChevronLeft, Loader2, Bell } from 'lucide-react';
+import { ShoppingCart, Search, CloudOff, RefreshCcw, Printer, X, Map, ChevronDown, ChevronLeft, Loader2, Bell, CheckCircle } from 'lucide-react';
 import { useOrder } from "@/context/OrderContext";
 import EmptyState, { SearchEmptySVG } from "@/components/ui/EmptyState";
 import { createPosOrder, completeTableOrder } from '@/lib/actions';
 import { updateStaffDecision } from '@/lib/customer-actions';
+import { closeSession } from '@/lib/session-actions';
 import { useRouter } from 'next/navigation';
 import { Rnd } from "react-rnd";
 import { supabase } from '@/lib/supabase/client';
@@ -98,6 +99,21 @@ function LiveFloorPlanView({
     setIsProcessing(false);
   };
 
+  const handleCloseSession = async (sessionId: string) => {
+    setIsProcessing(true);
+    const res = await closeSession(sessionId);
+    if (res.success) {
+      await fetchLiveTables();
+      setSelectedTable(null);
+    } else {
+      alert("Failed to close session.");
+    }
+    setIsProcessing(false);
+  };
+
+  const activeSession = selectedTable?.sessions?.find((s: any) => ['ACTIVE', 'BILL_REQUESTED'].includes(s.status));
+  const sessionTotal = activeSession?.orders?.reduce((sum: number, o: any) => sum + (o.status !== 'REJECTED' && o.status !== 'CANCELLED' ? o.total : 0), 0) || 0;
+
   return (
     <>
       <div id="pos-left-pane-floorplan" className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-[#F9FAFB] relative border-r border-gray-200">
@@ -116,10 +132,11 @@ function LiveFloorPlanView({
           <div className="relative w-[2000px] h-[2000px]">
             {tables.map((table) => {
               const isSelected = selectedTable?.id === table.id;
-              const hasActiveSession = table.sessions && table.sessions.length > 0 && table.sessions[0].status === "OPEN";
+              const hasActiveSession = table.sessions && table.sessions.length > 0 && ['ACTIVE', 'BILL_REQUESTED'].includes(table.sessions[0].status);
+              const isBillRequested = hasActiveSession && table.sessions[0].status === 'BILL_REQUESTED';
               
-              const borderColor = isSelected ? '#111827' : hasActiveSession ? '#9CA3AF' : '#E5E7EB';
-              const badgeColor = hasActiveSession ? 'bg-gray-900' : 'bg-gray-200';
+              const borderColor = isSelected ? '#111827' : isBillRequested ? '#EF4444' : hasActiveSession ? '#9CA3AF' : '#E5E7EB';
+              const badgeColor = isBillRequested ? 'bg-red-500 animate-pulse' : hasActiveSession ? 'bg-gray-900' : 'bg-gray-200';
 
               return (
                 <Rnd
@@ -142,7 +159,7 @@ function LiveFloorPlanView({
                   }}
                 >
                   <div className="flex flex-col items-center justify-center text-center">
-                    <span className="font-black text-gray-900 text-lg">{table.label}</span>
+                    <span className={`font-black text-lg ${isBillRequested ? 'text-red-500' : 'text-gray-900'}`}>{table.label}</span>
                     <span className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-1">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                       {table.seats || 4}
@@ -196,7 +213,7 @@ function LiveFloorPlanView({
         <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden p-3 sm:p-4 bg-gray-50/50 min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center justify-between mb-3 sm:mb-4 min-w-0">
             <h3 className="font-extrabold text-gray-900 text-[10px] sm:text-xs uppercase tracking-widest truncate">Live Orders</h3>
-            <span className="bg-gray-200 text-gray-700 text-xs font-black px-2 py-0.5 rounded-full shrink-0">{selectedTable?.sessions?.[0]?.orders?.length || 0}</span>
+            <span className="bg-gray-200 text-gray-700 text-xs font-black px-2 py-0.5 rounded-full shrink-0">{activeSession?.orders?.length || 0}</span>
           </div>
           
           {!selectedTable ? (
@@ -205,7 +222,7 @@ function LiveFloorPlanView({
               <p className="text-xs sm:text-sm font-bold text-gray-900">No Table Selected</p>
               <p className="text-[10px] sm:text-xs text-gray-500 mt-1 px-4">Tap a table on the map</p>
             </div>
-          ) : !selectedTable.sessions?.[0]?.orders?.length ? (
+          ) : !activeSession?.orders?.length ? (
             <div className="text-center py-12 sm:py-20 flex flex-col items-center opacity-70">
               <ShoppingCart size={40} strokeWidth={1} className="text-gray-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
               <p className="text-xs sm:text-sm font-bold text-gray-900">Table is empty</p>
@@ -213,7 +230,20 @@ function LiveFloorPlanView({
             </div>
           ) : (
             <div className="space-y-2.5 sm:space-y-3 min-w-0">
-              {selectedTable.sessions[0].orders.map((order: any) => (
+              
+              <div className="bg-gray-900 text-white rounded-xl p-4 shadow-sm mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-sm">Session Total</span>
+                  <span className="text-xl font-black">${sessionTotal.toFixed(2)}</span>
+                </div>
+                {activeSession.status === 'BILL_REQUESTED' && (
+                  <div className="mt-3 bg-red-500/20 text-red-100 border border-red-500/30 rounded-lg py-2 px-3 text-xs font-bold flex items-center justify-center gap-2 animate-pulse">
+                    <Bell size={14} /> Bill Requested by Customer
+                  </div>
+                )}
+              </div>
+
+              {activeSession.orders.map((order: any) => (
                  <div key={order.id} className="p-3 sm:p-4 bg-white rounded-[16px] border border-gray-100 shadow-sm">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-50">
                       <span className={`text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${order.status === 'PENDING' ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>{order.status}</span>
@@ -234,6 +264,14 @@ function LiveFloorPlanView({
                     )}
                  </div>
               ))}
+
+              <button 
+                onClick={() => handleCloseSession(activeSession.id)}
+                disabled={isProcessing}
+                className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-colors flex justify-center items-center gap-2"
+              >
+                {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />} Settle & Close Session
+              </button>
             </div>
           )}
         </div>

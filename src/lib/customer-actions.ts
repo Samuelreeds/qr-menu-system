@@ -6,20 +6,24 @@ import { revalidatePath } from "next/cache";
 
 export async function placeCustomerOrder(data: {
   shopId: string;
-  tableNumber: string; // Using label (e.g., "T1")
+  tableNumber?: string; // Support both incoming prop names
+  tableId?: string; 
   total: number;
   items: any[];
 }) {
   try {
+    // Extract the table label (e.g., "T1") safely
+    const tableLabel = data.tableNumber || data.tableId || "Unknown";
+
     return await prisma.$transaction(async (tx) => {
-      // 1. Find the table using shopId and the label (tableNumber)
+      // 1. Find the table to get its real database ID
       const table = await tx.table.findUnique({
-        where: { shopId_label: { shopId: data.shopId, label: data.tableNumber } }
+        where: { shopId_label: { shopId: data.shopId, label: tableLabel } }
       });
       
       if (!table) throw new Error("Table not found");
 
-      // 2. Find or Create Active Session using Table ID
+      // 2. Find or Create Active Session
       let session = await tx.tableSession.findFirst({
         where: { tableId: table.id, status: "ACTIVE" }
       });
@@ -29,7 +33,7 @@ export async function placeCustomerOrder(data: {
           data: { 
             shopId: data.shopId, 
             status: "ACTIVE",
-            table: { connect: { id: table.id } } // Explicitly connect the table relation
+            table: { connect: { id: table.id } } // Explicitly connect the table
           }
         });
       }
@@ -45,7 +49,7 @@ export async function placeCustomerOrder(data: {
           tableSessionId: session.id, // Correct relation
           orderNumber: generatedOrderNumber,
           orderType: "TABLE",
-          tableNumber: data.tableNumber, // Saved as string
+          tableNumber: tableLabel, // Store the label "T1" here, NOT the tableId
           subtotal: data.total,
           discount: 0,
           tax: 0,
