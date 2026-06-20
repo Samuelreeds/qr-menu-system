@@ -22,7 +22,8 @@ import {
   Image as ImageIcon, ChevronDown, ChevronUp, Store, Palette, Share2,
   Globe, Facebook, Instagram, Send, Youtube, Twitter, Linkedin,
   Check, List, Pencil, ExternalLink, QrCode, ChevronLeft, ChevronRight,
-  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users, Layers, DollarSign
+  Info, Loader2, Clock, Lock, MoreVertical, Hash, ClipboardList, ShoppingCart, Activity, Package, Sparkles, Users, Layers, DollarSign,ChefHat,
+  UtensilsCrossed
 } from 'lucide-react'; 
 
 import LazyImage from "@/components/ui/LazyImage";
@@ -653,6 +654,17 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           <nav className="space-y-2 flex-1 min-h-0 overflow-y-auto no-scrollbar [-webkit-overflow-scrolling:touch]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {featPos && (<><NavItem id="overview" icon={Activity} label="Overview" /><NavItem id="pos" icon={ShoppingCart} label="POS" /><NavItem id="orders" icon={ClipboardList} label="Orders" /></>)}
             {!isFreePlan && <NavItem id="tables" icon={QrCode} label="Tables & QR" />}
+             {/* --- ADD THIS KITCHEN LINK --- */}
+              <a 
+                href="/admin/kitchen" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className={`w-full flex items-center py-3 rounded-xl transition-all min-w-0 ${!showText ? 'justify-center px-0' : 'justify-start px-4 gap-3'} text-gray-500 font-medium hover:bg-gray-50 active:scale-[0.98]`}
+              >
+                <UtensilsCrossed size={20} className="shrink-0" />
+                {showText && <span className="font-medium truncate">Kitchen Display</span>}
+              </a>
+              {/* ----------------------------- */}
             {isAdmin && (
               <div className="mt-8 pt-4 border-t border-gray-100">
                 {showText ? <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-4 animate-in fade-in duration-300">Management</span> : <div className="h-px w-8 bg-gray-200 mx-auto mb-3 mt-1 rounded-full"></div>}

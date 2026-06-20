@@ -4,7 +4,8 @@ import { getServerSession } from 'next-auth';
 import AdminDashboard from '@/features/admin/AdminDashboard';
 import { getShopPlanState, getShopLimitsAndFeatures } from '@/lib/shop-guard';
 import { redirect } from 'next/navigation';
-import { ShiftProvider } from '@/context/ShiftContext'; // <--- ADDED IMPORT
+import { ShiftProvider } from '@/context/ShiftContext';
+
 
 export const revalidate = 0;
 
