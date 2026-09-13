@@ -6,4 +6,7 @@ export default defineConfig({
   datasource: {
     url: env("DIRECT_URL"),
   },
+  migrations: {
+    seed: "node --loader ts-node/esm prisma/seed.ts",
+  },
 });

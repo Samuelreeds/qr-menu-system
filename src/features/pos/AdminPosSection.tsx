@@ -461,7 +461,8 @@ export default function AdminPosSection({
         productId: i.productId, 
         name: i.name, 
         price: i.price, 
-        qty: i.qty, 
+        quantity: i.qty, // FIX: Explicitly send 'quantity' for Prisma OrderItem schema
+        qty: i.qty,      // Retained for backwards compatibility if needed elsewhere
         notes: i.notes, 
         customization: i.customization 
       }))
@@ -484,6 +485,8 @@ export default function AdminPosSection({
             const res = await createPosOrder(orderPayload);
             if (res?.success && res.order) {
                 finalOrderForReceipt = res.order;
+                const previewText = generateReceiptText(finalOrderForReceipt, shopName);
+                console.log("=== RECEIPT PREVIEW ===\n", previewText);
                 if (orderType === 'table') completeTableOrder(res.order.id).catch(console.error);
             } else {
                 throw new Error(res?.error || "Server rejected order");
@@ -496,12 +499,15 @@ export default function AdminPosSection({
         // OPTIMISTIC PRINTING
         if (shouldPrint && printerUrl && finalOrderForReceipt) {
             const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
-            
-            fetch(`${printerUrl}/print`, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ text: receiptText }) 
-            })
+    
+              // ADD THIS LINE to view the exact layout in your browser console (F12)
+              console.log("=== RECEIPT PREVIEW ==\n", receiptText);
+              
+              fetch(`${printerUrl}/print`, { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ text: receiptText }) 
+              })
             .then(printRes => {
                 if (printRes.ok) {
                    addSuccessToast("Receipt Printed"); // FIXED
