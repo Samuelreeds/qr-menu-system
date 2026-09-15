@@ -2207,3 +2207,90 @@ export async function settleUnpaidOrder(orderId: string, paymentMethod: string, 
     return { success: false, error: "Failed to settle payment" };
   }
 }
+
+// Add this to the BOTTOM of your src/lib/actions.ts file
+
+export async function executeInventoryImport(items: { 
+  id?: string, name: string, unit: string, current: number, max: number, lowThreshold: number 
+}[]) {
+  if (!(await checkIsAdmin())) return { success: false, error: "Unauthorized" };
+  
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "No active shop" };
+
+  const session = await getServerSession(authOptions);
+  const staffName = session?.user?.email?.split('@')[0] || "System Import";
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        if (item.id) {
+          // UPDATE EXISTING ITEM
+          const existing = await tx.ingredient.findUnique({ where: { id: item.id } });
+          
+          if (existing && existing.shopId === shopId) {
+            const stockDiff = item.current - existing.current;
+
+            await tx.ingredient.update({
+              where: { id: item.id },
+              data: {
+                name: item.name,
+                unit: item.unit,
+                max: item.max,
+                lowThreshold: item.lowThreshold,
+                current: item.current
+              }
+            });
+
+            // Log adjustment only if stock actually changed
+            if (stockDiff !== 0) {
+              await tx.stockLog.create({
+                data: {
+                  shopId,
+                  ingredientId: item.id,
+                  change: stockDiff,
+                  reason: stockDiff > 0 ? "Restock" : "Manual",
+                  staffName,
+                  previousStock: existing.current,
+                  newStock: item.current
+                }
+              });
+            }
+          }
+        } else {
+          // CREATE NEW ITEM
+          const newItem = await tx.ingredient.create({
+            data: {
+              shopId,
+              name: item.name,
+              unit: item.unit,
+              current: item.current,
+              max: item.max,
+              lowThreshold: item.lowThreshold
+            }
+          });
+
+          // Log initial stock creation
+          if (item.current > 0) {
+            await tx.stockLog.create({
+              data: {
+                shopId,
+                ingredientId: newItem.id,
+                change: item.current,
+                reason: "Restock",
+                staffName,
+                previousStock: 0,
+                newStock: item.current
+              }
+            });
+          }
+        }
+      }
+    });
+    
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: "Transaction failed: " + error.message };
+  }
+}

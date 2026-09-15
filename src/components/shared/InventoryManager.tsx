@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { AlertTriangle, X, Search, Copy, CheckCircle2, ChevronDown, Loader2, Plus, Package, Trash2 } from "lucide-react";
-import { adjustStockAction, createIngredient, getInventory, deleteInventoryItem } from "@/lib/actions";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { AlertTriangle, X, Search, Copy, CheckCircle2, ChevronDown, Loader2, Plus, Package, Trash2, MoreHorizontal, Download, Upload, FileSpreadsheet } from "lucide-react";
+import { adjustStockAction, createIngredient, getInventory, deleteInventoryItem, executeInventoryImport } from "@/lib/actions";
+import * as XLSX from 'xlsx';
 
 type AdjustmentReason = "Restock" | "Sold" | "Waste" | "Manual";
 
-// --- Custom Debounce Hook ---
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   useEffect(() => {
@@ -26,33 +26,35 @@ export default function InventoryManager({
   stockLogs?: any[];
 }) {
   
-  // --- BULLETPROOF STATE MANAGEMENT ---
-  // Start with server data for an instant load, then manage it locally to prevent Next.js cache glitches.
   const [localIngredients, setLocalIngredients] = useState<any[]>(ingredients);
   const [localLogs, setLocalLogs] = useState<any[]>(stockLogs);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Silently fetches the absolute latest DB data in the background
   const syncWithServer = async () => {
     const data = await getInventory();
     if (data.ingredients) setLocalIngredients(data.ingredients);
     if (data.logs) setLocalLogs(data.logs);
   };
 
-  // Run a silent sync when the component first mounts just to be safe
-  useEffect(() => {
-    syncWithServer();
-  }, []);
+  useEffect(() => { syncWithServer(); }, []);
 
-  // Search & Filter State
+  // Filter & Search States
   const [cardSearch, setCardSearch] = useState("");
   const debouncedSearch = useDebounce(cardSearch, 300);
-  
   const [cardFilter, setCardFilter] = useState<"All" | "Low">("All");
   const [logFilter, setLogFilter] = useState<"All" | AdjustmentReason>("All");
   const [logVisibleCount, setLogVisibleCount] = useState(10);
   
-  // Modals State
+  // UX Header Menu State
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importErrors, setImportErrors] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Existing Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [adjustmentMode, setAdjustmentMode] = useState<"restock" | "adjust">("restock");
@@ -66,11 +68,10 @@ export default function InventoryManager({
   const [newItemMax, setNewItemMax] = useState<number | "">("");
   const [newItemThreshold, setNewItemThreshold] = useState<number | "">(20);
 
-  // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
 
-  // --- Memoized Filtering ---
+  // --- MEMOS ---
   const lowStockItems = useMemo(() => {
     return localIngredients.filter(ing => (ing.current / ing.max) * 100 < ing.lowThreshold);
   }, [localIngredients]);
@@ -87,18 +88,136 @@ export default function InventoryManager({
 
   const paginatedLog = useMemo(() => {
     const filtered = localLogs.filter(entry => logFilter === "All" ? true : entry.reason === logFilter);
-    return {
-      items: filtered.slice(0, logVisibleCount),
-      total: filtered.length
-    };
+    return { items: filtered.slice(0, logVisibleCount), total: filtered.length };
   }, [localLogs, logFilter, logVisibleCount]);
 
-  // --- HANDLERS ---
-  const openModal = (item: any, mode: "restock" | "adjust") => {
-    if (item.id.startsWith("temp-")) {
-      alert("This item is still being saved to the database. Please wait a few seconds.");
-      return;
+
+  // --- EXCEL IMPORT/EXPORT WORKFLOW ---
+
+  const handleDownloadTemplate = () => {
+    const templateData = [{
+      "ID (DO NOT EDIT)": "", // Leave blank to create new items
+      "Item Name": "Example Coffee Beans",
+      "Unit": "kg",
+      "Current Stock": 10,
+      "Max Capacity": 20,
+      "Low Alert Threshold (%)": 20
+    }];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "Inventory_Import_Template.xlsx");
+    setMenuOpen(false);
+  };
+
+  const handleExportStock = () => {
+    const exportData = localIngredients.map(ing => ({
+      "ID (DO NOT EDIT)": ing.id,
+      "Item Name": ing.name,
+      "Unit": ing.unit,
+      "Current Stock": ing.current,
+      "Max Capacity": ing.max,
+      "Low Alert Threshold (%)": ing.lowThreshold
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+    XLSX.writeFile(wb, `Inventory_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setMenuOpen(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        const parsed: any[] = [];
+        let errorCount = 0;
+
+        data.forEach((row: any, idx: number) => {
+          const id = row["ID (DO NOT EDIT)"]?.toString().trim();
+          const name = row["Item Name"]?.toString().trim();
+          const unit = row["Unit"]?.toString().trim();
+          const current = Number(row["Current Stock"]);
+          const max = Number(row["Max Capacity"]);
+          const lowThreshold = Number(row["Low Alert Threshold (%)"]);
+
+          let status = 'create';
+          let errorMsg = '';
+
+          // 1. Structural Validation
+          if (!name) errorMsg += 'Missing Name. ';
+          if (!unit) errorMsg += 'Missing Unit. ';
+          if (isNaN(current) || current < 0) errorMsg += 'Invalid Current Stock. ';
+          if (isNaN(max) || max <= 0) errorMsg += 'Invalid Max Capacity. ';
+          if (isNaN(lowThreshold) || lowThreshold < 0 || lowThreshold > 100) errorMsg += 'Invalid Threshold. ';
+
+          // 2. Database Matching & Logic Validation
+          if (id) {
+            const existing = localIngredients.find(i => i.id === id);
+            if (!existing) {
+              errorMsg += `ID not found in database. `;
+            } else {
+              status = 'update';
+            }
+          } else {
+            const existingName = localIngredients.find(i => i.name.toLowerCase() === name?.toLowerCase());
+            if (existingName) {
+              errorMsg += `Item already exists (Missing ID). `;
+            }
+          }
+
+          if (errorMsg) {
+             status = 'error';
+             errorCount++;
+          }
+
+          parsed.push({ rowNum: idx + 2, id, name, unit, current, max, lowThreshold, status, errorMsg });
+        });
+
+        setImportPreview(parsed);
+        setImportErrors(errorCount);
+      } catch (err) {
+        alert("Failed to parse Excel file. Please use the provided template.");
+      }
+    };
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = ""; 
+  };
+
+  const executeImport = async () => {
+    if (importErrors > 0 || isProcessing || importPreview.length === 0) return;
+    setIsProcessing(true);
+
+    const payload = importPreview.map(p => ({
+      id: p.id, name: p.name, unit: p.unit, current: p.current, max: p.max, lowThreshold: p.lowThreshold
+    }));
+
+    const res = await executeInventoryImport(payload);
+    if (res.success) {
+      await syncWithServer();
+      setIsImportModalOpen(false);
+      setImportPreview([]);
+    } else {
+      alert("Import Failed: " + res.error);
     }
+    setIsProcessing(false);
+  };
+
+
+  // --- EXISTING HANDLERS ---
+
+  const openModal = (item: any, mode: "restock" | "adjust") => {
+    if (item.id.startsWith("temp-")) return alert("This item is still being saved to the database. Please wait.");
     setSelectedItem(item);
     setAdjustmentMode(mode);
     setReason(mode === "restock" ? "Restock" : "Manual");
@@ -115,30 +234,13 @@ export default function InventoryManager({
     const expectedNewStock = Math.max(0, selectedItem.current + changeAmount);
     const tempLogId = `temp-log-${Date.now()}`;
 
-    // 1. INSTANT UI UPDATE
     setLocalIngredients(prev => prev.map(item => item.id === selectedItem.id ? { ...item, current: expectedNewStock } : item));
-    setLocalLogs(prev => [
-      {
-        id: tempLogId,
-        ingredientName: selectedItem.name,
-        change: changeAmount,
-        reason: reason,
-        staffName: userName,
-        newStock: expectedNewStock,
-        timestamp: new Date()
-      },
-      ...prev
-    ]);
+    setLocalLogs(prev => [{ id: tempLogId, ingredientName: selectedItem.name, change: changeAmount, reason: reason, staffName: userName, newStock: expectedNewStock, timestamp: new Date() }, ...prev]);
     setIsModalOpen(false); 
 
-    // 2. BACKGROUND DATABASE UPDATE
     const res = await adjustStockAction(selectedItem.id, changeAmount, reason, userName);
-    if (res.success) {
-      await syncWithServer(); 
-    } else {
-      alert(res.error || "Failed to adjust stock. Changes reverted.");
-      await syncWithServer(); 
-    }
+    if (!res.success) alert(res.error || "Failed to adjust stock. Changes reverted.");
+    await syncWithServer(); 
     setIsProcessing(false);
   };
 
@@ -149,59 +251,31 @@ export default function InventoryManager({
     setIsProcessing(true);
     const maxNum = Number(newItemMax);
     const thresholdNum = Number(newItemThreshold);
-    const tempId = `temp-${Date.now()}`;
-
-    // 1. INSTANT UI UPDATE
-    const tempItem = {
-      id: tempId,
-      name: newItemName,
-      unit: newItemUnit,
-      current: maxNum,
-      max: maxNum,
-      lowThreshold: thresholdNum
-    };
     
-    setLocalIngredients(prev => [...prev, tempItem].sort((a, b) => a.name.localeCompare(b.name)));
     setIsCreateModalOpen(false);
 
-    // 2. BACKGROUND DATABASE UPDATE
-    const res = await createIngredient({
-      name: newItemName, 
-      unit: newItemUnit, 
-      max: maxNum, 
-      lowThreshold: thresholdNum
-    });
-
+    const res = await createIngredient({ name: newItemName, unit: newItemUnit, max: maxNum, lowThreshold: thresholdNum });
     if (res.success) {
-      setNewItemName(""); 
-      setNewItemUnit("kg"); 
-      setNewItemMax(""); 
-      setNewItemThreshold(20);
-      await syncWithServer(); 
+      setNewItemName(""); setNewItemUnit("kg"); setNewItemMax(""); setNewItemThreshold(20);
     } else {
       alert(res.error || "Failed to create ingredient");
-      await syncWithServer(); 
     }
+    await syncWithServer(); 
     setIsProcessing(false);
   };
 
   const executeDelete = async () => {
     if (!itemToDelete || isProcessing) return;
-
     setIsProcessing(true);
-    const id = itemToDelete.id;
     
-    // 1. Optimistic UI update
+    const id = itemToDelete.id;
     setLocalIngredients(prev => prev.filter(item => item.id !== id));
     setIsDeleteModalOpen(false); 
 
-    // 2. Database update
     const res = await deleteInventoryItem(id);
-    if (!res.success) {
-      alert(res.error || "Failed to delete item.");
-      await syncWithServer(); 
-    }
+    if (!res.success) alert(res.error || "Failed to delete item.");
     
+    await syncWithServer(); 
     setIsProcessing(false);
     setItemToDelete(null);
   };
@@ -226,6 +300,71 @@ export default function InventoryManager({
   return (
     <div className="w-full pb-12 font-sans text-gray-800 animate-in fade-in duration-300">
       
+      {/* --- RESPONSIVE TOOLBAR (Approved UX) --- */}
+      <div className="flex flex-col gap-5 mb-8">
+         {/* Top Row: Title + Action Buttons */}
+         <div className="flex items-center justify-between">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 hidden md:block">Stock Levels</h2>
+
+            {/* Mobile Actions */}
+            <div className="flex md:hidden w-full justify-between items-center gap-2 relative">
+              <h2 className="text-xl font-bold text-gray-900">Stock Levels</h2>
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95">
+                    <Plus size={14} /> Add Item
+                  </button>
+                  <div className="relative">
+                    <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 bg-white border border-gray-200 text-gray-700 rounded-lg active:scale-95"><MoreHorizontal size={16}/></button>
+                    {menuOpen && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50">
+                         <button onClick={() => { setIsImportModalOpen(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 border-b flex items-center gap-2"><Upload size={14}/> Import Excel</button>
+                         <button onClick={handleExportStock} className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 border-b flex items-center gap-2"><Download size={14}/> Export All Stock</button>
+                         <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 text-blue-600 flex items-center gap-2"><FileSpreadsheet size={14}/> Download Template</button>
+                      </div>
+                    )}
+                  </div>
+              </div>
+            </div>
+
+            {/* Desktop Actions */}
+            <div className="hidden md:flex items-center gap-2">
+              <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-800 transition-colors active:scale-95">
+                <Plus size={14} strokeWidth={3} /> Add New Item
+              </button>
+              <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
+                <Upload size={14} /> Import
+              </button>
+              <button onClick={handleExportStock} className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
+                <Download size={14} /> Export
+              </button>
+              <div className="relative">
+                <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center justify-center w-9 h-9 bg-white border border-gray-200 text-gray-700 rounded-lg shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
+                  <MoreHorizontal size={16} strokeWidth={3} />
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50">
+                     <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2">
+                       <FileSpreadsheet size={14} /> Download Excel Template
+                     </button>
+                  </div>
+                )}
+              </div>
+            </div>
+         </div>
+
+         {/* Bottom Row: Filters & Search */}
+         <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+           <div className="flex bg-gray-100 p-1.5 rounded-xl w-full sm:w-auto">
+                <button onClick={() => setCardFilter("All")} className={`flex-1 sm:flex-none px-5 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "All" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>All Items</button>
+                <button onClick={() => setCardFilter("Low")} className={`flex-1 sm:flex-none px-5 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "Low" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Low Stock</button>
+           </div>
+           <div className="relative w-full sm:w-64 sm:ml-auto">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input placeholder="Search items..." value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:ring-2 focus:ring-gray-900 transition-all shadow-sm" />
+           </div>
+         </div>
+      </div>
+
       {lowStockItems.length > 0 && (
         <div className="mb-8 bg-red-50 border border-red-100 rounded-3xl p-5 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
@@ -249,29 +388,8 @@ export default function InventoryManager({
         </div>
       )}
 
-      {/* STOCK LEVELS SECTION */}
+      {/* STOCK LEVEL CARDS */}
       <div className="mb-12">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-gray-900">Stock Levels</h2>
-            <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-sm">
-              <Plus size={14} strokeWidth={3} /> Add New Item
-            </button>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-            <div className="flex bg-gray-100 p-1.5 rounded-xl w-full sm:w-auto">
-              <button onClick={() => setCardFilter("All")} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "All" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>All Items</button>
-              <button onClick={() => setCardFilter("Low")} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "Low" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Low Stock</button>
-            </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input placeholder="Search items..." value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:ring-2 focus:ring-gray-900 transition-all shadow-sm" />
-            </div>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {displayedIngredients.map(item => {
             const pct = (item.current / item.max) * 100;
@@ -284,16 +402,12 @@ export default function InventoryManager({
                     {isLow && <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border border-red-100">LOW</span>}
                     <button 
                       onClick={() => {
-                        if (item.id.startsWith("temp-")) {
-                          alert("This item is still being saved to the database. Please wait a few seconds.");
-                          return;
-                        }
+                        if (item.id.startsWith("temp-")) return alert("Please wait for this item to finish saving.");
                         setItemToDelete({ id: item.id, name: item.name });
                         setIsDeleteModalOpen(true);
                       }} 
                       disabled={isProcessing}
                       className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1 rounded-md transition-colors disabled:opacity-50" 
-                      title="Delete Item"
                     >
                       <Trash2 size={14} strokeWidth={2.5} />
                     </button>
@@ -315,13 +429,13 @@ export default function InventoryManager({
             <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-gray-200 shadow-sm">
               <Package size={32} className="mx-auto text-gray-300 mb-3" />
               <p className="text-gray-900 font-bold text-sm">No items found</p>
-              <p className="text-gray-400 font-medium text-xs mt-1">Click "Add New Item" to create your first stock item.</p>
+              <p className="text-gray-400 font-medium text-xs mt-1">Adjust your filters or add a new item.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ADJUSTMENT LOG */}
+      {/* ADJUSTMENT LOG (Unchanged from original) */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
           <h2 className="text-xl font-bold text-gray-900">Adjustment Log</h2>
@@ -370,7 +484,102 @@ export default function InventoryManager({
         </div>
       </div>
 
-      {/* MODAL 1: UPDATE/ADJUST EXISTING ITEM */}
+
+      {/* --- EXCEL IMPORT PREVIEW MODAL --- */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white shrink-0">
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Import Inventory Excel</h3>
+                <p className="text-xs text-gray-500 mt-1">Upload your populated Excel template to bulk update stock.</p>
+              </div>
+              <button onClick={() => { setIsImportModalOpen(false); setImportPreview([]); setImportErrors(0); }} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95"><X size={20} /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto bg-gray-50 flex-1">
+              {importPreview.length === 0 ? (
+                <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center bg-white flex flex-col items-center justify-center">
+                  <Upload size={32} className="text-gray-300 mb-4" />
+                  <p className="text-sm font-bold text-gray-900 mb-1">Select Excel File</p>
+                  <p className="text-xs text-gray-500 mb-6">Must be .xlsx format generated from the template.</p>
+                  <input type="file" accept=".xlsx, .xls" className="hidden" id="excel-upload" ref={fileInputRef} onChange={handleFileUpload} />
+                  <label htmlFor="excel-upload" className="bg-gray-900 text-white text-xs font-bold px-5 py-3 rounded-xl cursor-pointer hover:bg-gray-800 transition-colors shadow-sm active:scale-95">
+                    Browse Files
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Items Found</p>
+                      <p className="text-lg font-black text-gray-900">{importPreview.length}</p>
+                    </div>
+                    <div className="flex-1 border-l border-gray-100 pl-4">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Action</p>
+                      <p className="text-sm font-bold text-gray-700">
+                        {importPreview.filter(p => p.status === 'create').length} New / {importPreview.filter(p => p.status === 'update').length} Updates
+                      </p>
+                    </div>
+                    <div className="flex-1 border-l border-gray-100 pl-4">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</p>
+                      {importErrors > 0 ? (
+                        <p className="text-sm font-bold text-red-600 flex items-center gap-1.5"><AlertTriangle size={14}/> {importErrors} Errors found</p>
+                      ) : (
+                        <p className="text-sm font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle2 size={14}/> Ready to Import</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto max-h-[400px]">
+                      <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                        <thead className="sticky top-0 bg-gray-100 shadow-sm z-10">
+                          <tr className="text-gray-500 font-bold uppercase tracking-wider">
+                            <th className="p-3 pl-4">Row</th><th className="p-3">Action</th><th className="p-3">Name</th><th className="p-3">Stock</th><th className="p-3">Max</th><th className="p-3">Issues</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {importPreview.map(row => (
+                            <tr key={row.rowNum} className={row.status === 'error' ? 'bg-red-50/50' : 'hover:bg-gray-50'}>
+                              <td className="p-3 pl-4 font-medium text-gray-400">{row.rowNum}</td>
+                              <td className="p-3">
+                                {row.status === 'create' && <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">CREATE</span>}
+                                {row.status === 'update' && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">UPDATE</span>}
+                                {row.status === 'error' && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">ERROR</span>}
+                              </td>
+                              <td className="p-3 font-bold text-gray-900">{row.name || '—'}</td>
+                              <td className="p-3 font-medium text-gray-700">{row.current} {row.unit}</td>
+                              <td className="p-3 font-medium text-gray-500">{row.max}</td>
+                              <td className="p-3 text-red-600 font-medium">{row.errorMsg || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  {importErrors > 0 && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs font-bold text-center">
+                      Please fix the errors in your Excel file and upload again.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 bg-white shrink-0 flex gap-3">
+               <button onClick={() => { setIsImportModalOpen(false); setImportPreview([]); setImportErrors(0); }} disabled={isProcessing} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold active:scale-95 transition-all text-sm disabled:opacity-50">Cancel</button>
+               <button onClick={executeImport} disabled={importErrors > 0 || importPreview.length === 0 || isProcessing} className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold active:scale-95 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                 {isProcessing ? <Loader2 size={16} className="animate-spin"/> : "Confirm Import"}
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* EXISTING MODALS (Update/Adjust/Create/Delete) UNCHANGED BELOW */}
       {isModalOpen && selectedItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -407,7 +616,6 @@ export default function InventoryManager({
         </div>
       )}
 
-      {/* MODAL 2: CREATE NEW ITEM */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -419,36 +627,16 @@ export default function InventoryManager({
               <div className="space-y-4 mb-8">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Item Name</label>
-                  <input 
-                    type="text" 
-                    value={newItemName} 
-                    onChange={(e) => setNewItemName(e.target.value)} 
-                    required 
-                    placeholder="e.g. Espresso Beans" 
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" 
-                  />
+                  <input type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} required placeholder="e.g. Espresso Beans" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Max Capacity</label>
-                    <input 
-                      type="number" 
-                      step="0.1" 
-                      min="0.1" 
-                      value={newItemMax} 
-                      onChange={(e) => setNewItemMax(e.target.value ? Number(e.target.value) : "")} 
-                      required 
-                      placeholder="e.g. 20" 
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" 
-                    />
+                    <input type="number" step="0.1" min="0.1" value={newItemMax} onChange={(e) => setNewItemMax(e.target.value ? Number(e.target.value) : "")} required placeholder="e.g. 20" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Unit</label>
-                    <select 
-                      value={newItemUnit} 
-                      onChange={(e) => setNewItemUnit(e.target.value)} 
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm cursor-pointer"
-                    >
+                    <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm cursor-pointer">
                       <option value="kg">kg</option>
                       <option value="liters">liters</option>
                       <option value="pcs">pcs</option>
@@ -459,19 +647,9 @@ export default function InventoryManager({
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Low Alert Threshold (%)</label>
                   <div className="relative">
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="99" 
-                      value={newItemThreshold} 
-                      onChange={(e) => setNewItemThreshold(e.target.value ? Number(e.target.value) : "")} 
-                      required 
-                      placeholder="e.g. 20" 
-                      className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" 
-                    />
+                    <input type="number" min="1" max="99" value={newItemThreshold} onChange={(e) => setNewItemThreshold(e.target.value ? Number(e.target.value) : "")} required placeholder="e.g. 20" className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 text-sm outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 transition-all shadow-sm" />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">%</span>
                   </div>
-                  <p className="text-[10px] text-gray-400 font-medium mt-1.5 ml-1">You will be alerted when stock drops below this %.</p>
                 </div>
               </div>
               <button type="submit" disabled={isProcessing} className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-4 rounded-xl shadow-md transition-all active:scale-[0.98] text-[15px] disabled:opacity-50">
@@ -482,7 +660,6 @@ export default function InventoryManager({
         </div>
       )}
 
-      {/* MODAL 3: DELETE CONFIRMATION */}
       {isDeleteModalOpen && itemToDelete && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 p-6 md:p-8">
@@ -494,25 +671,14 @@ export default function InventoryManager({
               Are you sure you want to delete <span className="font-bold text-gray-700">"{itemToDelete.name}"</span>? This action cannot be undone.
             </p>
             <div className="flex gap-3 w-full">
-              <button 
-                onClick={() => setIsDeleteModalOpen(false)} 
-                disabled={isProcessing}
-                className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={executeDelete} 
-                disabled={isProcessing}
-                className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm disabled:opacity-50"
-              >
+              <button onClick={() => setIsDeleteModalOpen(false)} disabled={isProcessing} className="flex-1 py-3.5 px-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-[16px] md:text-sm disabled:opacity-50">Cancel</button>
+              <button onClick={executeDelete} disabled={isProcessing} className="flex-1 py-3.5 px-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center text-[16px] md:text-sm disabled:opacity-50">
                 {isProcessing ? <Loader2 className="animate-spin" size={18} /> : "Delete"}
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
