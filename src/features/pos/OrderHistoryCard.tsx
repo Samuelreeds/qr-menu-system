@@ -300,14 +300,15 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
                       </div>
                       <div className="flex-1 min-w-0 pt-0.5">
                         <p className="text-xs font-bold text-gray-900 leading-tight pr-2">{item.name} <span className="text-gray-400 font-medium">×{qty}</span></p>
+                        
                         {item.customization && (
                           <p className="text-[10px] text-gray-500 mt-1">
                             {item.customization.size} 
                             {item.customization.mood && `, ${item.customization.mood}`} 
-                            {item.customization.sugar && `, ${item.customization.sugar} sugar`} 
-                            {item.customization.ice && `, ${item.customization.ice} ice`}
+                            {/* SUGAR AND ICE COMPLETELY REMOVED FROM HERE */}
                           </p>
                         )}
+                        
                         {toppingsArray.length > 0 && (
                           <p className="text-[10px] text-gray-600 mt-0.5 italic">
                             + {toppingsArray.map((t: any) => t.name).join(', ')}
