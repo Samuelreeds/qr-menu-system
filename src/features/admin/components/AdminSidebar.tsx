@@ -1,3 +1,4 @@
+// src/components/shared/AdminSidebar.tsx (or your specific path)
 'use client';
 
 import React from 'react';
@@ -92,7 +93,7 @@ export default function AdminSidebar({
 
       <aside
         ref={sidebarRef}
-        className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:static flex-shrink-0 flex flex-col ${
+        className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:sticky lg:top-0 lg:h-screen flex-shrink-0 flex flex-col ${
           isMobileMenuOpen
             ? 'translate-x-0 w-64'
             : `-translate-x-full lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`

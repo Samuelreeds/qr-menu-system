@@ -641,7 +641,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         <button onClick={() => handleTabClick('settings')} className="p-2 bg-gray-50 rounded-xl text-gray-700 active:scale-95 transition-transform shrink-0"><Settings size={20} /></button>
       </div>
 
-      <aside ref={sidebarRef} className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:static flex-shrink-0 flex flex-col ${isMobileMenuOpen ? 'translate-x-0 w-64' : `-translate-x-full lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`} print:hidden`}>
+      <aside ref={sidebarRef} className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 transition-all duration-300 lg:sticky lg:top-0 lg:h-[100dvh] flex-shrink-0 flex flex-col ${isMobileMenuOpen ? 'translate-x-0 w-64' : `-translate-x-full lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`} print:hidden`}>
         <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden lg:flex absolute -right-4 top-8 w-8 h-8 bg-gray-900 text-white border-2 border-white rounded-full items-center justify-center shadow-md hover:bg-gray-800 hover:scale-110 z-50 transition-all active:scale-95 cursor-pointer ring-4 ring-white">{isSidebarCollapsed ? <ChevronRight size={16} strokeWidth={2.5} /> : <ChevronLeft size={16} strokeWidth={2.5} />}</button>
         <div className={`pb-6 pt-20 lg:pt-8 h-full flex flex-col overflow-hidden transition-all duration-300 ${isSidebarCollapsed && !isMobileMenuOpen ? 'px-3' : 'px-6'}`}>
           <div className={`mb-6 hidden lg:flex items-center ${isSidebarCollapsed && !isMobileMenuOpen ? 'justify-center' : 'justify-start'}`}>
