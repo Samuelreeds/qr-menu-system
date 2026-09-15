@@ -39,10 +39,12 @@ export default function InventoryManager({
 
   useEffect(() => { syncWithServer(); }, []);
 
-  // Filter & Search States
+  // Filter, Search & Pagination States
   const [cardSearch, setCardSearch] = useState("");
   const debouncedSearch = useDebounce(cardSearch, 300);
   const [cardFilter, setCardFilter] = useState<"All" | "Low">("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  
   const [logFilter, setLogFilter] = useState<"All" | AdjustmentReason>("All");
   const [logVisibleCount, setLogVisibleCount] = useState(10);
   
@@ -72,6 +74,11 @@ export default function InventoryManager({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
 
+  // Reset pagination when search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, cardFilter]);
+
   // --- MEMOS ---
   const lowStockItems = useMemo(() => {
     return localIngredients.filter(ing => (ing.current / ing.max) * 100 < ing.lowThreshold);
@@ -86,6 +93,11 @@ export default function InventoryManager({
       return matchesSearch && matchesFilter;
     });
   }, [localIngredients, debouncedSearch, cardFilter]);
+
+  // Pagination Logic (10 per page)
+  const itemsPerPage = 10;
+  const totalPages = Math.max(1, Math.ceil(displayedIngredients.length / itemsPerPage));
+  const paginatedIngredients = displayedIngredients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const paginatedLog = useMemo(() => {
     const filtered = localLogs.filter(entry => logFilter === "All" ? true : entry.reason === logFilter);
@@ -159,12 +171,11 @@ export default function InventoryManager({
           if (isNaN(max) || max <= 0) errorMsg += 'Invalid Max Capacity. ';
           if (isNaN(lowThreshold) || lowThreshold < 0 || lowThreshold > 100) errorMsg += 'Invalid Threshold. ';
 
-          // Map item ID automatically using the Name
           if (name) {
             const existing = localIngredients.find(i => i.name.toLowerCase() === name.toLowerCase());
             if (existing) {
               status = 'update';
-              matchedId = existing.id; // Quietly attach the real database ID for the backend
+              matchedId = existing.id; 
             }
           }
 
@@ -365,10 +376,10 @@ export default function InventoryManager({
       <div className="mb-12 bg-white border border-gray-200 rounded-[12px] shadow-sm overflow-hidden flex flex-col">
         
         {/* Table Toolbar */}
-        <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
-            <div className="flex w-full sm:w-auto overflow-x-auto no-scrollbar gap-6 px-3">
-              <button onClick={() => setCardFilter("All")} className={`pb-3 text-[13px] font-bold transition-all border-b-2 whitespace-nowrap ${cardFilter === "All" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>All Items</button>
-              <button onClick={() => setCardFilter("Low")} className={`pb-3 text-[13px] font-bold transition-all border-b-2 whitespace-nowrap ${cardFilter === "Low" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>Low Stock</button>
+        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
+            <div className="flex w-full sm:w-auto overflow-x-auto no-scrollbar gap-6 px-2">
+              <button onClick={() => setCardFilter("All")} className={`pb-3 text-[13px] font-extrabold transition-all border-b-[3px] whitespace-nowrap ${cardFilter === "All" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>All Items</button>
+              <button onClick={() => setCardFilter("Low")} className={`pb-3 text-[13px] font-extrabold transition-all border-b-[3px] whitespace-nowrap ${cardFilter === "Low" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>Low Stock</button>
             </div>
             <div className="relative w-full sm:w-72">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
@@ -378,74 +389,85 @@ export default function InventoryManager({
 
         {/* The Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
-              <tr className="bg-white border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                <th className="p-4 pl-6 w-[35%]">Name</th>
+              <tr className="bg-white border-b border-gray-200 text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
+                <th className="p-4 pl-6 w-[5%]">No.</th>
+                <th className="p-4 w-[30%]">Name</th>
                 <th className="p-4 w-[25%]">Stock Level</th>
                 <th className="p-4 w-[15%]">Status</th>
                 <th className="p-4 text-right pr-6 w-[25%]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {displayedIngredients.map(item => {
+              {paginatedIngredients.map((item, idx) => {
                 const pct = (item.current / item.max) * 100;
                 const isLow = pct < item.lowThreshold;
+                const rowIndex = (currentPage - 1) * itemsPerPage + idx + 1;
                 
                 return (
                   <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                    {/* Index / Order Number */}
+                    <td className="p-4 pl-6 font-bold text-gray-400 text-[12px]">
+                      {rowIndex}
+                    </td>
+
                     {/* Item Name */}
-                    <td className="p-4 pl-6 font-bold text-gray-900 text-[13px]">
+                    <td className="p-4 font-extrabold text-gray-900 text-[13px]">
                       {item.name}
                     </td>
                     
-                    {/* Stock Level with mini Progress Bar */}
-                    <td className="p-4 flex flex-col justify-center">
-                      <span className="text-[12px] font-bold text-gray-700 mb-1">
-                        {item.current.toFixed(1)} / {item.max} <span className="text-gray-400 font-medium">{item.unit}</span>
+                    {/* Stock Level with Solid Bottom Bar */}
+                    <td className="p-4 flex flex-col justify-center pt-5">
+                      <span className="text-[13px] font-extrabold text-gray-900 mb-1">
+                        {item.current.toFixed(1)} / {item.max} <span className="text-gray-400 font-medium text-xs ml-0.5">{item.unit}</span>
                       </span>
-                      <div className="w-full max-w-[120px] bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-500 ${isLow ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-                      </div>
+                      {/* Only showing the filled color bar per your design */}
+                      <div 
+                        className={`h-1.5 mt-0.5 rounded-full transition-all duration-500 ${isLow ? 'bg-[#ff3b3b]' : 'bg-[#10b981]'}`} 
+                        style={{ width: `${Math.min(100, Math.max(0, pct))}%`, maxWidth: '100px' }} 
+                      />
                     </td>
 
                     {/* Status Pill */}
                     <td className="p-4">
                       {isLow ? (
-                         <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border border-red-100">Low Stock</span>
+                         <span className="bg-red-50 text-[#ff3b3b] text-[10px] font-extrabold px-2.5 py-1 rounded border border-red-100 tracking-wider">LOW</span>
                       ) : (
-                         <span className="bg-emerald-50 text-emerald-600 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border border-emerald-100">Good</span>
+                         <span className="bg-emerald-50 text-[#10b981] text-[10px] font-extrabold px-2.5 py-1 rounded border border-emerald-100 tracking-wider">GOOD</span>
                       )}
                     </td>
 
                     {/* Actions */}
-                    <td className="p-4 pr-6 flex items-center justify-end gap-2">
-                      <button onClick={() => openModal(item, "restock")} className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
-                        + Restock
-                      </button>
-                      <button onClick={() => openModal(item, "adjust")} className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
-                        − Adjust
-                      </button>
-                      <div className="w-px h-4 bg-gray-200 mx-1 hidden sm:block"></div>
-                      <button 
-                        onClick={() => {
-                          if (item.id.startsWith("temp-")) return alert("Please wait for this item to save.");
-                          setItemToDelete({ id: item.id, name: item.name });
-                          setIsDeleteModalOpen(true);
-                        }} 
-                        disabled={isProcessing}
-                        className="text-gray-400 hover:text-red-500 p-1.5 rounded transition-colors disabled:opacity-50" 
-                        title="Delete Item"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                    <td className="p-4 pr-6">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button onClick={() => openModal(item, "restock")} className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
+                          + Restock
+                        </button>
+                        <button onClick={() => openModal(item, "adjust")} className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
+                          − Adjust
+                        </button>
+                        <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                        <button 
+                          onClick={() => {
+                            if (item.id.startsWith("temp-")) return alert("Please wait for this item to save.");
+                            setItemToDelete({ id: item.id, name: item.name });
+                            setIsDeleteModalOpen(true);
+                          }} 
+                          disabled={isProcessing}
+                          className="text-gray-400 hover:text-red-500 p-1.5 rounded transition-colors disabled:opacity-50" 
+                          title="Delete Item"
+                        >
+                          <Trash2 size={16} strokeWidth={2} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
-              {displayedIngredients.length === 0 && (
+              {paginatedIngredients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-16 text-center">
+                  <td colSpan={5} className="py-16 text-center">
                     <Package size={32} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-gray-900 font-bold text-sm">No items found</p>
                     <p className="text-gray-400 font-medium text-xs mt-1">Adjust your filters or add a new item.</p>
@@ -455,6 +477,31 @@ export default function InventoryManager({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-white">
+            <span className="text-xs font-bold text-gray-500">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, displayedIngredients.length)} of {displayedIngredients.length} entries
+            </span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border border-gray-200 rounded-md text-xs font-bold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Previous
+              </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border border-gray-200 rounded-md text-xs font-bold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ADJUSTMENT LOG (Unchanged) */}
