@@ -97,12 +97,19 @@ export default function BillingPanel({
 
   const handleConfirmOwedPayment = () => {
     setIsPaymentModalOpen(false);
-    // Use "CASH" but amountReceived is 0 to signify Unpaid/Owed
     onProceedToConfirm("CASH", deliveryAgent, promoCode, discountType, discountValue, isTaxEnabled, "USD", 0, 0, printReceipt);
   };
 
   return (
     <>
+      <style>{`
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+      `}</style>
+
       <div className="p-3 sm:p-4 border-b border-gray-100 shrink-0 bg-white z-20 min-w-0">
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -145,7 +152,15 @@ export default function BillingPanel({
 
       <div className="flex-1 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden p-3 sm:p-4 bg-gray-50/50 min-w-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <div className="flex items-center justify-between mb-3 sm:mb-4 min-w-0">
-          <h3 className="font-extrabold text-gray-900 text-[10px] sm:text-xs uppercase tracking-widest truncate">Current Order</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-extrabold text-gray-900 text-[10px] sm:text-xs uppercase tracking-widest truncate">Current Order</h3>
+            {/* FEATURE 3: Table Information Display */}
+            {orderType === 'table' && tableNumber && (
+              <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-sm uppercase tracking-wider">
+                TABLE: {tableNumber}
+              </span>
+            )}
+          </div>
           <span className="bg-gray-200 text-gray-700 text-xs font-black px-2 py-0.5 rounded-full shrink-0">{items.length}</span>
         </div>
         
@@ -171,18 +186,42 @@ export default function BillingPanel({
                     <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold truncate mt-0.5">
                       {[
                         item.customization.size && item.customization.size !== 'Default' ? `Size ${item.customization.size}` : null,
-                        item.customization.sugar ? `${item.customization.sugar}% Sug` : null,
                         ...(item.customization.toppings || []).map(t => t.qty > 0 ? `+${t.qty}x ${t.name}` : null)
                       ].filter(Boolean).join(' • ')}
                     </p>
                   </div>
                   <div className="flex items-center justify-between mt-2 min-w-0">
                     <span className="font-black text-xs sm:text-sm text-gray-900 truncate pr-2">${(item.price * item.qty).toFixed(2)}</span>
-                    <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-6 sm:h-7 shrink-0">
-                      <button className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-l-lg" onClick={() => onQtyChange(item.id, -1)}>−</button>
-                      <span className="w-5 sm:w-6 text-center text-[10px] sm:text-xs font-bold text-gray-900 bg-white border-x border-gray-200 h-full flex items-center justify-center">{item.qty}</span>
-                      <button className="w-6 sm:w-7 h-full flex items-center justify-center text-gray-500 hover:text-gray-900 font-medium active:bg-gray-100 rounded-r-lg" onClick={() => onQtyChange(item.id, 1)}>+</button>
+                    
+                    {/* FEATURE 4: Improved Quantity Controls */}
+                    <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-8 sm:h-10 shrink-0">
+                      <button 
+                        className="w-8 sm:w-10 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 hover:bg-gray-200 font-medium active:bg-gray-300 rounded-l-lg transition-colors text-lg" 
+                        onClick={() => onQtyChange(item.id, -1)}
+                      >−</button>
+                      
+                      <input 
+                        type="number" 
+                        className="w-8 sm:w-10 text-center text-xs sm:text-sm font-bold text-gray-900 bg-white border-x border-gray-200 h-full flex items-center justify-center outline-none focus:ring-2 focus:ring-gray-900 m-0 p-0"
+                        style={{ MozAppearance: 'textfield' }}
+                        value={item.qty}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          if (e.target.value === '') return;
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 0) {
+                            // Automatically calculate the delta relative to current quantity to feed into the existing cart state
+                            onQtyChange(item.id, val - item.qty);
+                          }
+                        }}
+                      />
+
+                      <button 
+                        className="w-8 sm:w-10 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 hover:bg-gray-200 font-medium active:bg-gray-300 rounded-r-lg transition-colors text-lg" 
+                        onClick={() => onQtyChange(item.id, 1)}
+                      >+</button>
                     </div>
+
                   </div>
                 </div>
               </div>

@@ -20,14 +20,14 @@ export default function PosCustomizationModal({
 
   const [customization, setCustomization] = useState<ProductCustomization>({
     size: "", 
-    sugar: "50",
-    ice: "Normal", // Keeps the backend happy, but hidden from UI
+    sugar: "50", // Retained for backend safety
+    ice: "Normal", // Retained for backend safety
     toppings: [], 
   });
   
   const [notes, setNotes] = useState("");
   
-  const { isDrink } = product; // Linter fix applied
+  const { isDrink } = product; 
   const hasVariants = product.variants && product.variants.length > 0 && product.variants.some(v => v.name !== 'Default');
   const activeBasePrice = product.variants?.[selectedVariantIndex]?.price ?? product.price;
 
@@ -96,22 +96,7 @@ export default function PosCustomizationModal({
                </div>
              )}
 
-             {isDrink && (
-               <div>
-                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">Sugar Level</p>
-                 <div className="flex gap-2">
-                   {(["0", "50", "100"] as const).map((v) => (
-                     <button 
-                       key={v} 
-                       className={`flex-1 py-3 rounded-xl text-sm font-bold border-2 transition-all duration-200 ease-out active:scale-95 ${customization.sugar === v ? "border-gray-900 bg-gray-900 text-white shadow-md" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"}`} 
-                       onClick={() => setCustomization((c) => ({ ...c, sugar: v }))}
-                     >
-                       {v}%
-                     </button>
-                   ))}
-                 </div>
-               </div>
-             )}
+             {/* SUGAR LEVEL UI REMOVED ENTIRELY FROM HERE */}
 
              <div>
                <div className="flex justify-between items-center mb-3 px-1">

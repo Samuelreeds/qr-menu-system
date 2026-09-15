@@ -54,7 +54,6 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
   
   text += '-'.repeat(MAX_LEN) + '\n';
   
-  // NEW FORMAT: Item (20) | Qty x Price (16) | Total (12)
   text += `${padRight('Item', 20)}${padRight('Qty x Price', 16)}${padLeft('Total', 12)}\n`;
   text += '-'.repeat(MAX_LEN) + '\n';
   
@@ -66,7 +65,6 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
     const toppingsArray = item.toppings || item.customization?.toppings || [];
     const itemToppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
     
-    // Calculate unit price explicitly
     const unitPrice = itemPrice + itemToppingsPrice;
     const itemTotal = unitPrice * qty;
     
@@ -79,8 +77,8 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
        let mods = [];
        if (item.customization?.size && item.customization.size !== 'Default') mods.push(item.customization.size);
        if (item.customization?.mood) mods.push(item.customization.mood);
-       if (item.customization?.sugar) mods.push(`Sug:${item.customization.sugar}%`);
-       if (item.customization?.ice) mods.push(`${item.customization.ice} ice`);
+       
+       // SUGAR AND ICE COMPLETELY REMOVED FROM HERE
        
        if (toppingsArray.length > 0) {
          toppingsArray.forEach((t: any) => {
@@ -112,8 +110,6 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
   text += '-'.repeat(MAX_LEN) + '\n';
   text += `${padRight('TOTAL (USD):', 36)}${padLeft('$' + totals.total.toFixed(2), 12)}\n`;
   text += `${padRight('TOTAL (KHR):', 34)}${padLeft((totals.total * EXCHANGE_RATE).toLocaleString() + ' R', 14)}\n`;
-  
-  // STRIPPED PAYMENT AND CHANGE AMOUNTS HERE
   
   text += '-'.repeat(MAX_LEN) + '\n';
   text += center('Thank you for your visit!', MAX_LEN) + '\n';
@@ -317,6 +313,9 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
               const unitPrice = itemPrice + toppingsTotal;
               const itemTotal = unitPrice * qty;
 
+              // Check if there's actually a valid size to show
+              const hasValidSize = item.customization?.size && item.customization.size !== 'Default';
+
               return (
                 <React.Fragment key={idx}>
                   <tr>
@@ -325,13 +324,10 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
                     <td>{itemTotal.toFixed(2)}</td>
                   </tr>
                   
-                  {item.customization && (
+                  {hasValidSize && (
                     <tr>
                       <td colSpan={3} style={{ fontSize: '10px', color: '#555', textTransform: 'none', paddingBottom: '0' }}>
-                        {[
-                          item.customization.size && item.customization.size !== 'Default' ? item.customization.size : null,
-                          item.customization.sugar ? `Sug:${item.customization.sugar}%` : null
-                        ].filter(Boolean).join(' | ')}
+                        {item.customization.size}
                       </td>
                     </tr>
                   )}
@@ -382,8 +378,6 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
           <span className="total-label">TOTAL</span>
           <span className="total-amount">${totals.total.toFixed(2)}</span>
         </div>
-
-        {/* STRIPPED PAYMENT AMOUNT AND CHANGE FROM UI */}
 
         {/* FOOTER */}
         <div className="receipt-footer">
