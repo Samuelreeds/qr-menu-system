@@ -54,22 +54,26 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
   
   text += '-'.repeat(MAX_LEN) + '\n';
   
-  text += `${padRight('Qty', 4)}${padRight('Item', 34)}${padLeft('Total', 10)}\n`;
+  // NEW FORMAT: Item (20) | Qty x Price (16) | Total (12)
+  text += `${padRight('Item', 20)}${padRight('Qty x Price', 16)}${padLeft('Total', 12)}\n`;
   text += '-'.repeat(MAX_LEN) + '\n';
   
   order.items?.forEach((item: any) => {
     const qty = Number(item.quantity || item.qty || 1);
-    const qtyStr = `${qty}x`; 
     const nameStr = item.name;
 
     const itemPrice = Number(item.price) || 0;
     const toppingsArray = item.toppings || item.customization?.toppings || [];
     const itemToppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
-    const itemTotal = (itemPrice + itemToppingsPrice) * qty;
     
+    // Calculate unit price explicitly
+    const unitPrice = itemPrice + itemToppingsPrice;
+    const itemTotal = unitPrice * qty;
+    
+    const qtyPriceStr = `${qty} x $${unitPrice.toFixed(2)}`;
     const totalStr = `$${itemTotal.toFixed(2)}`;
     
-    text += `${padRight(qtyStr, 4)}${padRight(nameStr, 34)}${padLeft(totalStr, 10)}\n`;
+    text += `${padRight(nameStr, 20)}${padRight(qtyPriceStr, 16)}${padLeft(totalStr, 12)}\n`;
     
     if (item.customization || toppingsArray.length > 0) {
        let mods = [];
@@ -97,29 +101,21 @@ export function generateReceiptText(order: any, shopName: string, isReprint: boo
   
   text += '-'.repeat(MAX_LEN) + '\n';
   
-  text += `${padRight('Subtotal:', 38)}${padLeft('$' + totals.baseSubtotal.toFixed(2), 10)}\n`;
+  text += `${padRight('Subtotal:', 36)}${padLeft('$' + totals.baseSubtotal.toFixed(2), 12)}\n`;
   
   if (totals.toppingsTotal > 0) {
-    text += `${padRight('Add-ons:', 38)}${padLeft('$' + totals.toppingsTotal.toFixed(2), 10)}\n`;
+    text += `${padRight('Add-ons:', 36)}${padLeft('$' + totals.toppingsTotal.toFixed(2), 12)}\n`;
   }
-  if (totals.discount > 0) text += `${padRight('Discount:', 38)}${padLeft('-$' + totals.discount.toFixed(2), 10)}\n`;
-  if (totals.tax > 0) text += `${padRight('Tax (10%):', 38)}${padLeft('$' + totals.tax.toFixed(2), 10)}\n`;
+  if (totals.discount > 0) text += `${padRight('Discount:', 36)}${padLeft('-$' + totals.discount.toFixed(2), 12)}\n`;
+  if (totals.tax > 0) text += `${padRight('Tax (10%):', 36)}${padLeft('$' + totals.tax.toFixed(2), 12)}\n`;
   
   text += '-'.repeat(MAX_LEN) + '\n';
   text += `${padRight('TOTAL (USD):', 36)}${padLeft('$' + totals.total.toFixed(2), 12)}\n`;
   text += `${padRight('TOTAL (KHR):', 34)}${padLeft((totals.total * EXCHANGE_RATE).toLocaleString() + ' R', 14)}\n`;
   
-  if (order.amountReceived !== undefined) {
-    const changeAmount = order.amountReceived - totals.total;
-    const symbol = order.currency === 'KHR' ? 'R' : '$';
-    const multiplier = order.currency === 'KHR' ? EXCHANGE_RATE : 1;
-    
-    text += `${padRight('Received:', 36)}${padLeft(symbol + (order.amountReceived * multiplier).toLocaleString(), 12)}\n`;
-    text += `${padRight('Change:', 36)}${padLeft(symbol + (Math.max(changeAmount, 0) * multiplier).toLocaleString(), 12)}\n`;
-  }
+  // STRIPPED PAYMENT AND CHANGE AMOUNTS HERE
   
   text += '-'.repeat(MAX_LEN) + '\n';
-  text += `Payment: ${order.paymentMethod || 'N/A'}\n\n`;
   text += center('Thank you for your visit!', MAX_LEN) + '\n';
   text += center('Powered by Scandine', MAX_LEN) + '\n';
   text += '\n\n\n\n\n\n\n\n';
@@ -194,7 +190,7 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
         .logo-icon { width: 72px; height: 72px; margin: 0 auto 10px; display: block; }
         .store-name {
           font-family: 'Arial Black', Arial, sans-serif;
-          font-size: 28px; /* INCREASED FROM 22px */
+          font-size: 28px; 
           font-weight: 900;
           letter-spacing: 2px;
           line-height: 1.2;
@@ -222,16 +218,14 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
           font-size: 11px;
           letter-spacing: 0.5px;
         }
-        .items-table thead th:first-child { text-align: left; width: 28px; }
+        .items-table thead th:first-child { text-align: left; }
         .items-table thead th:nth-child(2) { text-align: left; }
         .items-table thead th:nth-child(3) { text-align: right; }
-        .items-table thead th:nth-child(4) { text-align: right; }
 
         .items-table tbody td { padding: 3px 0; color: #222; vertical-align: top; }
-        .items-table tbody td:first-child { text-align: left; font-weight: 600; }
-        .items-table tbody td:nth-child(2) { text-align: left; text-transform: uppercase; }
-        .items-table tbody td:nth-child(3) { text-align: right; }
-        .items-table tbody td:nth-child(4) { text-align: right; font-weight: 600; }
+        .items-table tbody td:first-child { text-align: left; font-weight: 600; text-transform: uppercase; }
+        .items-table tbody td:nth-child(2) { text-align: left; }
+        .items-table tbody td:nth-child(3) { text-align: right; font-weight: 600; }
 
         .total-row { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 10px; }
         .total-label {
@@ -258,7 +252,7 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
           margin-top: 8px;
           color: #333;
         }
-        .payment-row { display: flex; gap: 20px; }
+        .payment-row { display: flex; gap: 20px; width: 100%; justify-content: space-between; }
         .payment-row span:first-child { font-weight: 600; }
         .payment-row span:last-child  { font-weight: 700; font-family: 'Courier New', monospace; }
 
@@ -308,9 +302,8 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
         <table className="items-table">
           <thead>
             <tr>
-              <th>Qty</th>
               <th>Item</th>
-              <th>Price</th>
+              <th>Qty x Price</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -320,20 +313,20 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
               const toppings = item.customization?.toppings || [];
               const itemPrice = Number(item.price) || 0;
               const toppingsTotal = toppings.reduce((sum: number, t: any) => sum + ((Number(t.price) || 0) * (Number(t.qty) || 1)), 0);
-              const itemTotal = (itemPrice + toppingsTotal) * qty;
+              
+              const unitPrice = itemPrice + toppingsTotal;
+              const itemTotal = unitPrice * qty;
 
               return (
                 <React.Fragment key={idx}>
                   <tr>
-                    <td>{qty}</td>
                     <td>{item.name}</td>
-                    <td>{(itemPrice + toppingsTotal).toFixed(2)}</td>
+                    <td>{qty} x ${unitPrice.toFixed(2)}</td>
                     <td>{itemTotal.toFixed(2)}</td>
                   </tr>
                   
                   {item.customization && (
                     <tr>
-                      <td></td>
                       <td colSpan={3} style={{ fontSize: '10px', color: '#555', textTransform: 'none', paddingBottom: '0' }}>
                         {[
                           item.customization.size && item.customization.size !== 'Default' ? item.customization.size : null,
@@ -345,7 +338,6 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
                   
                   {toppings.length > 0 && toppings.map((t: any, tIdx: number) => (
                     <tr key={`t-${idx}-${tIdx}`}>
-                      <td></td>
                       <td colSpan={3} style={{ fontSize: '10px', color: '#666', fontStyle: 'italic', textTransform: 'none', paddingTop: '0' }}>
                         + {t.qty || 1}x {t.name}
                       </td>
@@ -360,24 +352,24 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
         <hr className="divider-dashed" />
 
         {/* SUBTOTAL & TAX */}
-        <div className="payment-summary" style={{ alignItems: 'space-between', width: '100%' }}>
-          <div className="payment-row" style={{ width: '100%', justifyContent: 'space-between' }}>
+        <div className="payment-summary">
+          <div className="payment-row">
             <span>Subtotal</span>
             <span>${totals.baseSubtotal.toFixed(2)}</span>
           </div>
           {totals.toppingsTotal > 0 && (
-            <div className="payment-row" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <div className="payment-row">
               <span>Add-ons</span>
               <span>${totals.toppingsTotal.toFixed(2)}</span>
             </div>
           )}
           {totals.discount > 0 && (
-            <div className="payment-row" style={{ width: '100%', justifyContent: 'space-between', color: '#d32f2f' }}>
+            <div className="payment-row" style={{ color: '#d32f2f' }}>
               <span>Discount</span>
               <span>-${totals.discount.toFixed(2)}</span>
             </div>
           )}
-          <div className="payment-row" style={{ width: '100%', justifyContent: 'space-between' }}>
+          <div className="payment-row">
             <span>Tax (10%)</span>
             <span>${totals.tax.toFixed(2)}</span>
           </div>
@@ -391,19 +383,7 @@ export default function PosReceipt({ order, shopName }: PosReceiptProps) {
           <span className="total-amount">${totals.total.toFixed(2)}</span>
         </div>
 
-        {/* PAYMENT AMOUNT */}
-        {order.amountReceived !== undefined && (
-          <div className="payment-summary">
-            <div className="payment-row">
-              <span>{order.paymentMethod || 'Paid'}</span>
-              <span>${order.amountReceived.toFixed(2)}</span>
-            </div>
-            <div className="payment-row">
-              <span>Change</span>
-              <span>${Math.max((order.amountReceived - totals.total), 0).toFixed(2)}</span>
-            </div>
-          </div>
-        )}
+        {/* STRIPPED PAYMENT AMOUNT AND CHANGE FROM UI */}
 
         {/* FOOTER */}
         <div className="receipt-footer">
