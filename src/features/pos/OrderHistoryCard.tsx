@@ -2,11 +2,25 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { ShoppingCart, ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer, X, Loader2, CheckCircle } from 'lucide-react';
+import { ChevronDown, Image as ImageIcon, Banknote, CreditCard, Trash2, XCircle, AlertTriangle, Printer, X, Loader2, CheckCircle } from 'lucide-react';
 import { deleteOrder, updateOrderStatus, settleUnpaidOrder } from '@/lib/actions';
 import { generateReceiptText, getCorrectedOrderTotals, EXCHANGE_RATE } from '@/components/shared/PosReceipt';
 
-export default function OrderHistoryCard({ order, shopName = "Store", printerUrl, qrImage }: { order: any, shopName?: string, printerUrl?: string, qrImage?: string | null }) {
+export default function OrderHistoryCard({ 
+  order, 
+  shopName = "Store", 
+  printerUrl, 
+  qrImage,
+  isSelected,
+  onToggleSelect
+}: { 
+  order: any, 
+  shopName?: string, 
+  printerUrl?: string, 
+  qrImage?: string | null,
+  isSelected?: boolean,
+  onToggleSelect?: (id: string) => void
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -14,25 +28,21 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
   const [optimisticIsPaid, setOptimisticIsPaid] = useState(order.isPaid);
   const [isOptimisticallyDeleted, setIsOptimisticallyDeleted] = useState(false);
   
-  // Unified Modal States
   const [modalAction, setModalAction] = useState<'delete' | 'cancel' | 'pay' | null>(null);
   const [activeTab, setActiveTab] = useState<'cash' | 'khqr'>('cash');
   const [printReceipt, setPrintReceipt] = useState(true);
 
-  // Cash Calculation States
   const [cashReceivedUSD, setCashReceivedUSD] = useState("");
   const [cashReceivedKHR, setCashReceivedKHR] = useState("");
 
   const totals = getCorrectedOrderTotals(order);
-  const itemSummary = order.items?.map((i: any) => `${i.name} ×${i.quantity || i.qty}`).join(', ') || 'No items';
+  const itemCount = order.items?.reduce((sum: number, i: any) => sum + (i.quantity || i.qty || 1), 0) || 0;
   
   const isCancelled = optimisticStatus === 'CANCELLED';
   const isUnpaid = optimisticIsPaid === false; 
-  const amountReceived = optimisticIsPaid ? totals.total : Number(order.amountReceived || 0);
 
-  const priceColor = isCancelled ? 'text-gray-400 line-through' : isUnpaid ? 'text-red-500' : 'text-green-600';
+  const priceColor = isCancelled ? 'text-gray-400 line-through' : isUnpaid ? 'text-red-500' : 'text-gray-900';
 
-  // Safe Cash Math Calculations
   const parsedUSD = parseFloat(cashReceivedUSD) || 0;
   const parsedKHR = parseFloat(cashReceivedKHR) || 0;
   const totalReceivedInUSD = parsedUSD + (parsedKHR / EXCHANGE_RATE);
@@ -71,7 +81,6 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
     startTransition(async () => { 
       await settleUnpaidOrder(order.id, method, totals.total); 
       
-      // Handle Auto-Printing for settled orders
       if (printReceipt && printerUrl) {
         try {
           const updatedOrderForReceipt = {
@@ -113,24 +122,20 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
   };
 
   return (
-    <>
-      {/* UNIFIED PAYMENT MODAL */}
+    <div className={`bg-white transition-colors duration-200 ${isCancelled ? 'opacity-75' : ''} ${isSelected ? 'bg-blue-50/20' : ''}`}>
+      
+      {/* --- PAYMENT & ACTION MODALS (Unchanged logic) --- */}
       {modalAction === 'pay' && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col">
-            
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden p-6 md:p-8 animate-in zoom-in-95 duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-5">
               <h3 className="font-extrabold text-gray-900 text-xl">Settle Payment</h3>
               <button onClick={() => setModalAction(null)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors active:scale-95"><X size={20} /></button>
             </div>
-
-            {/* TAB NAVIGATION */}
             <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
               <button onClick={() => setActiveTab("cash")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'cash' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cash</button>
               <button onClick={() => setActiveTab("khqr")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'khqr' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>KHQR</button>
             </div>
-
-            {/* COMMON HEADER (Total Due) */}
             <div className="mb-6 text-center py-4 bg-gray-50 rounded-2xl border border-gray-100">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Due</p>
               <div className="flex flex-col items-center justify-center gap-0.5">
@@ -138,8 +143,6 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
                 <p className="text-sm font-bold text-gray-500">{(totals.total * EXCHANGE_RATE).toLocaleString()} ៛</p>
               </div>
             </div>
-
-            {/* TAB CONTENT: CASH */}
             {activeTab === 'cash' && (
               <div className="space-y-4 mb-6">
                 <div className="grid grid-cols-2 gap-3">
@@ -170,19 +173,12 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
                 {!isPaymentSufficient && totalReceivedInUSD > 0 && <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-xl text-xs font-bold text-center">Received amount is less than total</div>}
               </div>
             )}
-
-            {/* TAB CONTENT: KHQR */}
             {activeTab === 'khqr' && (
               <div className="bg-white p-4 rounded-3xl border-2 border-gray-100 mb-6 w-full flex justify-center shadow-sm relative overflow-hidden">
                 {qrImage ? <img src={qrImage} alt="Shop KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10" /> : <img src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`KHQR_PAYMENT_FOR_${totals.total}`)}`} alt="Default KHQR Code" className="w-48 h-48 sm:w-56 sm:h-56 object-contain relative z-10 mix-blend-multiply opacity-50" />}
               </div>
             )}
-
-            {/* SHARED FOOTER ACTION AREA */}
-            <div 
-              className={`mb-5 border-2 rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all ${printReceipt ? 'bg-gray-900 border-gray-900' : 'bg-gray-50 border-gray-200'}`} 
-              onClick={() => setPrintReceipt(!printReceipt)}
-            >
+            <div className={`mb-5 border-2 rounded-2xl p-4 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all ${printReceipt ? 'bg-gray-900 border-gray-900' : 'bg-gray-50 border-gray-200'}`} onClick={() => setPrintReceipt(!printReceipt)}>
               <div className="flex items-center gap-3">
                 <span className="text-xl">🖨️</span>
                 <span className={`text-[15px] font-extrabold ${printReceipt ? 'text-white' : 'text-gray-500'}`}>Auto-Print Receipt</span>
@@ -191,13 +187,11 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
                 <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${printReceipt ? 'translate-x-6 left-0.5' : 'translate-x-0 left-0.5'}`} />
               </div>
             </div>
-
             {activeTab === 'cash' && (
                <button onClick={() => handleConfirmPayment('CASH')} disabled={isPending || !isPaymentSufficient} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-[15px] hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                  {isPending && <Loader2 className="animate-spin" size={18} />} Confirm Payment
                </button>
             )}
-
             {activeTab === 'khqr' && (
                <div className="w-full flex gap-3">
                  <button onClick={() => handleConfirmPayment("CASH")} disabled={isPending} className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-bold text-[14px] hover:bg-gray-800 disabled:opacity-50 shadow-md active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1">
@@ -212,10 +206,9 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
         </div>
       )}
 
-      {/* CANCEL & DELETE MODAL */}
       {(modalAction === 'cancel' || modalAction === 'delete') && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+          <div className="bg-white rounded-[32px] p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-5 ${modalAction === 'delete' ? 'bg-red-100' : 'bg-orange-100'}`}>
               {modalAction === 'delete' ? <Trash2 size={24} className="text-red-500" /> : <AlertTriangle size={24} className="text-orange-500" />}
             </div>
@@ -233,150 +226,209 @@ export default function OrderHistoryCard({ order, shopName = "Store", printerUrl
         </div>
       )}
 
-      {/* MAIN CARD UI */}
-      <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md ${isCancelled ? 'opacity-75' : ''}`}>
-        <div className="p-4 flex items-center justify-between cursor-pointer active:bg-gray-50/50" onClick={() => setIsExpanded(!isExpanded)}>
-          <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
-            <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 shadow-inner">
-              <ShoppingCart size={16} className="text-gray-400" />
+
+      {/* --- DESKTOP ROW PRESENTATION (Strict Grid) --- */}
+      <div 
+        className="hidden md:flex items-center px-4 py-4 w-full hover:bg-gray-50 cursor-pointer transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        {/* 1. Checkbox & Order ID */}
+        <div className="w-[30%] min-w-[200px] flex items-center gap-3">
+          {onToggleSelect && (
+            <div className="shrink-0 pl-1" onClick={e => e.stopPropagation()}>
+              <input 
+                type="checkbox" 
+                checked={isSelected} 
+                onChange={() => onToggleSelect(order.id)} 
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer accent-blue-600" 
+              />
             </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`font-black text-sm ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                  #ORD-{(order.orderNumber || order.id).slice(-4).toUpperCase()}
-                </span>
-                {isCancelled ? (
-                  <span className="bg-red-50 text-red-600 border border-red-100 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md">Cancelled</span>
-                ) : isUnpaid ? (
-                  <span className="bg-orange-50 text-orange-600 border border-orange-100 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md">Unpaid</span>
-                ) : (
-                  <span className="bg-green-50 text-green-600 border border-green-100 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md">{optimisticStatus || 'Completed'}</span>
-                )}
-              </div>
-              <p className="text-xs text-gray-400 font-medium truncate w-full max-w-[250px] sm:max-w-md">{itemSummary}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-6 shrink-0">
-            <div className="hidden sm:flex flex-col items-end">
-              <span className={`font-black text-sm ${priceColor}`}>
-                {isUnpaid ? 'Unpaid' : `$${totals.total.toFixed(2)}`}
-              </span>
-              <span className={`font-bold text-[10px] ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-500'}`}>
-                {isUnpaid ? `Amount Recv: $${amountReceived.toFixed(2)}` : (totals.total * EXCHANGE_RATE).toLocaleString() + ' ៛'}
-              </span>
-              <div className="flex items-center gap-1 text-[10px] text-gray-400 font-medium mt-0.5">
-                {order.paymentMethod === 'CASH' ? <Banknote size={10}/> : <CreditCard size={10}/>}
-                {order.paymentMethod}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 border-l border-gray-100 pl-2 sm:pl-4 ml-2 sm:ml-0">
-              <button onClick={handlePrint} className="p-2 text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors active:scale-95 hidden sm:flex">
-                <Printer size={16} />
-              </button>
-              <button className="text-gray-400 hover:text-gray-900 transition-transform duration-200 p-2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                <ChevronDown size={18} />
-              </button>
-            </div>
+          )}
+          <div className="flex flex-col">
+            <span className="font-extrabold text-gray-900 text-[13px]">
+              #ORD-{(order.orderNumber || order.id).slice(-6).toUpperCase()}
+            </span>
+            <span className="text-[11px] text-gray-400 mt-0.5">
+              {new Date(order.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+            </span>
           </div>
         </div>
 
-        {isExpanded && (
-          <div className="border-t border-gray-50 bg-gray-50/30 p-4 sm:p-6 animate-in slide-in-from-top-2 fade-in duration-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4 px-1">Items</p>
-                <div className="space-y-3">
-                  {order.items?.map((item: any, idx: number) => {
-                    const qty = Number(item.quantity || item.qty || 1);
-                    const itemPrice = Number(item.price) || 0;
-                    const toppingsArray = item.toppings || item.customization?.toppings || [];
-                    const toppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
-                    const itemTotal = (itemPrice + toppingsPrice) * qty;
+        {/* 2. Total Items */}
+        <div className="w-[15%] text-[13px] font-medium text-gray-600">
+          {itemCount}
+        </div>
 
-                    return (
-                    <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-50 shrink-0 border border-gray-50">
-                        <div className="w-full h-full flex items-center justify-center"><ImageIcon size={14} className="text-gray-300" /></div>
-                      </div>
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <p className="text-xs font-bold text-gray-900 leading-tight pr-2">{item.name} <span className="text-gray-400 font-medium">×{qty}</span></p>
-                        
-                        {item.customization && (
-                          <p className="text-[10px] text-gray-500 mt-1">
-                            {item.customization.size} 
-                            {item.customization.mood && `, ${item.customization.mood}`} 
-                            {/* SUGAR AND ICE COMPLETELY REMOVED FROM HERE */}
-                          </p>
-                        )}
-                        
-                        {toppingsArray.length > 0 && (
-                          <p className="text-[10px] text-gray-600 mt-0.5 italic">
-                            + {toppingsArray.map((t: any) => t.name).join(', ')}
-                          </p>
-                        )}
-                        {item.notes && <p className="text-[10px] text-gray-500 italic mt-0.5">Note: {item.notes}</p>}
-                      </div>
-                      <span className={`text-xs font-bold pt-0.5 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                        {formatMoney(itemTotal)}
-                      </span>
+        {/* 3. Payment Option */}
+        <div className="w-[20%] flex items-center gap-1.5">
+          {order.paymentMethod === 'CASH' ? <Banknote size={14} className="text-gray-400"/> : <CreditCard size={14} className="text-gray-400"/>}
+          <span className="text-[13px] font-bold text-gray-700">{order.paymentMethod || 'N/A'}</span>
+        </div>
+
+        {/* 4. Status (Pill matches design perfectly) */}
+        <div className="w-[15%]">
+          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+            isCancelled ? 'bg-red-50 text-red-600 border-red-100' : 
+            isUnpaid ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+            'bg-white text-[#d4a83e] border-[#f2cd72]' // Yellow pill
+          }`}>
+            {optimisticStatus || 'COMPLETED'}
+          </span>
+        </div>
+
+        {/* 5. Price & Actions */}
+        <div className="w-[20%] flex items-center justify-end gap-3 pr-2">
+          <span className={`font-black text-[13px] ${priceColor}`}>${totals.total.toFixed(2)}</span>
+          <button onClick={handlePrint} className="p-1.5 text-gray-400 hover:text-gray-900 bg-white border border-gray-200 rounded-md transition-colors shadow-sm active:scale-95" onClickCapture={e => e.stopPropagation()}>
+            <Printer size={14} />
+          </button>
+          <ChevronDown size={16} className="text-gray-400 shrink-0" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+        </div>
+      </div>
+
+      {/* --- MOBILE ROW PRESENTATION (Flex Stack) --- */}
+      <div 
+        className="md:hidden p-4 flex flex-col gap-3 cursor-pointer hover:bg-gray-50 transition-colors" 
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-3">
+            {onToggleSelect && (
+              <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                <input 
+                  type="checkbox" 
+                  checked={isSelected} 
+                  onChange={() => onToggleSelect(order.id)} 
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer accent-blue-600" 
+                />
+              </div>
+            )}
+            <div className="flex flex-col">
+              <span className="font-extrabold text-gray-900 text-sm">
+                #ORD-{(order.orderNumber || order.id).slice(-6).toUpperCase()}
+              </span>
+              <span className="text-[11px] text-gray-400 mt-0.5">
+                {new Date(order.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`font-black text-sm ${priceColor}`}>${totals.total.toFixed(2)}</span>
+            <ChevronDown size={18} className="text-gray-400 transition-transform" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mt-2 pt-3 border-t border-gray-50">
+          <div className="flex items-center gap-1.5">
+            {order.paymentMethod === 'CASH' ? <Banknote size={14} className="text-gray-400"/> : <CreditCard size={14} className="text-gray-400"/>}
+            <span className="text-xs font-bold text-gray-700">{order.paymentMethod || 'N/A'}</span>
+          </div>
+          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+            isCancelled ? 'bg-red-50 text-red-600 border-red-100' : 
+            isUnpaid ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+            'bg-white text-[#d4a83e] border-[#f2cd72]'
+          }`}>
+            {optimisticStatus || 'COMPLETED'}
+          </span>
+        </div>
+      </div>
+
+
+      {/* --- EXPANDED DETAILS --- */}
+      {isExpanded && (
+        <div className="border-t border-gray-100 bg-gray-50/50 p-4 sm:p-6 animate-in slide-in-from-top-2 fade-in duration-200 cursor-default" onClick={e => e.stopPropagation()}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4 px-1">Items</p>
+              <div className="space-y-3">
+                {order.items?.map((item: any, idx: number) => {
+                  const qty = Number(item.quantity || item.qty || 1);
+                  const itemPrice = Number(item.price) || 0;
+                  const toppingsArray = item.toppings || item.customization?.toppings || [];
+                  const toppingsPrice = toppingsArray.reduce((sum: number, t: any) => sum + (Number(t.price) || 0), 0);
+                  const itemTotal = (itemPrice + toppingsPrice) * qty;
+
+                  return (
+                  <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-50 shrink-0 border border-gray-50">
+                      <div className="w-full h-full flex items-center justify-center"><ImageIcon size={14} className="text-gray-300" /></div>
                     </div>
-                  )})}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p className="text-xs font-bold text-gray-900 leading-tight pr-2">{item.name} <span className="text-gray-400 font-medium">×{qty}</span></p>
+                      {item.customization && (
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          {item.customization.size} 
+                          {item.customization.mood && `, ${item.customization.mood}`} 
+                        </p>
+                      )}
+                      {toppingsArray.length > 0 && (
+                        <p className="text-[10px] text-gray-600 mt-0.5 italic">
+                          + {toppingsArray.map((t: any) => t.name).join(', ')}
+                        </p>
+                      )}
+                      {item.notes && <p className="text-[10px] text-gray-500 italic mt-0.5">Note: {item.notes}</p>}
+                    </div>
+                    <span className={`text-xs font-bold pt-0.5 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                      {formatMoney(itemTotal)}
+                    </span>
+                  </div>
+                )})}
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-4 h-full">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4">Summary</p>
+                <div className="space-y-2.5 mb-4">
+                  <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Subtotal</span><span className="font-bold text-gray-900">{formatMoney(totals.baseSubtotal)}</span></div>
+                  {totals.toppingsTotal > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Add-ons</span><span className="font-bold text-gray-900">{formatMoney(totals.toppingsTotal)}</span></div>}
+                  {totals.discount > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Discount</span><span className="font-bold text-gray-900">-{formatMoney(totals.discount)}</span></div>}
+                  <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Tax</span><span className="font-bold text-gray-900">{formatMoney(totals.tax)}</span></div>
+                </div>
+                
+                <div className="flex justify-between items-end pt-4 border-t border-gray-100 mb-6">
+                  <div className="flex flex-col">
+                    <span className="font-black text-sm text-gray-900 uppercase">Total</span>
+                    <span className="text-[10px] text-gray-400 font-bold">Rate: {EXCHANGE_RATE}៛</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className={`font-black text-xl leading-none ${priceColor}`}>
+                      {isUnpaid ? '$0.00' : `$${totals.total.toFixed(2)}`}
+                    </span>
+                    <span className={`font-bold text-sm mt-1 ${isCancelled ? 'text-gray-400 line-through' : priceColor}`}>
+                       {isUnpaid ? 'Unpaid' : (totals.total * EXCHANGE_RATE).toLocaleString() + ' ៛'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 pt-4 border-t border-gray-50">
+                  <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Order Type</span><span className="font-bold text-gray-700 capitalize">{order.orderType === 'TAKEAWAY' ? 'Walk-in' : order.orderType?.toLowerCase()} {order.tableNumber ? `(${order.tableNumber})` : ''}</span></div>
+                  <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Payment</span><span className="font-bold text-gray-700 capitalize">{order.paymentMethod?.toLowerCase()}</span></div>
+                  <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Date</span><span className="font-bold text-gray-700">{new Date(order.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
                 </div>
               </div>
-              <div className="flex flex-col gap-4 h-full">
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-fit">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-4">Summary</p>
-                  <div className="space-y-2.5 mb-4">
-                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Subtotal</span><span className="font-bold text-gray-900">{formatMoney(totals.baseSubtotal)}</span></div>
-                    {totals.toppingsTotal > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Add-ons</span><span className="font-bold text-gray-900">{formatMoney(totals.toppingsTotal)}</span></div>}
-                    {totals.discount > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Discount</span><span className="font-bold text-gray-900">-{formatMoney(totals.discount)}</span></div>}
-                    <div className="flex justify-between text-xs"><span className="text-gray-500 font-medium">Tax</span><span className="font-bold text-gray-900">{formatMoney(totals.tax)}</span></div>
-                  </div>
-                  
-                  <div className="flex justify-between items-end pt-4 border-t border-gray-100 mb-6">
-                    <div className="flex flex-col">
-                      <span className="font-black text-sm text-gray-900 uppercase">Total</span>
-                      <span className="text-[10px] text-gray-400 font-bold">Rate: {EXCHANGE_RATE}៛</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className={`font-black text-xl leading-none ${priceColor}`}>
-                        {isUnpaid ? '$0.00' : `$${totals.total.toFixed(2)}`}
-                      </span>
-                      <span className={`font-bold text-sm mt-1 ${isCancelled ? 'text-gray-400 line-through' : priceColor}`}>
-                         {isUnpaid ? 'Unpaid' : (totals.total * EXCHANGE_RATE).toLocaleString() + ' ៛'}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 pt-4 border-t border-gray-50">
-                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Order Type</span><span className="font-bold text-gray-700 capitalize">{order.orderType === 'TAKEAWAY' ? 'Walk-in' : order.orderType?.toLowerCase()} {order.tableNumber ? `(${order.tableNumber})` : ''}</span></div>
-                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Payment</span><span className="font-bold text-gray-700 capitalize">{order.paymentMethod?.toLowerCase()}</span></div>
-                    <div className="flex justify-between text-[10px]"><span className="text-gray-400 font-medium">Date</span><span className="font-bold text-gray-700">{new Date(order.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
-                  </div>
-                </div>
 
-                <div className="flex flex-col gap-2 mt-auto pt-2">
-                  {isUnpaid && !isCancelled && (
-                    <button onClick={handleOpenPaymentModal} className="w-full bg-green-50 border border-green-100 text-green-600 hover:bg-green-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                      <CheckCircle size={14}/> Settle Payment
+              <div className="flex flex-col gap-2 mt-auto pt-2">
+                {isUnpaid && !isCancelled && (
+                  <button onClick={handleOpenPaymentModal} className="w-full bg-green-50 border border-green-100 text-green-600 hover:bg-green-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                    <CheckCircle size={14}/> Settle Payment
+                  </button>
+                )}
+                <div className="flex items-center gap-2">
+                  {!isCancelled && (
+                    <button onClick={() => setModalAction('cancel')} className="flex-1 bg-orange-50 text-orange-600 hover:bg-orange-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                      <XCircle size={14}/> Cancel Order
                     </button>
                   )}
-                  <div className="flex items-center gap-2">
-                    {!isCancelled && (
-                      <button onClick={() => setModalAction('cancel')} className="flex-1 bg-orange-50 text-orange-600 hover:bg-orange-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                        <XCircle size={14}/> Cancel Order
-                      </button>
-                    )}
-                    <button onClick={() => setModalAction('delete')} className="flex-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                      <Trash2 size={14}/> Delete Order
-                    </button>
-                  </div>
+                  <button onClick={() => setModalAction('delete')} className="flex-1 bg-red-50 text-red-600 hover:bg-red-100 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                    <Trash2 size={14}/> Delete Order
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-        )}
-      </div>
-    </>
+        </div>
+      )}
+    </div>
   );
 }
