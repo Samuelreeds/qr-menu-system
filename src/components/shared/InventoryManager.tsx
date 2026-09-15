@@ -1,3 +1,4 @@
+// src/features/admin/tabs/InventoryManager.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
@@ -96,7 +97,6 @@ export default function InventoryManager({
 
   const handleDownloadTemplate = () => {
     const templateData = [{
-      "ID (DO NOT EDIT)": "", // Leave blank to create new items
       "Item Name": "Example Coffee Beans",
       "Unit": "kg",
       "Current Stock": 10,
@@ -112,7 +112,6 @@ export default function InventoryManager({
 
   const handleExportStock = () => {
     const exportData = localIngredients.map(ing => ({
-      "ID (DO NOT EDIT)": ing.id,
       "Item Name": ing.name,
       "Unit": ing.unit,
       "Current Stock": ing.current,
@@ -144,7 +143,6 @@ export default function InventoryManager({
         let errorCount = 0;
 
         data.forEach((row: any, idx: number) => {
-          const id = row["ID (DO NOT EDIT)"]?.toString().trim();
           const name = row["Item Name"]?.toString().trim();
           const unit = row["Unit"]?.toString().trim();
           const current = Number(row["Current Stock"]);
@@ -153,26 +151,20 @@ export default function InventoryManager({
 
           let status = 'create';
           let errorMsg = '';
+          let matchedId = undefined;
 
-          // 1. Structural Validation
           if (!name) errorMsg += 'Missing Name. ';
           if (!unit) errorMsg += 'Missing Unit. ';
           if (isNaN(current) || current < 0) errorMsg += 'Invalid Current Stock. ';
           if (isNaN(max) || max <= 0) errorMsg += 'Invalid Max Capacity. ';
           if (isNaN(lowThreshold) || lowThreshold < 0 || lowThreshold > 100) errorMsg += 'Invalid Threshold. ';
 
-          // 2. Database Matching & Logic Validation
-          if (id) {
-            const existing = localIngredients.find(i => i.id === id);
-            if (!existing) {
-              errorMsg += `ID not found in database. `;
-            } else {
+          // Map item ID automatically using the Name
+          if (name) {
+            const existing = localIngredients.find(i => i.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
               status = 'update';
-            }
-          } else {
-            const existingName = localIngredients.find(i => i.name.toLowerCase() === name?.toLowerCase());
-            if (existingName) {
-              errorMsg += `Item already exists (Missing ID). `;
+              matchedId = existing.id; // Quietly attach the real database ID for the backend
             }
           }
 
@@ -181,7 +173,7 @@ export default function InventoryManager({
              errorCount++;
           }
 
-          parsed.push({ rowNum: idx + 2, id, name, unit, current, max, lowThreshold, status, errorMsg });
+          parsed.push({ rowNum: idx + 2, id: matchedId, name, unit, current, max, lowThreshold, status, errorMsg });
         });
 
         setImportPreview(parsed);
@@ -300,15 +292,14 @@ export default function InventoryManager({
   return (
     <div className="w-full pb-12 font-sans text-gray-800 animate-in fade-in duration-300">
       
-      {/* --- RESPONSIVE TOOLBAR (Approved UX) --- */}
+      {/* --- RESPONSIVE TOOLBAR --- */}
       <div className="flex flex-col gap-5 mb-8">
-         {/* Top Row: Title + Action Buttons */}
          <div className="flex items-center justify-between">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 hidden md:block">Stock Levels</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 hidden md:block">Inventory Items</h2>
 
             {/* Mobile Actions */}
             <div className="flex md:hidden w-full justify-between items-center gap-2 relative">
-              <h2 className="text-xl font-bold text-gray-900">Stock Levels</h2>
+              <h2 className="text-xl font-bold text-gray-900">Inventory Items</h2>
               <div className="flex items-center gap-2">
                   <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-gray-900 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95">
                     <Plus size={14} /> Add Item
@@ -328,45 +319,27 @@ export default function InventoryManager({
 
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center gap-2">
-              <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-800 transition-colors active:scale-95">
-                <Plus size={14} strokeWidth={3} /> Add New Item
-              </button>
-              <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
-                <Upload size={14} /> Import
-              </button>
-              <button onClick={handleExportStock} className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
-                <Download size={14} /> Export
-              </button>
               <div className="relative">
-                <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center justify-center w-9 h-9 bg-white border border-gray-200 text-gray-700 rounded-lg shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
-                  <MoreHorizontal size={16} strokeWidth={3} />
+                <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors active:scale-95">
+                  <Upload size={16} /> Import / Export <ChevronDown size={14} className="ml-1 text-gray-400" />
                 </button>
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50">
-                     <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2">
-                       <FileSpreadsheet size={14} /> Download Excel Template
-                     </button>
+                     <button onClick={() => { setIsImportModalOpen(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 border-b">Import Items</button>
+                     <button onClick={handleExportStock} className="w-full text-left px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 border-b">Export Items</button>
+                     <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 bg-gray-50/50">Download Excel Template</button>
                   </div>
                 )}
               </div>
+              <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-[#4c1d95] text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-[#3b1575] transition-colors active:scale-95 ml-2">
+                Create Item
+              </button>
             </div>
-         </div>
-
-         {/* Bottom Row: Filters & Search */}
-         <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
-           <div className="flex bg-gray-100 p-1.5 rounded-xl w-full sm:w-auto">
-                <button onClick={() => setCardFilter("All")} className={`flex-1 sm:flex-none px-5 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "All" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>All Items</button>
-                <button onClick={() => setCardFilter("Low")} className={`flex-1 sm:flex-none px-5 py-2 rounded-lg text-xs font-bold transition-all ${cardFilter === "Low" ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Low Stock</button>
-           </div>
-           <div className="relative w-full sm:w-64 sm:ml-auto">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input placeholder="Search items..." value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium outline-none focus:ring-2 focus:ring-gray-900 transition-all shadow-sm" />
-           </div>
          </div>
       </div>
 
       {lowStockItems.length > 0 && (
-        <div className="mb-8 bg-red-50 border border-red-100 rounded-3xl p-5 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className="mb-8 bg-red-50 border border-red-100 rounded-xl p-5 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle size={20} className="text-red-500" strokeWidth={2.5} />
@@ -388,54 +361,103 @@ export default function InventoryManager({
         </div>
       )}
 
-      {/* STOCK LEVEL CARDS */}
-      <div className="mb-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {displayedIngredients.map(item => {
-            const pct = (item.current / item.max) * 100;
-            const isLow = pct < item.lowThreshold;
-            return (
-              <div key={item.id} className={`bg-white rounded-2xl p-5 shadow-sm transition-all duration-200 flex flex-col ${isLow ? 'border-2 border-red-400' : 'border border-gray-200'}`}>
-                <div className="flex justify-between items-start mb-1 gap-2">
-                  <h3 className="font-extrabold text-gray-900 text-sm truncate flex-1">{item.name}</h3>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isLow && <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border border-red-100">LOW</span>}
-                    <button 
-                      onClick={() => {
-                        if (item.id.startsWith("temp-")) return alert("Please wait for this item to finish saving.");
-                        setItemToDelete({ id: item.id, name: item.name });
-                        setIsDeleteModalOpen(true);
-                      }} 
-                      disabled={isProcessing}
-                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1 rounded-md transition-colors disabled:opacity-50" 
-                    >
-                      <Trash2 size={14} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 font-semibold mb-4">{item.current.toFixed(1)} / {item.max} {item.unit}</p>
-                <div className="w-full bg-gray-100 rounded-full h-2 mb-2 overflow-hidden mt-auto">
-                  <div className={`h-full rounded-full transition-all duration-500 ${isLow ? 'bg-red-500' : 'bg-gray-900'}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-                </div>
-                <p className="text-[11px] text-gray-400 font-bold mb-5">{Math.round(pct)}% capacity</p>
-                <div className="flex gap-2">
-                  <button onClick={() => openModal(item, "restock")} className="flex-1 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-sm">+ Restock</button>
-                  <button onClick={() => openModal(item, "adjust")} className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold py-2.5 rounded-xl transition-all active:scale-[0.98]">− Adjust</button>
-                </div>
-              </div>
-            );
-          })}
-          {displayedIngredients.length === 0 && (
-            <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-gray-200 shadow-sm">
-              <Package size={32} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-900 font-bold text-sm">No items found</p>
-              <p className="text-gray-400 font-medium text-xs mt-1">Adjust your filters or add a new item.</p>
+      {/* --- TABLE LIST VIEW --- */}
+      <div className="mb-12 bg-white border border-gray-200 rounded-[12px] shadow-sm overflow-hidden flex flex-col">
+        
+        {/* Table Toolbar */}
+        <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
+            <div className="flex w-full sm:w-auto overflow-x-auto no-scrollbar gap-6 px-3">
+              <button onClick={() => setCardFilter("All")} className={`pb-3 text-[13px] font-bold transition-all border-b-2 whitespace-nowrap ${cardFilter === "All" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>All Items</button>
+              <button onClick={() => setCardFilter("Low")} className={`pb-3 text-[13px] font-bold transition-all border-b-2 whitespace-nowrap ${cardFilter === "Low" ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>Low Stock</button>
             </div>
-          )}
+            <div className="relative w-full sm:w-72">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+               <input placeholder="Search items..." value={cardSearch} onChange={(e) => setCardSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-200 bg-white text-[13px] font-medium outline-none focus:ring-1 focus:ring-gray-300 transition-all shadow-sm" />
+            </div>
+        </div>
+
+        {/* The Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-white border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                <th className="p-4 pl-6 w-[35%]">Name</th>
+                <th className="p-4 w-[25%]">Stock Level</th>
+                <th className="p-4 w-[15%]">Status</th>
+                <th className="p-4 text-right pr-6 w-[25%]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {displayedIngredients.map(item => {
+                const pct = (item.current / item.max) * 100;
+                const isLow = pct < item.lowThreshold;
+                
+                return (
+                  <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                    {/* Item Name */}
+                    <td className="p-4 pl-6 font-bold text-gray-900 text-[13px]">
+                      {item.name}
+                    </td>
+                    
+                    {/* Stock Level with mini Progress Bar */}
+                    <td className="p-4 flex flex-col justify-center">
+                      <span className="text-[12px] font-bold text-gray-700 mb-1">
+                        {item.current.toFixed(1)} / {item.max} <span className="text-gray-400 font-medium">{item.unit}</span>
+                      </span>
+                      <div className="w-full max-w-[120px] bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-500 ${isLow ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                      </div>
+                    </td>
+
+                    {/* Status Pill */}
+                    <td className="p-4">
+                      {isLow ? (
+                         <span className="bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border border-red-100">Low Stock</span>
+                      ) : (
+                         <span className="bg-emerald-50 text-emerald-600 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider border border-emerald-100">Good</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="p-4 pr-6 flex items-center justify-end gap-2">
+                      <button onClick={() => openModal(item, "restock")} className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
+                        + Restock
+                      </button>
+                      <button onClick={() => openModal(item, "adjust")} className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[11px] font-bold rounded-md shadow-sm transition-all active:scale-95 whitespace-nowrap">
+                        − Adjust
+                      </button>
+                      <div className="w-px h-4 bg-gray-200 mx-1 hidden sm:block"></div>
+                      <button 
+                        onClick={() => {
+                          if (item.id.startsWith("temp-")) return alert("Please wait for this item to save.");
+                          setItemToDelete({ id: item.id, name: item.name });
+                          setIsDeleteModalOpen(true);
+                        }} 
+                        disabled={isProcessing}
+                        className="text-gray-400 hover:text-red-500 p-1.5 rounded transition-colors disabled:opacity-50" 
+                        title="Delete Item"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {displayedIngredients.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-16 text-center">
+                    <Package size={32} className="mx-auto text-gray-300 mb-3" />
+                    <p className="text-gray-900 font-bold text-sm">No items found</p>
+                    <p className="text-gray-400 font-medium text-xs mt-1">Adjust your filters or add a new item.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* ADJUSTMENT LOG (Unchanged from original) */}
+      {/* ADJUSTMENT LOG (Unchanged) */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
           <h2 className="text-xl font-bold text-gray-900">Adjustment Log</h2>
