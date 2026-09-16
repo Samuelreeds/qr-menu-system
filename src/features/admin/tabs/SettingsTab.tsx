@@ -16,6 +16,7 @@ export interface SocialLink {
 }
 
 interface SettingsTabProps {
+  shopId: string;
   openSection: string | null;
   handleSectionClick: (section: string) => void;
   onIdentitySubmit: (e?: React.FormEvent) => void;
@@ -72,7 +73,7 @@ interface SettingsTabProps {
   handleMoveBanner: (index: number, direction: number) => void;
   dispatchOptBanners: (action: any) => void;
   deleteBanner: (fd: FormData) => void;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: "success" | "fail") => void;
   bannerInputRef: any; 
   safeLimits: any;
   onSocialsSubmit: (e?: React.FormEvent) => void;
@@ -103,6 +104,7 @@ interface SettingsTabProps {
 }
 
 export default function SettingsTab({
+  shopId,
   openSection, handleSectionClick, onIdentitySubmit, previewNameEn, setPreviewNameEn,
   previewNameKh, setPreviewNameKh, previewDisplay, setPreviewDisplay, printerUrl,
   setPrinterUrl, address, setAddress, phone, setPhone, is24Hours, setIs24Hours,
@@ -202,6 +204,36 @@ export default function SettingsTab({
                <input type="file" accept="image/*" ref={qrInputRef} onChange={(e) => onFileSelect(e, 'qr')} className="hidden" />
             </div>
 
+            {/* --- SHOP INFO / INTEGRATION ID IS NOW PROPERLY INSIDE --- */}
+            <div className="pt-5 border-t border-gray-100 mt-6">
+              <div className="mb-2">
+                <h4 className="text-sm font-extrabold text-gray-900">Shop ID (System Info)</h4>
+                <p className="text-[11px] font-medium text-gray-500">
+                  Use this secure ID to connect the Windows Cloud Print Agent to your shop.
+                </p>
+              </div>
+              
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={shopId} 
+                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-500 outline-none select-all"
+                />
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault(); 
+                    navigator.clipboard.writeText(shopId);
+                    showToast("Shop ID copied!", "success"); 
+                  }}
+                  className="px-5 py-3.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm active:scale-95 shrink-0"
+                >
+                  Copy ID
+                </button>
+              </div>
+            </div>
+
             <div className="flex justify-end pt-4 border-t border-gray-100">
                <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
             </div>
@@ -295,7 +327,7 @@ export default function SettingsTab({
                  <div key={b.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} className={`relative w-full aspect-[16/9] rounded-2xl overflow-hidden border ${draggedBannerIndex === index ? 'border-gray-900 opacity-50' : 'border-gray-200'} shadow-sm group bg-gray-50 flex items-center justify-center cursor-move`}>
                    <LazyImage src={b.image} className="w-full h-full object-contain pointer-events-none" alt="Banner" />
                    <div className="absolute top-2 left-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><button type="button" onClick={() => handleMoveBanner(index, -1)} disabled={index === 0} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronUp size={14}/></button><button type="button" onClick={() => handleMoveBanner(index, 1)} disabled={index === optBanners.length - 1} className="p-1.5 bg-white/90 text-gray-600 rounded-lg shadow-sm hover:bg-white disabled:opacity-50 backdrop-blur-sm active:scale-95"><ChevronDown size={14}/></button></div>
-                   <form action={(fd) => { startTransition(async () => { dispatchOptBanners({ type: 'delete', payload: b.id }); await deleteBanner(fd); showToast("Banner deleted"); }); }}><input type="hidden" name="id" value={b.id} /><button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600"><Trash2 size={14}/></button></form>
+                   <form action={(fd) => { startTransition(async () => { dispatchOptBanners({ type: 'delete', payload: b.id }); await deleteBanner(fd); showToast("Banner deleted", "success"); }); }}><input type="hidden" name="id" value={b.id} /><button type="submit" className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity backdrop-blur-sm active:scale-95 hover:bg-red-600"><Trash2 size={14}/></button></form>
                  </div>
                ))}
              </div>

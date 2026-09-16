@@ -12,14 +12,16 @@ export default function OrderHistoryCard({
   printerUrl, 
   qrImage,
   isSelected,
-  onToggleSelect
+  onToggleSelect,
+  printMode = "legacy"
 }: { 
   order: any, 
   shopName?: string, 
   printerUrl?: string, 
   qrImage?: string | null,
   isSelected?: boolean,
-  onToggleSelect?: (id: string) => void
+  onToggleSelect?: (id: string) => void,
+  printMode?: string
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();

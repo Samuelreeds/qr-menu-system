@@ -8,26 +8,26 @@ import { createClient } from "@supabase/supabase-js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- SUPABASE CONNECTION ---
-// IMPORTANT: Paste your actual Supabase URL and Anon Key here
+// --- CONFIGURATION ---
 const SUPABASE_URL = "https://fqiuwmxdxqrlpmuyxlyw.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxaXV3bXhkeHFybHBtdXl4bHl3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE2NTAyNCwiZXhwIjoyMDg2NzQxMDI0fQ.vXPv6inWpJ2IPPF0e98-ZPZ82fuL6yQwgmCmFaUN3so";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (YOUR SERVICE ROLE KEY)";
+const SHOP_ID = "cm0xyz... (THE CUID OF THE CLIENTS SHOP)"; // <-- CRITICAL: RESTRICTS TO ONE SHOP
+const PRINTER_NAME = "POS Printer 203DPI Series"; // <-- EXACT WINDOWS PRINTER NAME
 
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let isPrinting = false;
 
-// --- THE CLOUD WORKER ---
-// --- THE CLOUD WORKER ---
 async function checkPrintQueue() {
   if (isPrinting) return;
 
   try {
-    // 1. Look for the oldest pending job (Updated to 'PrintJob')
+    // 1. Fetch only THIS shop's pending jobs
     const { data: jobs, error } = await supabase
       .from('PrintJob') 
       .select('*')
+      .eq('shopId', SHOP_ID) // SECURITY: Isolated to this shop
       .eq('status', 'pending')
-      .order('createdAt', { ascending: true }) // Also updated to Prisma's 'createdAt'
+      .order('createdAt', { ascending: true })
       .limit(1);
 
     if (error) throw error;
@@ -36,52 +36,53 @@ async function checkPrintQueue() {
       isPrinting = true;
       const job = jobs[0];
 
-      console.log(`\n☁️ Found new cloud print job: ${job.id}`);
+      // 2. Atomic Claim: Prevent duplicate printing race conditions
+      const { data: claimedJob, error: claimError } = await supabase
+        .from('PrintJob')
+        .update({ status: 'processing' })
+        .eq('id', job.id)
+        .eq('status', 'pending') // Only update if still pending
+        .select()
+        .single();
 
-      // 2. Lock the job so it doesn't print twice
-      await supabase.from('PrintJob').update({ status: 'processing' }).eq('id', job.id);
+      if (claimError || !claimedJob) {
+        isPrinting = false;
+        return; // Another worker claimed it, skip!
+      }
 
-      // 3. Send to physical printer
-      await executePrintJob(job.receipt_text);
+      console.log(`\n☁️ Processing job: ${job.id}`);
 
-      // 4. Mark as finished in the cloud
-      await supabase.from('PrintJob').update({ status: 'printed' }).eq('id', job.id);
-      console.log(`✅ Job printed successfully!`);
+      // 3. Print
+      try {
+        await executePrintJob(job.receipt_text);
+        await supabase.from('PrintJob').update({ status: 'printed' }).eq('id', job.id);
+        console.log(`✅ Job printed successfully!`);
+      } catch (printErr) {
+        console.error(`❌ Print failed:`, printErr.message);
+        await supabase.from('PrintJob').update({ status: 'failed' }).eq('id', job.id);
+      }
     }
   } catch (error) {
     console.error("❌ Queue Error:", error.message);
   } finally {
-    isPrinting = false; // Unlock for the next job
+    isPrinting = false;
   }
 }
 
-// --- THE PHYSICAL PRINTER LOGIC (Optimized for 58mm) ---
 const executePrintJob = (text) => {
   return new Promise((resolve, reject) => {
     const tempPdfPath = path.join(__dirname, `receipt_${Date.now()}.pdf`);
     
     try {
-      const doc = new PDFDocument({
-        margins: { top: 10, bottom: 10, left: 5, right: 5 }, 
-        size: [148, 1500], // 58mm width, long height for big orders
-      });
-
+      const doc = new PDFDocument({ margins: { top: 10, bottom: 10, left: 5, right: 5 }, size: [148, 1500] });
       const writeStream = fs.createWriteStream(tempPdfPath);
       doc.pipe(writeStream);
-
-      doc.font("Courier")
-         .fontSize(6.5) 
-         .text(text, { align: "left" });
-
+      doc.font("Courier").fontSize(6.5).text(text, { align: "left" });
       doc.end();
 
       writeStream.on("finish", async () => {
         try {
-          await ptp.print(tempPdfPath, {
-            printer: "POS Printer 203DPI Series", // <-- PUT YOUR EXACT PRINTER NAME HERE
-            scale: "noscale"
-          });
-          
+          await ptp.print(tempPdfPath, { printer: PRINTER_NAME, scale: "noscale" });
           if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
           resolve();
         } catch (printErr) {
@@ -89,18 +90,12 @@ const executePrintJob = (text) => {
           reject(new Error(`Windows Spooler Error: ${printErr.message}`));
         }
       });
-
-      writeStream.on("error", (streamErr) => {
-        reject(new Error(`File Error: ${streamErr.message}`));
-      });
-
     } catch (error) {
       reject(new Error(`PDF Error: ${error.message}`));
     }
   });
 };
 
-// --- START THE LOOP ---
 console.log("☁️ Scandine Cloud Print Queue Started!");
-console.log("📡 Listening to Supabase for pending receipts...");
-setInterval(checkPrintQueue, 3000); // Checks the database every 3 seconds
+console.log(`📡 Listening for Shop ID: ${SHOP_ID}...`);
+setInterval(checkPrintQueue, 3000);

@@ -14,6 +14,7 @@ interface OrdersTabProps {
   settingsName: string;
   printerUrl: string;
   qrImage?: string | null;
+  printMode?: string; // <-- ADDED: Support for legacy vs cloud
 }
 
 type ReportType = "daily" | "monthly" | "yearly" | "custom";
@@ -26,7 +27,8 @@ export default function OrdersTab({
   setOrderFilter,
   settingsName,
   printerUrl,
-  qrImage
+  qrImage,
+  printMode = "legacy" // <-- ADDED: Default to legacy
 }: OrdersTabProps) {
   
   // Export Panel State
@@ -429,6 +431,7 @@ export default function OrdersTab({
               shopName={settingsName} 
               printerUrl={printerUrl}
               qrImage={qrImage}
+              printMode={printMode} // <-- ADDED: Passes setting to card
               isSelected={selectedIds.has(order.id)}
               onToggleSelect={handleToggleSelect}
             />

@@ -45,7 +45,8 @@ function LiveFloorPlanView({
   userEmail,
   userRole,
   onSelectTableForOrder,
-  onOrderTypeChange
+  onOrderTypeChange,
+  printMode = "legacy" // <-- ADDED
 }: { 
   shopId: string; 
   printerUrl?: string; 
@@ -54,6 +55,7 @@ function LiveFloorPlanView({
   userRole?: string;
   onSelectTableForOrder: (tableId: string) => void;
   onOrderTypeChange: (type: OrderType) => void;
+  printMode?: string; // <-- ADDED
 }) {
   const [tables, setTables] = useState<any[]>([]);
   const [selectedTable, setSelectedTable] = useState<any>(null);
@@ -88,12 +90,19 @@ function LiveFloorPlanView({
 
   const handlePrintAndComplete = async (order: any) => {
     setIsProcessing(true);
-    if (printerUrl) {
-      try {
-        const receiptText = generateReceiptText(order, shopName);
-        await fetch(`${printerUrl}/print`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: receiptText }) });
-      } catch (e) { alert("Failed to print ticket."); }
-    }
+    
+    try {
+      const receiptText = generateReceiptText(order, shopName);
+      
+      // --- PRINT ROUTING LOGIC ---
+      if (printMode === 'cloud' || printerUrl === 'cloud') {
+         const { createPrintJob } = await import('@/lib/actions');
+         await createPrintJob(receiptText);
+      } else if (printerUrl && printerUrl !== 'cloud') {
+         await fetch(`${printerUrl}/print`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: receiptText }) });
+      }
+    } catch (e) { alert("Failed to print ticket."); }
+    
     await completeTableOrder(order.id);
     await fetchLiveTables();
     setIsProcessing(false);
@@ -269,9 +278,10 @@ export default function AdminPosSection({
   userEmail, 
   userRole, 
   shopName, 
-  printerUrl, 
+  printerUrl = "cloud", 
   qrImage, 
-  toppings = [] 
+  toppings = [],
+  printMode = "cloud" // <-- ADDED
 }: { 
   dashboardCategories: Category[], 
   dashboardProducts: Product[], 
@@ -281,7 +291,8 @@ export default function AdminPosSection({
   shopName: string, 
   printerUrl?: string, 
   qrImage?: string | null, 
-  toppings?: Topping[] 
+  toppings?: Topping[],
+  printMode?: string // <-- ADDED
 }) {
   const router = useRouter();
   const { addSuccessToast, addErrorToast } = useToast();
@@ -461,7 +472,7 @@ export default function AdminPosSection({
         productId: i.productId, 
         name: i.name, 
         price: i.price, 
-        quantity: i.qty, // FIX: Explicitly send 'quantity' for Prisma OrderItem schema
+        quantity: i.qty, // Explicitly send 'quantity' for Prisma OrderItem schema
         qty: i.qty,      // Retained for backwards compatibility if needed elsewhere
         notes: i.notes, 
         customization: i.customization 
@@ -493,37 +504,51 @@ export default function AdminPosSection({
             }
         }
         
-        // FIXED: Replaced showToast with addSuccessToast
         addSuccessToast("Order Saved!");
 
-        // OPTIMISTIC PRINTING
-        if (shouldPrint && printerUrl && finalOrderForReceipt) {
+        // --- PRINT ROUTING LOGIC ---
+        // --- PRINT ROUTING LOGIC ---
+        if (shouldPrint && finalOrderForReceipt) {
             const receiptText = generateReceiptText(finalOrderForReceipt, shopName);
-    
-              // ADD THIS LINE to view the exact layout in your browser console (F12)
-              console.log("=== RECEIPT PREVIEW ==\n", receiptText);
-              
-              fetch(`${printerUrl}/print`, { 
-                  method: 'POST', 
-                  headers: { 'Content-Type': 'application/json' }, 
-                  body: JSON.stringify({ text: receiptText }) 
-              })
-            .then(printRes => {
-                if (printRes.ok) {
-                   addSuccessToast("Receipt Printed"); // FIXED
-                } else {
-                   addErrorToast("Printer error: Check paper or connection"); // FIXED
+            console.log("=== RECEIPT PREVIEW ==\n", receiptText);
+            
+            if (printMode === 'cloud' || printerUrl === 'cloud') {
+                try {
+                    const { createPrintJob } = await import('@/lib/actions');
+                    const res = await createPrintJob(receiptText);
+                    if (res?.success) {
+                        addSuccessToast("Sent to Cloud Print Queue");
+                    } else {
+                        addErrorToast("Cloud print failed: " + res?.error);
+                    }
+                } catch (err) {
+                    console.error("Cloud Print Error:", err);
+                    addErrorToast("Failed to reach cloud print service");
                 }
-            })
-            .catch(printErr => {
-                console.error("Print Error:", printErr);
-                addErrorToast("Failed to connect to printer"); // FIXED
-            });
+            } else if (printerUrl && printerUrl !== 'cloud') {
+                // LEGACY
+                fetch(`${printerUrl}/print`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ text: receiptText }) 
+                })
+                .then(printRes => {
+                    if (printRes.ok) {
+                       addSuccessToast("Receipt Printed");
+                    } else {
+                       addErrorToast("Printer error: Check paper or connection");
+                    }
+                })
+                .catch(printErr => {
+                    console.error("Print Error:", printErr);
+                    addErrorToast("Failed to connect to local printer");
+                });
+            }
         }
 
       } catch (err) {
         console.error("Background Order Error:", err);
-        addErrorToast("Order failed to save to server."); // FIXED
+        addErrorToast("Order failed to save to server.");
       }
     })();
   };
@@ -548,6 +573,7 @@ export default function AdminPosSection({
           printerUrl={printerUrl}
           userEmail={userEmail}
           userRole={userRole}
+          printMode={printMode} // <-- PASSED DOWN
           onSelectTableForOrder={(id) => {
             setOrderType("table");
             setTableNumber(id);

@@ -2162,9 +2162,13 @@ export async function closeShift(shiftId: string, actualEndingCash: number, expe
 // ==========================================
 
 export async function createPrintJob(receiptText: string) {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "Unauthorized" };
+
   try {
     const job = await (prisma as any).printJob.create({
       data: {
+        shopId: shopId,
         receipt_text: receiptText,
         status: 'pending'
       }

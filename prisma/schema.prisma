@@ -98,7 +98,8 @@ model Shop {
   banners    Banner[]
   orders     Order[]
   toppings   Topping[]
-  posShifts  PosShift[] // <--- ADDED SHIFT RELATION
+  posShifts  PosShift[]
+  printJobs  PrintJob[]
 
   // INVENTORY RELATIONS
   ingredients Ingredient[]
@@ -236,6 +237,8 @@ model ShopSettings {
   showTelegram  Boolean @default(false)
   printerUrl    String?
   qrImage       String?
+
+  printMode String @default("legacy")
 
   shopId String @unique
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -464,4 +467,9 @@ model PrintJob {
   receipt_text String   @db.Text
   status       String   @default("pending")
   createdAt    DateTime @default(now())
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
 }
