@@ -1,4 +1,3 @@
-// src/features/admin/tabs/SettingsTab.tsx
 import React from 'react';
 import { 
   Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, 
@@ -41,6 +40,9 @@ interface SettingsTabProps {
   setCloseTime: (val: string) => void;
   sortByPriceDesc?: boolean;
   setSortByPriceDesc: (val: boolean) => void;
+  printMode: string;
+  setPrintMode: (val: string) => void;
+  handleTestPrint: () => void;
   qrImagePreview: string;
   qrInputRef: any; 
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>, target: any) => void;
@@ -76,7 +78,7 @@ interface SettingsTabProps {
   handleMoveBanner: (index: number, direction: number) => void;
   dispatchOptBanners: (action: any) => void;
   deleteBanner: (fd: FormData) => void;
-  showToast: (msg: string, type?: "success" | "fail") => void;
+  showToast: (msg: string, type?: "success" | "fail" | "info") => void;
   bannerInputRef: any; 
   safeLimits: any;
   onSocialsSubmit: (e?: React.FormEvent) => void;
@@ -112,6 +114,7 @@ export default function SettingsTab({
   previewNameKh, setPreviewNameKh, previewDisplay, setPreviewDisplay, printerUrl,
   setPrinterUrl, address, setAddress, phone, setPhone, is24Hours, setIs24Hours,
   openTime, setOpenTime, closeTime, setCloseTime, sortByPriceDesc = false, setSortByPriceDesc, 
+  printMode, setPrintMode, handleTestPrint,
   qrImagePreview, qrInputRef,
   onFileSelect, setQrImagePreview, setQrFileBlob, setRemoveQr, markDirty, dirtySections,
   onBrandingSubmit, headerDesign, allDesigns, isCurrentDesignLocked, setHeaderDesign,
@@ -128,6 +131,20 @@ export default function SettingsTab({
   setIsDirtyLogo, setLogoFileBlobAction,
   isDirtyLogo, isFreePlan, settings 
 }: SettingsTabProps) {
+
+  const isServerOnline = settings?.printServerLastSeen && (Date.now() - new Date(settings.printServerLastSeen).getTime() < 60000);
+    
+  function getRelativeTime(timestamp?: string | Date | null) {
+    if (!timestamp) return "Never";
+    const diff = Date.now() - new Date(timestamp).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins} minute${mins > 1 ? 's' : ''} ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return "Offline";
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12 print:hidden">
       
@@ -176,7 +193,6 @@ export default function SettingsTab({
                 </div>
                 <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
                 
-                {/* SORT BY PRICE TOGGLE */}
                 <div className="pt-4 border-t border-gray-100 mt-6">
                   <div className="flex items-center justify-between py-2">
                     <div>
@@ -189,7 +205,6 @@ export default function SettingsTab({
                     </label>
                   </div>
                 </div>
-                {/* END SORT BY PRICE TOGGLE */}
 
               </div>
             </div>
@@ -420,18 +435,66 @@ export default function SettingsTab({
            {openSection === 'advanced' ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
         </button>
         <div className={openSection === 'advanced' ? 'block' : 'hidden'}>
-          <form onSubmit={onIdentitySubmit} className="p-6 border-t border-gray-100 space-y-6">
+          <div className="p-6 border-t border-gray-100 space-y-6">
              <div className="space-y-4">
                 <div className="pt-2">
-                  <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
-                  <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
-                  <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing.</p>
+                  <label className="block text-sm font-semibold text-gray-800 mb-3">Printing Method</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                    <button type="button" onClick={() => { setPrintMode('legacy'); markDirty('identity'); }} className={`p-4 rounded-2xl border-2 text-left transition-all ${printMode === 'legacy' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`font-bold text-sm ${printMode === 'legacy' ? 'text-gray-900' : 'text-gray-700'}`}>Legacy (Local IP)</span>
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${printMode === 'legacy' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>{printMode === 'legacy' && <Check size={10} strokeWidth={4} className="text-white" />}</div>
+                        </div>
+                        <p className="text-xs text-gray-500">Print directly over local Wi-Fi / LAN to your POS PC</p>
+                    </button>
+                    <button type="button" onClick={() => { setPrintMode('cloud'); markDirty('identity'); }} className={`p-4 rounded-2xl border-2 text-left transition-all ${printMode === 'cloud' ? 'border-gray-900 bg-gray-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`font-bold text-sm ${printMode === 'cloud' ? 'text-gray-900' : 'text-gray-700'}`}>Cloud (Internet)</span>
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${printMode === 'cloud' ? 'border-gray-900 bg-gray-900' : 'border-gray-300 bg-transparent'}`}>{printMode === 'cloud' && <Check size={10} strokeWidth={4} className="text-white" />}</div>
+                        </div>
+                        <p className="text-xs text-gray-500">Print anywhere over the internet using Cloud Print Server</p>
+                    </button>
+                  </div>
+
+                  {printMode === 'legacy' ? (
+                    <div className="animate-in fade-in zoom-in-95 duration-200">
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">Local Print Server URL (POS)</label>
+                      <input name="printerUrl" value={printerUrl} onChange={e => { setPrinterUrl(e.target.value); markDirty('identity'); }} placeholder="e.g. http://192.168.0.10:3001" className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm font-mono"/>
+                      <p className="text-xs text-gray-500 mt-1.5">Required for automatic thermal receipt printing over LAN.</p>
+                    </div>
+                  ) : (
+                    <div className="animate-in fade-in zoom-in-95 duration-200 p-5 bg-gray-50 border border-gray-200 rounded-2xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-sm">Print Server</h4>
+                          <p className="text-xs text-gray-500 mt-1">Last seen: <span className="font-semibold text-gray-700">{getRelativeTime(settings?.printServerLastSeen)}</span></p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${isServerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                          <span className="text-sm font-bold text-gray-700">{isServerOnline ? 'Online' : 'Offline'}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pb-2">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-sm">Printer</h4>
+                          <p className="text-xs text-gray-500 mt-1">USB Thermal Printer</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${settings?.printerStatus === 'CONNECTED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                          <span className="text-sm font-bold text-gray-700">{settings?.printerStatus === 'CONNECTED' ? 'Connected' : 'Disconnected'}</span>
+                        </div>
+                      </div>
+                      <button type="button" onClick={handleTestPrint} className="w-full py-3.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-800 hover:bg-gray-100 hover:border-gray-400 active:scale-95 transition-all shadow-sm">
+                        [ Test Print ]
+                      </button>
+                    </div>
+                  )}
                 </div>
              </div>
              <div className="flex justify-end pt-4 border-t border-gray-100">
-               <button type="submit" disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
+               <button type="button" onClick={onIdentitySubmit} disabled={!dirtySections['identity']} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold text-[16px] md:text-sm shadow-sm flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"><CheckCircle size={16}/>{dirtySections['identity'] ? 'Save Changes' : 'Saved'}</button>
              </div>
-          </form>
+          </div>
         </div>
       </div>
 

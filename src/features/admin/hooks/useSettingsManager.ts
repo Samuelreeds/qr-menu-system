@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, TransitionStartFunction } from 'react';
-import { updateShopIdentity, updateShopBranding, updateShopSocials } from '@/lib/actions';
+import { updateShopIdentity, updateShopBranding, updateShopSocials, createTestPrintJob } from '@/lib/actions';
 import { updateStaffSettingsAction, sendTestTelegramNotification } from '@/lib/staff-actions';
 import { ShopSettings } from '../AdminDashboard';
 import { SocialLink } from '../tabs/SettingsTab';
@@ -11,7 +11,7 @@ interface UseSettingsManagerProps {
   telegramChatId?: string | null;
   staffCallTopicId?: string | null;
   newOrderTopicId?: string | null;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: "success" | "fail" | "info") => void;
   startTransition: TransitionStartFunction;
   allDesigns: string[];
   isCurrentDesignLocked: boolean;
@@ -35,6 +35,7 @@ export function useSettingsManager({
   const [qrFileBlob, setQrFileBlob] = useState<Blob | null>(null);
   const [removeQr, setRemoveQr] = useState(false);
   const [sortByPriceDesc, setSortByPriceDesc] = useState(settings?.sortByPriceDesc || false);
+  const [printMode, setPrintMode] = useState(settings?.printMode || 'legacy');
 
   const getInitialHours = () => { 
     if (!settings?.openingHours) return { open: '08:00', close: '22:00' }; 
@@ -84,11 +85,21 @@ export function useSettingsManager({
   const updateSocialLink = (id: string, field: keyof SocialLink, value: any) => { setSocialLinks(socialLinks.map(l => l.id === id ? { ...l, [field]: value } : l)); markDirty('socials'); };
 
   const handleTestTelegram = async (type: 'General' | 'Staff Call' | 'New Order', specificTopicId?: string) => { 
-    if (!tgChatId.trim()) { showToast("Please enter a Chat ID first."); return; } 
+    if (!tgChatId.trim()) { showToast("Please enter a Chat ID first.", "fail"); return; } 
     setIsTestingTg(true); 
     const res = await sendTestTelegramNotification(shopId, tgChatId, settings?.name || 'Your Shop', specificTopicId, type); 
-    showToast(res.message || (res.success ? "Test message sent!" : "Failed to send message.")); 
+    showToast(res.message || (res.success ? "Test message sent!" : "Failed to send message."), res.success ? "success" : "fail"); 
     setIsTestingTg(false); 
+  };
+
+  const handleTestPrint = async () => {
+    showToast("Sending test job to cloud...", "info");
+    const res = await createTestPrintJob();
+    if (res?.success) {
+      showToast("Test job sent successfully!", "success");
+    } else {
+      showToast("Failed to send test job.", "fail");
+    }
   };
 
   const saveIdentityForm = async () => { 
@@ -101,10 +112,11 @@ export function useSettingsManager({
     fd.set('printerUrl', printerUrl);
     fd.set('is24Hours', String(is24Hours));
     fd.set('sortByPriceDesc', String(sortByPriceDesc));
+    fd.set('printMode', printMode);
     if (!is24Hours) fd.set('openingHours', `${openTime} - ${closeTime}`); 
     if (qrFileBlob) fd.set('qrImage', qrFileBlob, 'qr.webp');
     if (removeQr) fd.set('removeQr', 'true');
-    try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information."); return false; } 
+    try { await updateShopIdentity(fd); return true; } catch(e) { showToast("Error saving information.", "fail"); return false; } 
   };
 
   const saveBrandingForm = async () => { 
@@ -114,17 +126,17 @@ export function useSettingsManager({
     fd.set('themeColor', themeColorPreview); 
     fd.set('logoType', logoType); 
     if (logoFileBlob) fd.set('logo', logoFileBlob, 'logo.webp'); 
-    try { await updateShopBranding(fd); return true; } catch (e) { showToast("Error saving branding."); return false; } 
+    try { await updateShopBranding(fd); return true; } catch (e) { showToast("Error saving branding.", "fail"); return false; } 
   };
 
   const saveSocialsForm = async () => { 
     const fd = new FormData(); 
     fd.set('socials', JSON.stringify(socialLinks)); 
-    try { const res = await updateShopSocials(fd); if (res?.error) { showToast(res.error); return false; } return true; } catch (e) { showToast("Error saving socials."); return false; } 
+    try { const res = await updateShopSocials(fd); if (res?.error) { showToast(res.error, "fail"); return false; } return true; } catch (e) { showToast("Error saving socials.", "fail"); return false; } 
   };
 
   const saveNotificationsForm = async () => { 
-    try { const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId); if (!res.success) { showToast(res.message || "Error saving"); return false; } return true; } catch (e) { return false; } 
+    try { const res = await updateStaffSettingsAction(shopId, isStaffEnabled, tgChatId, tgStaffCallTopicId, tgNewOrderTopicId); if (!res.success) { showToast(res.message || "Error saving", "fail"); return false; } return true; } catch (e) { return false; } 
   };
 
   const resetSettings = (source: string) => {
@@ -135,6 +147,7 @@ export function useSettingsManager({
       const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); 
       setIs24Hours(settings?.is24Hours || false); setQrImagePreview(settings?.qrImage || ''); 
       setQrFileBlob(null); setRemoveQr(false); setSortByPriceDesc(settings?.sortByPriceDesc || false);
+      setPrintMode(settings?.printMode || 'legacy');
     } else if (source === 'branding') { 
       setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); 
       setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); 
@@ -165,11 +178,11 @@ export function useSettingsManager({
     tgStaffCallTopicId, setTgStaffCallTopicId, tgNewOrderTopicId, setTgNewOrderTopicId,
     isTestingTg, setIsTestingTg, getShopNamePreview, handlePrevDesign, handleNextDesign,
     cancelLogoChange, addSocialLink, removeSocialLink, updateSocialLink, handleTestTelegram,
-    sortByPriceDesc, setSortByPriceDesc,
-    onIdentitySubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name."); return; } clearDirty('identity'); showToast("Basic information saved!"); startTransition(async () => { await saveIdentityForm(); setQrFileBlob(null); setRemoveQr(false); }); },
-    onBrandingSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (isCurrentDesignLocked) return; clearDirty('branding'); setIsDirtyLogo(false); showToast("Branding updated!"); startTransition(async () => { await saveBrandingForm(); setLogoFileBlob(null); }); },
-    onSocialsSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); },
-    onNotificationsSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!"); startTransition(async () => { await saveNotificationsForm(); }); },
+    sortByPriceDesc, setSortByPriceDesc, printMode, setPrintMode, handleTestPrint,
+    onIdentitySubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name.", "fail"); return; } clearDirty('identity'); showToast("Basic information saved!", "success"); startTransition(async () => { await saveIdentityForm(); setQrFileBlob(null); setRemoveQr(false); }); },
+    onBrandingSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (isCurrentDesignLocked) return; clearDirty('branding'); setIsDirtyLogo(false); showToast("Branding updated!", "success"); startTransition(async () => { await saveBrandingForm(); setLogoFileBlob(null); }); },
+    onSocialsSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!", "success"); startTransition(async () => { await saveSocialsForm(); }); },
+    onNotificationsSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('notifications'); showToast("Notification settings saved!", "success"); startTransition(async () => { await saveNotificationsForm(); }); },
     resetSettings, saveSettings
   };
 }

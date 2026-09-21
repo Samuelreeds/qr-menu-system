@@ -17,6 +17,28 @@ const PRINTER_NAME = "POS Printer 203DPI Series"; // <-- EXACT WINDOWS PRINTER N
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let isPrinting = false;
 
+async function sendHeartbeat() {
+  try {
+    const printers = await ptp.getPrinters();
+    // Validate if the intended printer is currently attached to the system
+    const isPrinterConnected = printers.some(p => {
+        const name = p.name || p.deviceId || p; 
+        return typeof name === 'string' && name.includes(PRINTER_NAME);
+    });
+    
+    await supabase
+      .from('ShopSettings')
+      .update({
+        printServerLastSeen: new Date().toISOString(),
+        printerStatus: isPrinterConnected ? 'CONNECTED' : 'DISCONNECTED'
+      })
+      .eq('shopId', SHOP_ID);
+
+  } catch (err) {
+    console.error('❌ Heartbeat failed:', err.message);
+  }
+}
+
 async function checkPrintQueue() {
   if (isPrinting) return;
 
@@ -99,3 +121,7 @@ const executePrintJob = (text) => {
 console.log("☁️ Scandine Cloud Print Queue Started!");
 console.log(`📡 Listening for Shop ID: ${SHOP_ID}...`);
 setInterval(checkPrintQueue, 3000);
+
+// Initialize 15-second status reporting heartbeat
+setInterval(sendHeartbeat, 15000);
+sendHeartbeat();

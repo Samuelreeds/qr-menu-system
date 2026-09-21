@@ -57,7 +57,7 @@ import { useSettingsManager } from './hooks/useSettingsManager';
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
-export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; sortByPriceDesc?: boolean; }
+export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; sortByPriceDesc?: boolean; printMode?: string; printServerLastSeen?: string | Date | null; printerStatus?: string | null; }
 export interface Topping { id: string; name: string; price: number; isDrink: boolean; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -520,24 +520,43 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
       discount: Number(productDiscount) || 0, categoryId: productCategoryId, time: prepTime + 'min',
       isPopular: isHotSale, isSoldOut: isSoldOutState, department: productDepartment,
       ingredients: productRecipe.map(r => ({ ingredientId: r.ingredientId, quantityUsed: parseFloat(r.quantityUsed as string) || 0 })).filter(r => r.ingredientId && r.quantityUsed > 0),
-      image: productFileBlob || undefined
+      image: productPreview || undefined 
     };
 
     const isUpdate = !!editingProduct;
     const currentEditingId = editingProduct?.id;
     const tempId = `temp-${Date.now()}`;
 
-    setIsFormOpen(false); setEditingProduct(null); setWasFormOpen(false); setWasEditingProduct(null);
+    // SAFELY CONSTRUCT FORMDATA BEFORE ANY STATE TRANSITIONS OR UNMOUNTS
+    const fd = new FormData();
+    if (isUpdate) {
+      fd.append('payload', JSON.stringify({ ...payload, id: currentEditingId as string }));
+    } else {
+      fd.append('payload', JSON.stringify(payload));
+    }
+    
+    if (productFileBlob) {
+      fd.append('image', productFileBlob, 'product.webp');
+    }
 
+    // QUEUE STATE UPDATES
+    setIsFormOpen(false); 
+    setEditingProduct(null); 
+    setWasFormOpen(false); 
+    setWasEditingProduct(null);
+
+    // EXECUTE SERVER ACTION
     startTransition(async () => {
       if (isUpdate) {
         const optimisticProduct = { ...editingProduct, ...payload, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || editingProduct.image } as Product;
         dispatchOptProducts({ type: 'update', payload: optimisticProduct });
-        try { const res = await updateProduct({ ...payload, id: currentEditingId as string }); if (res?.error) showToast(res.error || "Failed to update product", "fail"); else showToast("Product updated successfully!", "success"); } catch (e) { showToast("Failed to update product.", "fail"); }
+
+        try { const res = await updateProduct(fd); if (res?.error) showToast(res.error || "Failed to update product", "fail"); else showToast("Product updated successfully!", "success"); } catch (e) { showToast("Failed to update product.", "fail"); }
       } else {
         const optimisticProduct = { ...payload, id: tempId, category: { name: sortedCategories.find(c => c.id === payload.categoryId)?.name || '' }, image: productPreview || '' } as Product;
         dispatchOptProducts({ type: 'add', payload: optimisticProduct });
-        try { const res = await createProduct(payload); if (res?.error) showToast(res.error || "Failed to create product", "fail"); else showToast("Product created successfully!", "success"); } catch (e) { showToast("Failed to create product.", "fail"); }
+
+        try { const res = await createProduct(fd); if (res?.error) showToast(res.error || "Failed to create product", "fail"); else showToast("Product created successfully!", "success"); } catch (e) { showToast("Failed to create product.", "fail"); }
       }
     });
   };
@@ -789,6 +808,9 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                setCloseTime={settingsState.setCloseTime}
                sortByPriceDesc={settingsState.sortByPriceDesc}
                setSortByPriceDesc={settingsState.setSortByPriceDesc}
+               printMode={settingsState.printMode}
+               setPrintMode={settingsState.setPrintMode}
+               handleTestPrint={settingsState.handleTestPrint}
                qrImagePreview={settingsState.qrImagePreview}
                qrInputRef={settingsState.qrInputRef} 
                onFileSelect={onFileSelect}

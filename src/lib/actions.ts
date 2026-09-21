@@ -333,21 +333,7 @@ export async function deleteCategory(formData: FormData) {
   await revalidateActiveShop();
 }
 
-export async function createProduct(data: {
-  name: string;
-  name_kh?: string | null;
-  name_zh?: string | null;
-  price?: number | null;
-  variants?: { name: string; price: number }[] | null;
-  ingredients?: { ingredientId: string; quantityUsed: number }[] | null;
-  discount?: number;
-  categoryId: string;
-  time?: string;
-  image?: any;
-  isPopular?: boolean;
-  isSoldOut?: boolean;
-  department?: string; 
-}) {
+export async function createProduct(formData: FormData) {
   if (!(await checkIsAdmin())) return { error: "Unauthorized" };
 
   const shopId = await getActiveShopId();
@@ -356,6 +342,12 @@ export async function createProduct(data: {
   const limit = await getLimit(shopId, 'maxProducts');
   const currentCount = await prisma.product.count({ where: { shopId, deletedAt: null } });
   if (currentCount >= limit) return { error: "Product limit reached." };
+
+  const payloadStr = formData.get('payload') as string;
+  if (!payloadStr) return { error: "Invalid payload" };
+
+  const data = JSON.parse(payloadStr);
+  const imageFile = formData.get('image') as File | null;
 
   const name = data.name;
   const name_kh = data.name_kh || null;
@@ -369,8 +361,8 @@ export async function createProduct(data: {
   const price = variants[0]?.price || data.price || 0;
 
   let imagePath: string | undefined;
-  if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
-    imagePath = await uploadToSupabase(data.image as File, 'products');
+  if (imageFile && imageFile.name && imageFile.name !== 'undefined') {
+    imagePath = await uploadToSupabase(imageFile, 'products');
   } else if (typeof data.image === 'string' && data.image) {
     imagePath = data.image;
   }
@@ -394,39 +386,30 @@ export async function createProduct(data: {
       isSoldOut, 
       shopId,
       variants: {
-        create: variants.map(v => ({
+        create: variants.map((v: any) => ({
           name: v.name,
           price: v.price
         }))
       },
       ingredients: {
-        create: data.ingredients?.map(ing => ({
+        create: data.ingredients?.map((ing: any) => ({
           ingredientId: ing.ingredientId,
           quantityUsed: ing.quantityUsed
         })) || []
       }
     }
-  })
+  });
   await revalidateActiveShop();
 }
 
-export async function updateProduct(data: {
-  id: string;
-  name: string;
-  name_kh?: string | null;
-  name_zh?: string | null;
-  price?: number | null;
-  variants?: { name: string; price: number }[] | null;
-  ingredients?: { ingredientId: string; quantityUsed: number }[] | null;
-  discount?: number;
-  categoryId: string;
-  time?: string;
-  image?: any;
-  isPopular?: boolean;
-  isSoldOut?: boolean;
-  department?: string; 
-}) {
+export async function updateProduct(formData: FormData) {
   if (!(await checkIsAdmin())) return { error: "Unauthorized" };
+
+  const payloadStr = formData.get('payload') as string;
+  if (!payloadStr) return { error: "Invalid payload" };
+
+  const data = JSON.parse(payloadStr);
+  const imageFile = formData.get('image') as File | null;
 
   const id = data.id;
   const name = data.name;
@@ -441,8 +424,8 @@ export async function updateProduct(data: {
   const price = variants[0]?.price || data.price || 0;
 
   let newImagePath: string | undefined;
-  if (data.image && typeof data.image === 'object' && 'arrayBuffer' in data.image) {
-    newImagePath = await uploadToSupabase(data.image as File, 'products');
+  if (imageFile && imageFile.name && imageFile.name !== 'undefined') {
+    newImagePath = await uploadToSupabase(imageFile, 'products');
   }
 
   if (newImagePath) {
@@ -468,14 +451,14 @@ export async function updateProduct(data: {
       description: hiddenDeptTag, 
       variants: {
         deleteMany: {}, 
-        create: variants.map(v => ({
+        create: variants.map((v: any) => ({
           name: v.name,
           price: v.price
         }))
       },
       ingredients: {
         deleteMany: {},
-        create: data.ingredients?.map(ing => ({
+        create: data.ingredients?.map((ing: any) => ({
           ingredientId: ing.ingredientId,
           quantityUsed: ing.quantityUsed
         })) || []
@@ -526,6 +509,7 @@ export async function updateShopIdentity(formData: FormData) {
   const is24Hours = formData.get('is24Hours') === 'true';
   const sortByPriceDesc = formData.get('sortByPriceDesc') === 'true';
   const removeQr = formData.get('removeQr') === 'true'; // Allow deleting the QR
+  const printMode = formData.get('printMode') as string || 'legacy';
   
   const qrFile = formData.get('qrImage') as File | null;
 
@@ -548,7 +532,7 @@ export async function updateShopIdentity(formData: FormData) {
   }
 
   const dataToUpdate: any = { 
-    name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl, sortByPriceDesc
+    name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl, sortByPriceDesc, printMode
   };
 
   if (newQrPath) {
@@ -566,7 +550,7 @@ export async function updateShopIdentity(formData: FormData) {
     update: dataToUpdate,
     create: { 
       shopId, name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl,
-      sortByPriceDesc,
+      sortByPriceDesc, printMode,
       themeColor: '#000000',
       headerDesign: 'design1',
       qrImage: newQrPath || null
@@ -2298,5 +2282,24 @@ export async function executeInventoryImport(items: {
     return { success: true };
   } catch (error: any) {
     return { success: false, error: "Transaction failed: " + error.message };
+  }
+}export async function createTestPrintJob() {
+  const shopId = await getActiveShopId();
+  if (!shopId) return { success: false, error: "Unauthorized" };
+
+  const testText = `\n================================\n        TEST PRINT SUCCESS      \n================================\nTime: ${new Date().toLocaleString()}\nShop ID: ${shopId}\nConnection: CLOUD\n================================\nIf you are reading this, your\ncloud printing architecture is\nworking perfectly!\n================================\n\n\n\n`;
+
+  try {
+    const job = await (prisma as any).printJob.create({
+      data: {
+        shopId: shopId,
+        receipt_text: testText,
+        status: 'pending'
+      }
+    });
+    return { success: true, job };
+  } catch (error: any) {
+    console.error("Test print failed:", error);
+    return { success: false, error: error.message };
   }
 }
