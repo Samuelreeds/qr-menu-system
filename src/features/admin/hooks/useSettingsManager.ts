@@ -34,6 +34,7 @@ export function useSettingsManager({
   const [qrImagePreview, setQrImagePreview] = useState(settings?.qrImage || '');
   const [qrFileBlob, setQrFileBlob] = useState<Blob | null>(null);
   const [removeQr, setRemoveQr] = useState(false);
+  const [sortByPriceDesc, setSortByPriceDesc] = useState(settings?.sortByPriceDesc || false);
 
   const getInitialHours = () => { 
     if (!settings?.openingHours) return { open: '08:00', close: '22:00' }; 
@@ -99,6 +100,7 @@ export function useSettingsManager({
     fd.set('phone', phone); 
     fd.set('printerUrl', printerUrl);
     fd.set('is24Hours', String(is24Hours));
+    fd.set('sortByPriceDesc', String(sortByPriceDesc));
     if (!is24Hours) fd.set('openingHours', `${openTime} - ${closeTime}`); 
     if (qrFileBlob) fd.set('qrImage', qrFileBlob, 'qr.webp');
     if (removeQr) fd.set('removeQr', 'true');
@@ -132,7 +134,7 @@ export function useSettingsManager({
       setPhone(settings?.phone || ''); setPrinterUrl(settings?.printerUrl || ''); 
       const initH = getInitialHours(); setOpenTime(initH.open); setCloseTime(initH.close); 
       setIs24Hours(settings?.is24Hours || false); setQrImagePreview(settings?.qrImage || ''); 
-      setQrFileBlob(null); setRemoveQr(false);
+      setQrFileBlob(null); setRemoveQr(false); setSortByPriceDesc(settings?.sortByPriceDesc || false);
     } else if (source === 'branding') { 
       setHeaderDesign(settings?.headerDesign || 'design1'); setThemeColorPreview(settings?.themeColor || '#000000'); 
       setLogoPreview(settings?.logo || ''); setLogoType(settings?.logoType || 'withBackground'); setIsDirtyLogo(false); setLogoFileBlob(null); 
@@ -163,6 +165,7 @@ export function useSettingsManager({
     tgStaffCallTopicId, setTgStaffCallTopicId, tgNewOrderTopicId, setTgNewOrderTopicId,
     isTestingTg, setIsTestingTg, getShopNamePreview, handlePrevDesign, handleNextDesign,
     cancelLogoChange, addSocialLink, removeSocialLink, updateSocialLink, handleTestTelegram,
+    sortByPriceDesc, setSortByPriceDesc,
     onIdentitySubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (!previewNameEn.trim() && !previewNameKh.trim()) { showToast("Please enter at least one shop name."); return; } clearDirty('identity'); showToast("Basic information saved!"); startTransition(async () => { await saveIdentityForm(); setQrFileBlob(null); setRemoveQr(false); }); },
     onBrandingSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); if (isCurrentDesignLocked) return; clearDirty('branding'); setIsDirtyLogo(false); showToast("Branding updated!"); startTransition(async () => { await saveBrandingForm(); setLogoFileBlob(null); }); },
     onSocialsSubmit: (e?: React.FormEvent) => { if (e) e.preventDefault(); clearDirty('socials'); showToast("Social Media Links saved!"); startTransition(async () => { await saveSocialsForm(); }); },

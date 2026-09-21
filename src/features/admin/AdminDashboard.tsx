@@ -57,7 +57,7 @@ import { useSettingsManager } from './hooks/useSettingsManager';
 export interface Category { id: string; name: string; name_kh?: string | null; name_zh?: string | null; sortOrder: number; discount?: number; isDrink?: boolean; } 
 export interface Product { id: string; name: string; name_kh?: string | null; name_zh?: string | null; price: number; variants?: {id?: string, name: string, price: number}[]; ingredients?: { ingredientId: string, quantityUsed: number }[]; image: string; category: { name: string, discount?: number }; time: string; isPopular?: boolean; isSoldOut?: boolean; discount?: number; description?: string; department?: string; }
 export interface Banner { id: string; image: string; sortOrder: number; }
-export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; }
+export interface ShopSettings { name: string; name_kh?: string | null; nameDisplay?: string; address: string | null; phone: string | null; openingHours: string | null; is24Hours?: boolean; themeColor: string; headerDesign: string; logo: string | null; logoType?: string | null; socials: string; printerUrl?: string | null; qrImage?: string | null; sortByPriceDesc?: boolean; }
 export interface Topping { id: string; name: string; price: number; isDrink: boolean; }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -65,11 +65,6 @@ const FALLBACK_LOGO = 'https://images.unsplash.com/photo-1599305445671-ac291c95a
 const allDesigns = ['design1', 'design2', 'design3', 'design4', 'design5', 'design6', 'design7'];
 
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
-
-const getDisplayPrice = (product: Product) => {
-  if (product.variants && product.variants.length > 0) return Math.min(...product.variants.map((v: any) => v.price));
-  return product.price || 0;
-};
 
 interface AdminDashboardProps { shopId: string; categories: Category[]; products: Product[]; settings: ShopSettings; shopSlug: string; banners?: Banner[]; shopPlan?: string; planLimits?: any; callStaffEnabled?: boolean; telegramChatId?: string | null; staffCallTopicId?: string | null; newOrderTopicId?: string | null; telegramNotificationsEnabled?: boolean; featCampaign?: boolean; featPos?: boolean; userEmail?: string; userRole?: string; orders?: any[]; ingredients?: any[]; stockLogs?: any[]; toppings?: Topping[]; }
 type OptimisticAction<T> = | { type: 'add'; payload: T } | { type: 'update'; payload: T } | { type: 'delete'; payload: string } | { type: 'set'; payload: T[] };
@@ -167,6 +162,16 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
     shopId, settings, callStaffEnabled, telegramChatId, staffCallTopicId, newOrderTopicId,
     showToast, startTransition, allDesigns, isCurrentDesignLocked, markDirty, clearDirty
   });
+
+  // Ensure Admin Menu Tab Preview obeys the toggle
+  const getDisplayPrice = (product: Product) => {
+    if (product.variants && product.variants.length > 0) {
+      return settingsState.sortByPriceDesc 
+        ? Math.max(...product.variants.map((v: any) => v.price))
+        : Math.min(...product.variants.map((v: any) => v.price));
+    }
+    return product.price || 0;
+  };
 
   const mappedProducts: Product[] = initialProducts.map(p => ({
     ...p,
@@ -704,9 +709,6 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
           </ToastProvider>
         </div>}
         
-        {/* ======================================================== */}
-        {/* CORRECTED: Pass printMode to OrdersTab instead of AdminPosSection */}
-        {/* ======================================================== */}
         {featPos && (
           <div className={`${activeTab === 'orders' ? 'block animate-in fade-in duration-300' : 'hidden'} max-w-5xl mx-auto pb-12 print:hidden`}>
             <OrdersTab 
@@ -763,7 +765,7 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
         {isAdmin && (
           <div className={`${activeTab === 'settings' ? 'block animate-in slide-in-from-right-4 duration-300' : 'hidden'} max-w-2xl mx-auto space-y-6 pb-12 print:hidden`}>
              <SettingsTab 
-                shopId={shopId}
+               shopId={shopId}
                openSection={openSection}
                handleSectionClick={handleSectionClick}
                onIdentitySubmit={settingsState.onIdentitySubmit}
@@ -785,6 +787,8 @@ export default function AdminDashboard({ shopId, categories, products: initialPr
                setOpenTime={settingsState.setOpenTime}
                closeTime={settingsState.closeTime}
                setCloseTime={settingsState.setCloseTime}
+               sortByPriceDesc={settingsState.sortByPriceDesc}
+               setSortByPriceDesc={settingsState.setSortByPriceDesc}
                qrImagePreview={settingsState.qrImagePreview}
                qrInputRef={settingsState.qrInputRef} 
                onFileSelect={onFileSelect}

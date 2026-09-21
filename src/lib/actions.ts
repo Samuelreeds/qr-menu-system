@@ -524,6 +524,7 @@ export async function updateShopIdentity(formData: FormData) {
   const openingHours = formData.get('openingHours') as string || null;
   const printerUrl = formData.get('printerUrl') as string || null;
   const is24Hours = formData.get('is24Hours') === 'true';
+  const sortByPriceDesc = formData.get('sortByPriceDesc') === 'true';
   const removeQr = formData.get('removeQr') === 'true'; // Allow deleting the QR
   
   const qrFile = formData.get('qrImage') as File | null;
@@ -547,7 +548,7 @@ export async function updateShopIdentity(formData: FormData) {
   }
 
   const dataToUpdate: any = { 
-    name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl 
+    name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl, sortByPriceDesc
   };
 
   if (newQrPath) {
@@ -565,6 +566,7 @@ export async function updateShopIdentity(formData: FormData) {
     update: dataToUpdate,
     create: { 
       shopId, name, name_kh, nameDisplay, address, phone, openingHours, is24Hours, printerUrl,
+      sortByPriceDesc,
       themeColor: '#000000',
       headerDesign: 'design1',
       qrImage: newQrPath || null

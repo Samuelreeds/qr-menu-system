@@ -1,3 +1,4 @@
+// src/features/admin/tabs/SettingsTab.tsx
 import React from 'react';
 import { 
   Store, ChevronUp, ChevronDown, Check, Clock, UploadCloud, 
@@ -38,6 +39,8 @@ interface SettingsTabProps {
   setOpenTime: (val: string) => void;
   closeTime: string;
   setCloseTime: (val: string) => void;
+  sortByPriceDesc?: boolean;
+  setSortByPriceDesc: (val: boolean) => void;
   qrImagePreview: string;
   qrInputRef: any; 
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>, target: any) => void;
@@ -108,7 +111,8 @@ export default function SettingsTab({
   openSection, handleSectionClick, onIdentitySubmit, previewNameEn, setPreviewNameEn,
   previewNameKh, setPreviewNameKh, previewDisplay, setPreviewDisplay, printerUrl,
   setPrinterUrl, address, setAddress, phone, setPhone, is24Hours, setIs24Hours,
-  openTime, setOpenTime, closeTime, setCloseTime, qrImagePreview, qrInputRef,
+  openTime, setOpenTime, closeTime, setCloseTime, sortByPriceDesc = false, setSortByPriceDesc, 
+  qrImagePreview, qrInputRef,
   onFileSelect, setQrImagePreview, setQrFileBlob, setRemoveQr, markDirty, dirtySections,
   onBrandingSubmit, headerDesign, allDesigns, isCurrentDesignLocked, setHeaderDesign,
   handlePrevDesign, handleNextDesign, themeColorPreview, getShopNamePreview, isNoBg,
@@ -171,6 +175,22 @@ export default function SettingsTab({
                   <div className="relative w-full sm:flex-1"><label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Closing Time</label><div className="relative"><Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /><input type="time" disabled={is24Hours} value={closeTime} onChange={(e) => { setCloseTime(e.target.value); markDirty('identity'); }} className="w-full pl-9 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition-colors text-[16px] md:text-sm text-gray-900 shadow-sm cursor-pointer disabled:bg-gray-50"/></div></div>
                 </div>
                 <p className="text-xs text-gray-500 mt-2 ml-1">This will be displayed on your customer menu.</p>
+                
+                {/* SORT BY PRICE TOGGLE */}
+                <div className="pt-4 border-t border-gray-100 mt-6">
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800">Menu Sorting</label>
+                      <p className="text-xs text-gray-500 mt-1">Show highest priced items first on the menu</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input type="checkbox" checked={sortByPriceDesc} onChange={(e) => { setSortByPriceDesc(e.target.checked); markDirty('identity'); }} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-gray-900 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white shadow-inner"></div>
+                    </label>
+                  </div>
+                </div>
+                {/* END SORT BY PRICE TOGGLE */}
+
               </div>
             </div>
             
@@ -204,7 +224,6 @@ export default function SettingsTab({
                <input type="file" accept="image/*" ref={qrInputRef} onChange={(e) => onFileSelect(e, 'qr')} className="hidden" />
             </div>
 
-            {/* --- SHOP INFO / INTEGRATION ID IS NOW PROPERLY INSIDE --- */}
             <div className="pt-5 border-t border-gray-100 mt-6">
               <div className="mb-2">
                 <h4 className="text-sm font-extrabold text-gray-900">Shop ID (System Info)</h4>

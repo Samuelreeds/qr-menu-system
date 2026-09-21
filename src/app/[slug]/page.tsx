@@ -110,7 +110,8 @@ export default async function ShopMenuPage({
     telegram: '',
     showTelegram: false,
     socials: '[]', 
-    qrImage: null, // <--- ADDED QR IMAGE FALLBACK
+    qrImage: null, 
+    sortByPriceDesc: false,
   };
 
   const formattedSettings = {
@@ -131,7 +132,8 @@ export default async function ShopMenuPage({
     telegram: safeSettings.telegram || '',
     showTelegram: safeSettings.showTelegram || false,
     socials: effectiveCustomSocials ? (safeSettings.socials || '[]') : '[]', 
-    qrImage: safeSettings.qrImage || null, // <--- ADDED QR IMAGE PAYLOAD
+    qrImage: safeSettings.qrImage || null, 
+    sortByPriceDesc: safeSettings.sortByPriceDesc || false,
   };
 
   const formattedCategories = (shop.categories || []).map((cat: any) => ({

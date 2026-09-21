@@ -237,7 +237,7 @@ model ShopSettings {
   showTelegram  Boolean @default(false)
   printerUrl    String?
   qrImage       String?
-
+  sortByPriceDesc Boolean @default(false)
   printMode String @default("legacy")
 
   shopId String @unique

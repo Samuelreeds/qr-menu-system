@@ -1,14 +1,14 @@
 // src/components/shared/MenuClient.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import SearchBar from '@/components/ui/SearchBar';
 import LangSwitcher from '@/components/ui/LangSwitcher';
 import FoodCard from '@/components/shared/FoodCard';
 import ShopInfoModal from '@/components/shared/ShopInfoModal';
 import CartFloat from '@/components/ui/CartFloat'; 
 import { useLanguage } from '@/context/LanguageContext'; 
-import { Menu, X, Star, Bell, Loader2, CheckCircle, QrCode } from 'lucide-react'; // <-- Added QrCode Icon
+import { Menu, X, Star, Bell, Loader2, CheckCircle, QrCode } from 'lucide-react';
 import { requestStaffAssistance } from "@/lib/staff-actions";
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
@@ -30,7 +30,8 @@ interface ShopSettings {
   instagram?: string; showInstagram: boolean;
   telegram?: string; showTelegram: boolean;
   socials: string; 
-  qrImage?: string | null; // <-- Added qrImage property
+  qrImage?: string | null;
+  sortByPriceDesc?: boolean;
 }
 
 interface ProductVariant {
@@ -108,10 +109,22 @@ const BannerImage = ({ b, i, currentBanner }: { b: Banner; i: number; currentBan
 };
 
 export default function MenuClient({ 
-  initialProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false,
+  initialProducts: rawProducts, categories, shopSettings, banners = [], multiLanguageEnabled = false,
   featCampaign = false, isStaffCallActive = false, tableContext, shopId, shopSlug
 }: MenuClientProps) {
   
+  const initialProducts = useMemo(() => {
+    const prods = [...rawProducts];
+    if (shopSettings?.sortByPriceDesc) {
+      prods.sort((a, b) => {
+        const priceA = (a.variants && a.variants.length > 0) ? Math.min(...a.variants.map(v => v.price)) : (a.price || 0);
+        const priceB = (b.variants && b.variants.length > 0) ? Math.min(...b.variants.map(v => v.price)) : (b.price || 0);
+        return priceB - priceA; // Descending
+      });
+    }
+    return prods;
+  }, [rawProducts, shopSettings?.sortByPriceDesc]);
+
   const hasPopularProducts = initialProducts.some(p => p.isPopular);
   
   const [activeCategory, setActiveCategory] = useState(
@@ -120,7 +133,7 @@ export default function MenuClient({
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isInfoOpen, setIsInfoOpen] = useState(false);
-  const [isQrPaymentOpen, setIsQrPaymentOpen] = useState(false); // <-- Added QR Modal State
+  const [isQrPaymentOpen, setIsQrPaymentOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0);
   const [currentBanner, setCurrentBanner] = useState(0);
@@ -242,7 +255,19 @@ export default function MenuClient({
 
   const handleOpenItem = (item: Product) => {
     setSelectedItem(item);
-    setSelectedVariantIndex(0);
+    
+    let defaultVariantIndex = 0;
+    if (shopSettings?.sortByPriceDesc && item.variants && item.variants.length > 0) {
+      let maxPrice = -Infinity;
+      item.variants.forEach((v, idx) => {
+        if (v.price > maxPrice) {
+          maxPrice = v.price;
+          defaultVariantIndex = idx;
+        }
+      });
+    }
+    
+    setSelectedVariantIndex(defaultVariantIndex);
     setSelectedImgLoaded(false);
   };
 
@@ -293,7 +318,6 @@ export default function MenuClient({
     >
       <ShopInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} settings={displaySettings} />
 
-      {/* --- QR PAYMENT MODAL --- */}
       {isQrPaymentOpen && shopSettings.qrImage && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsQrPaymentOpen(false)}>
           <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col p-6 items-center text-center animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -313,7 +337,6 @@ export default function MenuClient({
         </div>
       )}
 
-      {/* --- SYNCED DYNAMIC HEADER --- */}
       <header className="relative overflow-hidden min-h-[160px]" style={{ background: themeColor }}>
         <div className="absolute inset-0 bg-black/10 z-0" />
         
@@ -331,7 +354,6 @@ export default function MenuClient({
                   <Menu size={20} />
                 </button>
                 
-                {/* NEW QR PAYMENT BUTTON */}
                 {shopSettings.qrImage && (
                   <button 
                     onClick={() => setIsQrPaymentOpen(true)} 
@@ -416,7 +438,6 @@ export default function MenuClient({
         </div>
       </header>
 
-      {/* --- BORDERLESS STICKY CONTROLS --- */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="shrink-0">
@@ -503,6 +524,7 @@ export default function MenuClient({
                   item={item as any} 
                   themeColor={themeColor} 
                   featCampaign={featCampaign} 
+                  sortByPriceDesc={shopSettings?.sortByPriceDesc}
                   onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                 />
               ))}
@@ -522,6 +544,7 @@ export default function MenuClient({
                         item={item as any} 
                         themeColor={themeColor} 
                         featCampaign={featCampaign} 
+                        sortByPriceDesc={shopSettings?.sortByPriceDesc}
                         onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                       />
                     ))}
@@ -549,6 +572,7 @@ export default function MenuClient({
                           item={item as any} 
                           themeColor={themeColor} 
                           featCampaign={featCampaign} 
+                          sortByPriceDesc={shopSettings?.sortByPriceDesc}
                           onClick={item.isSoldOut ? undefined : () => handleOpenItem(item)} 
                         />
                       ))}
@@ -561,7 +585,6 @@ export default function MenuClient({
         </div>
       </div>
 
-      {/* --- SELECTED ITEM MODAL --- */}
       {selectedItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedItem(null)}>
           <div className="bg-white rounded-[32px] overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
@@ -632,7 +655,6 @@ export default function MenuClient({
         </div>
       )}
 
-      {/* --- FLOATING STAFF CALL BUTTON --- */}
       {isStaffCallActive && tableContext?.isValid && (
         <div className="fixed bottom-6 left-4 sm:left-6 z-50 flex flex-col items-start gap-2">
           {callState === 'CONFIRM' && (

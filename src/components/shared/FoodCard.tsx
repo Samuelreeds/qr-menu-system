@@ -1,4 +1,4 @@
-// src/components/FoodCard.tsx
+// src/components/shared/FoodCard.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -27,19 +27,22 @@ interface FoodCardProps {
   onClick?: () => void;
   adminActions?: React.ReactNode;
   featCampaign?: boolean; // ENFORCES CAMPAIGN DISCOUNTS VISUALLY
+  sortByPriceDesc?: boolean;
 }
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D"http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width%3D"400" height%3D"400" viewBox%3D"0 0 400 400"%3E%3Crect width%3D"400" height%3D"400" fill%3D"%23f3f4f6"%2F%3E%3Ctext x%3D"50%25" y%3D"50%25" dominant-baseline%3D"middle" text-anchor%3D"middle" font-family%3D"sans-serif" font-size%3D"48" font-weight%3D"bold" fill%3D"%239ca3af"%3EN%2FA%3C%2Ftext%3E%3C%2Fsvg%3E';
 const getValidImage = (img?: string | null) => (!img || img === 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c') ? PLACEHOLDER_IMAGE : img;
 
-const getDisplayPrice = (p: MenuItem) => {
+const getDisplayPrice = (p: MenuItem, sortByPriceDesc?: boolean) => {
   if (p.variants && p.variants.length > 0) {
-    return Math.min(...p.variants.map(v => v.price));
+    return sortByPriceDesc 
+      ? Math.max(...p.variants.map(v => v.price))
+      : Math.min(...p.variants.map(v => v.price));
   }
   return p.price || 0;
 };
 
-export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions, featCampaign = false }: FoodCardProps) {
+export default function FoodCard({ item, themeColor = '#000000', onClick, adminActions, featCampaign = false, sortByPriceDesc = false }: FoodCardProps) {
   const { lang } = useLanguage(); 
   const [imgLoaded, setImgLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -62,7 +65,7 @@ export default function FoodCard({ item, themeColor = '#000000', onClick, adminA
   const rawItemDiscount = item.discount || 0;
   const effectiveDiscount = featCampaign === false ? 0 : (rawItemDiscount > 0 ? rawItemDiscount : categoryDiscount);
   
-  const basePrice = getDisplayPrice(item);
+  const basePrice = getDisplayPrice(item, sortByPriceDesc);
   const discountedPrice = effectiveDiscount > 0 ? basePrice * (1 - effectiveDiscount / 100) : basePrice;
 
   return (
