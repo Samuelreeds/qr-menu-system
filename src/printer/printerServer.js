@@ -9,10 +9,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- CONFIGURATION ---
-const SUPABASE_URL = "https://fqiuwmxdxqrlpmuyxlyw.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (YOUR SERVICE ROLE KEY)";
-const SHOP_ID = "cm0xyz... (THE CUID OF THE CLIENTS SHOP)"; // <-- CRITICAL: RESTRICTS TO ONE SHOP
-const PRINTER_NAME = "POS Printer 203DPI Series"; // <-- EXACT WINDOWS PRINTER NAME
+const SUPABASE_URL = "https://fqiuwmxdxqrlpmuyxlyw.supabase.co"; 
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxaXV3bXhkeHFybHBtdXl4bHl3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE2NTAyNCwiZXhwIjoyMDg2NzQxMDI0fQ.vXPv6inWpJ2IPPF0e98-ZPZ82fuL6yQwgmCmFaUN3so"; // Use Service Role Key for backend agents
+const SHOP_ID = "cmncobau900013tektolm80vo"; // <-- CRITICAL: The exact Database ID of this client's shop
+const PRINTER_NAME = "Cashier-2"; // <-- EXACT Windows Printer Name
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let isPrinting = false;

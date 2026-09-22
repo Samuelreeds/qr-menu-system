@@ -134,12 +134,14 @@ export async function getShopSettings() {
       headerDesign: "design1",
       logo: null, 
       logoType: "withBackground",
-      socials: "[]"
+      socials: "[]",
+      printMode: "legacy",
+      printServerLastSeen: null,
+      printerStatus: "DISCONNECTED"
     };
   }
   return settings;
 }
-
 export async function getBanners() {
   const shopId = await getActiveShopId();
   if (!shopId) return [];
