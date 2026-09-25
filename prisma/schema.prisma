@@ -240,8 +240,7 @@ model ShopSettings {
   sortByPriceDesc Boolean @default(false)
   printMode String @default("legacy")
   printServerLastSeen DateTime?
-  printerStatus       
-  String?   @default("DISCONNECTED")
+  printerStatus String?   @default("DISCONNECTED")
 
   shopId String @unique
   shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)

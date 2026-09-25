@@ -17,7 +17,7 @@ export async function secureCreateProduct(shopId: string, fd: FormData) {
     discount = 0;
   }
 
-  return createProduct({
+  return (createProduct as any)({
     name: fd.get('name') as string,
     name_kh: fd.get('name_kh') as string | null,
     name_zh: fd.get('name_zh') as string | null,
@@ -40,7 +40,7 @@ export async function secureUpdateProduct(shopId: string, fd: FormData) {
     discount = 0;
   }
 
-  return updateProduct({
+  return (updateProduct as any)({
     id: fd.get('id') as string,
     name: fd.get('name') as string,
     name_kh: fd.get('name_kh') as string | null,
@@ -61,7 +61,7 @@ export async function secureCreateCategory(shopId: string, fd: FormData) {
   if (!limits?.featCampaign) {
     fd.set('discount', '0');
   }
-  return createCategory(fd);
+  return (createCategory as any)(fd);
 }
 
 export async function secureUpdateCategory(shopId: string, fd: FormData) {
@@ -69,5 +69,5 @@ export async function secureUpdateCategory(shopId: string, fd: FormData) {
   if (!limits?.featCampaign) {
     fd.set('discount', '0');
   }
-  return updateCategory(fd);
+  return (updateCategory as any)(fd);
 }
